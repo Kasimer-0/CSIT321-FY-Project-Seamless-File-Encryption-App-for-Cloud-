@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react"
-import type { UserAccount } from "../Entity"
-import type { Ticket } from "../Entity"
+import type { UserAccount, TicketDTO } from "../Type"
 import AdminViewTicket from "./AdminViewTicketPage"
+import toast from "react-hot-toast"
 
 type AdminManageTicketProps = {
     currentUser: UserAccount
 }
 
 function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
-    const [tickets, setTickets] = useState<Ticket[]>([])
+    const [tickets, setTickets] = useState<TicketDTO[]>([])
     const [view, setView] = useState<"list" | "detail">("list")
-    const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+    const [selectedTicket, setSelectedTicket] = useState<TicketDTO | null>(null)
     const [search, setSearch] = useState("")
     const [filterStatus, setFilterStatus] = useState("all")
     const [filterPersonInCharge, setFilterPersonInCharge] = useState("all")
@@ -19,11 +19,9 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
     const [loading, setLoading] = useState(true)
 
     const fetchTickets = async () => {
+        setLoading(true)
         try {
-            setLoading(true)
-
             const params = new URLSearchParams()
-
             if (search) params.append("search", search)
             if (filterStatus !== "all") params.append("status", filterStatus)
             if (filterPersonInCharge !== "all") params.append("personInCharge", filterPersonInCharge)
@@ -43,33 +41,30 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
             setTickets(data)
 
         } catch (err) {
-            console.error("Server connection failed")
+            console.error("Failed to fetch tickets")
         } finally {
             setLoading(false)
         }
     }
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            fetchTickets()
-        }, 400)
-
+        const timer = setTimeout(fetchTickets, 300)
         return () => clearTimeout(timer)
     }, [search, filterStatus, filterPersonInCharge, filterRequester])
 
     const uniqueRequesters = Array.from(
-        new Map(tickets.map(t => [t.ticketRequester.id, t.ticketRequester])).values()
+        new Map(tickets.map(t => [t.ticketRequester.userID, t.ticketRequester])).values()
     )
 
     const uniqueAdmins = Array.from(
         new Map(
             tickets
-                .filter(t => t.personInCharge !== null)
-                .map(t => [t.personInCharge!.id, t.personInCharge!])
+                .filter(t => t.personInCharge)
+                .map(t => [t.personInCharge!.userID, t.personInCharge!])
         ).values()
     )
 
-    const handleSelect = (ticket: Ticket) => {
+    const handleSelect = (ticket: TicketDTO) => {
         setSelectedTicket(ticket)
         setView("detail")
     }
@@ -91,24 +86,21 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify({ personInChargeId: currentUser.id })
+                    body: JSON.stringify({ personInChargeId: currentUser.userID })
                 }
             )
 
             if (!response.ok) {
-                console.error("Failed to assign ticket")
+                toast.error("Failed to assign ticket")
                 return
             }
 
             await fetchTickets()
-
-            setSelectedTicket({
-                ...selectedTicket,
-                personInCharge: currentUser
-            })
+            setSelectedTicket({ ...selectedTicket, personInCharge: currentUser })
+            toast.success("Ticket assigned to you successfully")
 
         } catch (err) {
-            console.error("Server connection failed")
+            toast.error("Server connection failed")
         }
     }
 
@@ -125,19 +117,16 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
             )
 
             if (!response.ok) {
-                console.error("Failed to close ticket")
+                toast.error("Failed to close ticket")
                 return
             }
 
             await fetchTickets()
-
-            setSelectedTicket({
-                ...selectedTicket,
-                ticketStatus: "closed"
-            })
+            setSelectedTicket({ ...selectedTicket, ticketStatus: "closed" })
+            toast.success("Ticket closed successfully")
 
         } catch (err) {
-            console.error("Server connection failed")
+            toast.error("Server connection failed")
         } finally {
             setShowConfirm(false)
         }
@@ -147,7 +136,6 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
         return (
             <AdminViewTicket
                 ticket={selectedTicket}
-                currentUser={currentUser}
                 onBack={handleBack}
                 onAssignToMe={handleAssignToMe}
                 onCloseTicket={handleCloseTicket}
@@ -173,7 +161,7 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
                     >
-                        <option value="all">All Statuses</option>
+                        <option value="all">All Status</option>
                         <option value="open">Open</option>
                         <option value="closed">Closed</option>
                     </select>
@@ -187,10 +175,8 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
                     >
                         <option value="all">All Assignees</option>
                         <option value="unassigned">Unassigned</option>
-                        {uniqueAdmins.map(admin => (
-                            <option key={admin.id} value={admin.id}>
-                                {admin.username}
-                            </option>
+                        {uniqueAdmins.map(a => (
+                            <option key={a.userID} value={a.userID}>{a.username}</option>
                         ))}
                     </select>
                 </div>
@@ -202,10 +188,8 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
                         onChange={(e) => setFilterRequester(e.target.value)}
                     >
                         <option value="all">All Requesters</option>
-                        {uniqueRequesters.map(req => (
-                            <option key={req.id} value={req.id}>
-                                {req.username}
-                            </option>
+                        {uniqueRequesters.map(r => (
+                            <option key={r.userID} value={r.userID}>{r.username}</option>
                         ))}
                     </select>
                 </div>
@@ -213,20 +197,16 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
 
             <ul className="list-group" style={{ maxHeight: 500, overflowY: "auto" }}>
                 {loading ? (
-                    <li className="list-group-item text-center text-muted">
-                        Loading...
-                    </li>
+                    <li className="list-group-item text-center text-muted">Loading...</li>
                 ) : tickets.length === 0 ? (
-                    <li className="list-group-item text-muted text-center">
-                        No tickets found
-                    </li>
+                    <li className="list-group-item text-center text-muted">No tickets found</li>
                 ) : (
                     tickets.map(ticket => (
                         <li
                             key={ticket.ticketID}
-                            className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                            style={{ cursor: "pointer" }}
+                            className="list-group-item d-flex justify-content-between align-items-center"
                             onClick={() => handleSelect(ticket)}
+                            style={{ cursor: "pointer" }}
                         >
                             <div>
                                 <div className="fw-medium">{ticket.ticketTitle}</div>
@@ -234,15 +214,10 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
                                     #{ticket.ticketID} · {ticket.ticketRequester.username} ·{" "}
                                     {ticket.personInCharge
                                         ? `Assigned to ${ticket.personInCharge.username}`
-                                        : <span className="text-danger">Unassigned</span>
-                                    }
+                                        : "Unassigned"}
                                 </small>
                             </div>
-
-                            <span className={`badge ${ticket.ticketStatus === "open"
-                                ? "bg-warning text-dark"
-                                : "bg-secondary"
-                                }`}>
+                            <span className={`badge ${ticket.ticketStatus === "open" ? "bg-warning text-dark" : "bg-secondary"}`}>
                                 {ticket.ticketStatus}
                             </span>
                         </li>

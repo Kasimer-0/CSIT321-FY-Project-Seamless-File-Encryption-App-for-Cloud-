@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react"
-import type { Plan } from "../Entity"
+import type { Plan } from "../Type"
 import AdminCreatePlan from "./AdminCreatePlanPage"
 import AdminViewPlan from "./AdminViewPlanPage"
+import toast from "react-hot-toast"
 
 function AdminManagePlan() {
     const [plans, setPlans] = useState<Plan[]>([])
@@ -65,29 +66,13 @@ function AdminManagePlan() {
     const handleBack = () => {
         setView("list")
         setSelectedPlan(null)
-        fetchPlans() 
+        fetchPlans()
     }
 
-    const handleCreate = async (form: Omit<Plan, "planID">) => {
-        try {
-            const response = await fetch("http://localhost:8080/plans", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify(form)
-            })
-
-            if (!response.ok) {
-                console.error("Failed to create plan")
-                return
-            }
-
-            await fetchPlans()
-            setView("list")
-
-        } catch (err) {
-            console.error("Server connection failed")
-        }
+    const handleCreate = (plan: Plan) => {
+        setPlans(prev => [...prev, plan])
+        setView("list")
+        toast.success("Plan created successfully")
     }
 
     const handleEdit = async (updated: Plan) => {
@@ -103,42 +88,42 @@ function AdminManagePlan() {
             )
 
             if (!response.ok) {
-                console.error("Failed to update plan")
+                toast.error("Failed to update plan")
                 return
             }
 
             await fetchPlans()
             setSelectedPlan(updated)
+            toast.success("Plan updated successfully")
 
         } catch (err) {
-            console.error("Server connection failed")
+            toast.error("Server connection failed")
         }
     }
 
-    const handleToggleSuspend = async (plan: Plan) => {
-        const newStatus = plan.planStatus === "active" ? "suspended" : "active"
-
+    const handleUpdateStatus = async (plan: Plan, status: "active" | "inactive") => {
         try {
             const response = await fetch(
-                `http://localhost:8080/plans/${plan.planID}/suspend`,
+                `http://localhost:8080/plans/${plan.planID}/status`,
                 {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify({ planStatus: newStatus })
+                    body: JSON.stringify({ planStatus: status })
                 }
             )
 
             if (!response.ok) {
-                console.error("Failed to update plan status")
+                toast.error("Failed to update plan status")
                 return
             }
 
             await fetchPlans()
-            setSelectedPlan({ ...plan, planStatus: newStatus })
+            setSelectedPlan({ ...plan, planStatus: status })
+            toast.success("Plan status updated successfully")
 
         } catch (err) {
-            console.error("Server connection failed")
+            toast.error("Server connection failed")
         }
     }
 
@@ -159,7 +144,7 @@ function AdminManagePlan() {
                 encMethods={encMethods}
                 onBack={handleBack}
                 onEdit={handleEdit}
-                onToggleSuspend={handleToggleSuspend}
+                onUpdateStatus={handleUpdateStatus}
             />
         )
     }

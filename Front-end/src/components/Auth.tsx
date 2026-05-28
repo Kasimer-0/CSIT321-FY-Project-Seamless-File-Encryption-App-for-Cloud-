@@ -1,7 +1,7 @@
 import { useState } from "react"
 import LoginForm from "./LoginForm"
 import SignUpForm from "./SignUpForm"
-import type { UserAccount } from "../Entity"
+import type { UserAccount } from "../Type"
 
 type AuthProps = {
     onLogin: (user: UserAccount) => void

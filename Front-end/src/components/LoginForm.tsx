@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { UserAccount } from "../Entity"
+import type { UserAccount } from "../Type"
 
 type LoginFormProps = {
     onLogin: (user: UserAccount) => void
@@ -27,6 +27,11 @@ function LoginForm({ onLogin }: LoginFormProps) {
 
             if (!response.ok) {
                 setError(data.message || "Invalid credentials")
+                return
+            }
+
+            if (data.user.isSuspended) {
+                setError("Your account has been suspended. Please contact support.")
                 return
             }
 

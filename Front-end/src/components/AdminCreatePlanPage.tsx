@@ -1,26 +1,51 @@
 import { useState } from "react"
-import type { Plan } from "../Entity"
+import type { Plan } from "../Type"
+import toast from "react-hot-toast"
 
 type CreatePlanProps = {
     encMethods: string[]
     onBack: () => void
-    onCreate: (plan: Omit<Plan, "planID">) => void
+    onCreate: (plan: Plan) => void
 }
 
 const emptyForm: Omit<Plan, "planID"> = {
     planTitle: "",
     planPrice: 0,
     planDescription: "",
-    planStatus: "active",
+    planStatus: "inactive",
     encMethod: "",
 }
 
 function AdminCreatePlan({ encMethods, onBack, onCreate }: CreatePlanProps) {
     const [form, setForm] = useState<Omit<Plan, "planID">>(emptyForm)
 
-    const handleSubmit = () => {
-        onCreate(form)
-        setForm(emptyForm)
+    const handleSubmit = async () => {
+        if (!form.planTitle || !form.encMethod) {
+            toast.error("Please fill in all required fields")
+            return
+        }
+
+        try {
+            const response = await fetch("http://localhost:8080/plans", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(form)
+            })
+
+            if (!response.ok) {
+                toast.error("Failed to create plan")
+                return
+            }
+
+            const data: Plan = await response.json()
+            onCreate(data)
+            setForm(emptyForm)
+            toast.success("Plan created successfully")
+
+        } catch (err) {
+            toast.error("Server connection failed")
+        }
     }
 
     return (
@@ -46,7 +71,7 @@ function AdminCreatePlan({ encMethods, onBack, onCreate }: CreatePlanProps) {
                     className="form-control"
                     type="number"
                     value={form.planPrice}
-                    onChange={(e) => setForm({ ...form, planPrice: parseFloat(e.target.value) })}
+                    onChange={(e) => setForm({ ...form, planPrice: Number(e.target.value) || 0 })}
                 />
             </div>
 
@@ -68,7 +93,7 @@ function AdminCreatePlan({ encMethods, onBack, onCreate }: CreatePlanProps) {
                     onChange={(e) => setForm({ ...form, encMethod: e.target.value })}
                 >
                     <option value="">Select encryption method...</option>
-                    {encMethods.map(method => (
+                    {encMethods.map((method) => (
                         <option key={method} value={method}>{method}</option>
                     ))}
                 </select>

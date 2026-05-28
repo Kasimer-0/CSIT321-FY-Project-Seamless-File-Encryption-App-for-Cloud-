@@ -1,9 +1,7 @@
-import type { UserAccount } from "../Entity"
-import type { Ticket } from "../Entity"
+import type { TicketDTO } from "../Type"
 
 type AdminViewTicketProps = {
-    ticket: Ticket
-    currentUser: UserAccount
+    ticket: TicketDTO
     onBack: () => void
     onAssignToMe: () => void
     onCloseTicket: () => void
@@ -11,7 +9,7 @@ type AdminViewTicketProps = {
     setShowConfirm: (value: boolean) => void
 }
 
-function AdminViewTicket({ ticket, currentUser, onBack, onAssignToMe, onCloseTicket, showConfirm, setShowConfirm }: AdminViewTicketProps) {
+function AdminViewTicket({ ticket, onBack, onAssignToMe, onCloseTicket, showConfirm, setShowConfirm }: AdminViewTicketProps) {
     return (
         <div className="card p-4">
             <button className="btn btn-outline-secondary mb-3" onClick={onBack}>
@@ -40,7 +38,6 @@ function AdminViewTicket({ ticket, currentUser, onBack, onAssignToMe, onCloseTic
                 <small className="text-muted fw-semibold mb-1 d-block">Description</small>
                 <p className="mb-0" style={{ fontSize: 14 }}>{ticket.ticketDescription}</p>
             </div>
-
 
             {ticket.ticketStatus === "open" && (
                 <div className="d-flex gap-2">

@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react"
-import type { UserAccount } from "../Entity"
+import type { UserAccountDTO } from "../Type"
 import AdminViewAccount from "./AdminViewAccountPage"
+import toast from "react-hot-toast"
 
 function AdminManageAccount() {
-    const [users, setUsers] = useState<UserAccount[]>([])
+    const [users, setUsers] = useState<UserAccountDTO[]>([])
     const [view, setView] = useState<"list" | "detail">("list")
-    const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null)
+    const [selectedUser, setSelectedUser] = useState<UserAccountDTO | null>(null)
     const [search, setSearch] = useState("")
     const [showConfirm, setShowConfirm] = useState(false)
     const [loading, setLoading] = useState(true)
@@ -42,7 +43,7 @@ function AdminManageAccount() {
         return () => clearTimeout(timer)
     }, [search])
 
-    const handleSelect = (user: UserAccount) => {
+    const handleSelect = (user: UserAccountDTO) => {
         setSelectedUser(user)
         setView("detail")
     }
@@ -50,7 +51,7 @@ function AdminManageAccount() {
     const handleBack = () => {
         setView("list")
         setSelectedUser(null)
-        fetchUsers() // refresh list
+        fetchUsers()
     }
 
     const handleToggleSuspend = async () => {
@@ -60,32 +61,26 @@ function AdminManageAccount() {
 
         try {
             const response = await fetch(
-                `http://localhost:8080/users/${selectedUser.id}/suspend`,
+                `http://localhost:8080/users/${selectedUser.userID}/suspend`,
                 {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify({
-                        isSuspended: newStatus
-                    })
+                    body: JSON.stringify({ isSuspended: newStatus })
                 }
             )
 
             if (!response.ok) {
-                console.error("Failed to update suspension status")
+                toast.error("Failed to update suspension status")
                 return
             }
 
-            // refresh from backend instead of local update
             await fetchUsers()
-
-            setSelectedUser({
-                ...selectedUser,
-                isSuspended: newStatus
-            })
+            setSelectedUser({ ...selectedUser, isSuspended: newStatus })
+            toast.success(newStatus ? "Account suspended successfully" : "Account unsuspended successfully")
 
         } catch (err) {
-            console.error("Server connection failed")
+            toast.error("Server connection failed")
         } finally {
             setShowConfirm(false)
         }
@@ -124,7 +119,7 @@ function AdminManageAccount() {
                 ) : (
                     users.map(user => (
                         <li
-                            key={user.id}
+                            key={user.userID}
                             className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
                             style={{ cursor: "pointer" }}
                             onClick={() => handleSelect(user)}
@@ -134,8 +129,8 @@ function AdminManageAccount() {
                                 <small className="text-muted">{user.email}</small>
                             </div>
                             <div className="d-flex gap-2">
-                                <span className={`badge ${user.isPremium ? "bg-success" : "bg-secondary"}`}>
-                                    {user.isPremium ? "Premium" : "Free"}
+                                <span className={`badge ${user.isSubscribed ? "bg-success" : "bg-secondary"}`}>
+                                    {user.isSubscribed ? "Subscribed" : "Unsubscribed"}
                                 </span>
                                 {user.isSuspended && (
                                     <span className="badge bg-danger">Suspended</span>

@@ -1,8 +1,9 @@
 import { useState } from "react"
-import type { UserAccount } from "./Entity"
+import type { UserAccount } from "./Type"
 import Auth from "./components/Auth"
 import AdminDashboard from "./components/AdminDashboardPage"
 import CustomerDashboard from "./components/CustomerDashboard"
+import { Toaster } from "react-hot-toast"
 
 function App() {
     const [user, setUser] = useState<UserAccount | null>(null)
@@ -12,14 +13,24 @@ function App() {
     }
 
     const handleLogout = () => {
-        setUser(null) // 
+        setUser(null)
     }
 
-    if (!user) return <Auth onLogin={handleLogin} />
+    return (
+        <>
+            <Toaster position="top-center" />
 
+            {!user && <Auth onLogin={handleLogin} />}
 
-    if (user.role === "admin") return <AdminDashboard user={user} onLogout={handleLogout} />
-    if (user.role === "customer") return <CustomerDashboard user={user} onLogout={handleLogout} />
+            {user?.role === "admin" && (
+                <AdminDashboard user={user} onLogout={handleLogout} />
+            )}
+
+            {user?.role === "customer" && (
+                <CustomerDashboard user={user} onLogout={handleLogout} />
+            )}
+        </>
+    )
 }
 
 export default App
