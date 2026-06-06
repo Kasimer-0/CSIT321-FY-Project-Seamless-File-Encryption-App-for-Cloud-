@@ -5,6 +5,8 @@ import com.stealthsync.model.dto.LoginRequest;
 import com.stealthsync.model.dto.SignUpRequest;
 import com.stealthsync.model.dto.ErrorResponse;
 import com.stealthsync.model.entity.UserAccount;
+import com.stealthsync.service.MockDataStore;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +18,11 @@ import java.util.HashMap;
 @RestController
 @RequestMapping("/") // Directly map to the root path, connecting to the frontend's /login and /signup
 @CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true") // Allow React (Vite) frontend to make cross-origin requests
+@RequiredArgsConstructor
 @Slf4j
 public class AuthController {
+
+    private final MockDataStore dataStore;
 
     /**
      * Connect to the handleLogin method in LoginForm.tsx.
@@ -27,18 +32,13 @@ public class AuthController {
         log.info("StealthSync Auth: Login attempt for user/email: {}", loginRequest.getUsernameOrEmail());
 
         // Simulated login verification logic (temporarily hardcoded in the Prototype phase for frontend integration testing).
-        if ("admin".equals(loginRequest.getUsernameOrEmail()) && "Admin@123".equals(loginRequest.getPassword())) {
-            UserAccount admin = new UserAccount(1L, "admin", "admin@stealthsync.com", "admin", true, false);
-            return ResponseEntity.ok(new LoginResponse(admin));
-        } else if ("user@stealthsync.com".equals(loginRequest.getUsernameOrEmail()) && "User@1234".equals(loginRequest.getPassword())) {
-            UserAccount customer = new UserAccount(2L, "PremiumUser", "user@stealthsync.com", "customer", true, false);
-            return ResponseEntity.ok(new LoginResponse(customer));
-        }
-
-        // Validation failed: Returns a 401 status code along with JSON that matches the frontend's data.message expectations.
-        log.warn("Login failed for user: {}", loginRequest.getUsernameOrEmail());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(new ErrorResponse("Invalid credentials. Please check your username/email or password."));
+        return dataStore.authenticate(loginRequest.getUsernameOrEmail(), loginRequest.getPassword())
+                .<ResponseEntity<?>>map(user -> ResponseEntity.ok(new LoginResponse(user)))
+                .orElseGet(() -> {
+                    log.warn("Login failed for user: {}", loginRequest.getUsernameOrEmail());
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                            .body(new ErrorResponse("Invalid credentials. Please check your username/email or password."));
+                });
     }
 
     /**
@@ -51,10 +51,12 @@ public class AuthController {
 
         try {
             // Simulated registration success response for the Prototype phase
-            Map<String, String> successResponse = new HashMap<>();
+            UserAccount user = dataStore.registerCustomer(signUpRequest.getUsername(), signUpRequest.getEmail());
+            Map<String, Object> successResponse = new HashMap<>();
             successResponse.put("status", "success");
             successResponse.put("message", "Account registered successfully!");
-            
+            successResponse.put("user", user);
+
             return ResponseEntity.status(HttpStatus.CREATED).body(successResponse);
         } catch (Exception e) {
             log.error("Registration failed", e);

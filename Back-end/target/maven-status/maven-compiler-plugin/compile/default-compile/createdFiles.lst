@@ -1,0 +1,7 @@
+com\stealthsync\controller\SubscriptionController.class
+com\stealthsync\model\entity\EncryptedFileRecord.class
+com\stealthsync\service\MockDataStore.class
+com\stealthsync\model\entity\Subscription.class
+com\stealthsync\controller\CloudStorageController.class
+com\stealthsync\model\dto\CreateTicketRequest.class
+com\stealthsync\model\entity\CloudStorageLink.class
