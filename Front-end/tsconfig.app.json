@@ -5,6 +5,11 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "react-hot-toast": ["src/lib/reactHotToast.tsx"]
+    },
     "skipLibCheck": true,
 
     /* Bundler mode */
