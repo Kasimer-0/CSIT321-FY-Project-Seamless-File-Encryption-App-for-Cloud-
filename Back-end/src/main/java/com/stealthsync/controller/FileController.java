@@ -20,7 +20,7 @@ import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true") // Allow cross-origin access to the Vite frontend via the default port.
+@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true") // Allow cross-origin access to the Vite frontend via the default port.
 @Slf4j
 public class FileController {
 

@@ -17,7 +17,7 @@ import java.util.HashMap;
 
 @RestController
 @RequestMapping("/") // Directly map to the root path, connecting to the frontend's /login and /signup
-@CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true") // Allow React (Vite) frontend to make cross-origin requests
+@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true") // Allow React (Vite) frontend to make cross-origin requests
 @RequiredArgsConstructor
 @Slf4j
 public class AuthController {

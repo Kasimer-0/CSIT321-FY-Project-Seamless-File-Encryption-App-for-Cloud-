@@ -14,7 +14,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/tickets") // Corresponding front-end management and filtering routes for work orders
-@CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true")
+@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class TicketController {
