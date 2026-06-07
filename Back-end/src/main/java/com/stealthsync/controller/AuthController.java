@@ -5,7 +5,7 @@ import com.stealthsync.model.dto.LoginRequest;
 import com.stealthsync.model.dto.SignUpRequest;
 import com.stealthsync.model.dto.ErrorResponse;
 import com.stealthsync.model.entity.UserAccount;
-import com.stealthsync.service.MockDataStore;
+import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -22,7 +22,7 @@ import java.util.HashMap;
 @Slf4j
 public class AuthController {
 
-    private final MockDataStore dataStore;
+    private final AppDataService dataStore;
 
     /**
      * Connect to the handleLogin method in LoginForm.tsx.
@@ -51,7 +51,11 @@ public class AuthController {
 
         try {
             // Simulated registration success response for the Prototype phase
-            UserAccount user = dataStore.registerCustomer(signUpRequest.getUsername(), signUpRequest.getEmail());
+            UserAccount user = dataStore.registerCustomer(
+                    signUpRequest.getUsername(),
+                    signUpRequest.getEmail(),
+                    signUpRequest.getPassword()
+            );
             Map<String, Object> successResponse = new HashMap<>();
             successResponse.put("status", "success");
             successResponse.put("message", "Account registered successfully!");

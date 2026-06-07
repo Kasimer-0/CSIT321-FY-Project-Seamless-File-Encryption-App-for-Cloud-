@@ -1,7 +1,7 @@
 package com.stealthsync.controller;
 
 import com.stealthsync.model.entity.EncryptedFileRecord;
-import com.stealthsync.service.MockDataStore;
+import com.stealthsync.service.AppDataService;
 import com.stealthsync.service.crypto.AesGcmService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +28,7 @@ public class FileController {
     private static final String DEFAULT_ENC_METHOD = "AES-256-GCM";
 
     private final AesGcmService aesGcmService;
-    private final MockDataStore dataStore;
+    private final AppDataService dataStore;
 
     /**
      * Receive files uploaded via drag-and-drop from the frontend and encrypt them silently in the background (FR2.2 / FR1.1)

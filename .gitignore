@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+Front-end/node_modules/
+
+# Build output
+Back-end/target/
+Front-end/dist/
+dist-desktop/
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
+Front-end/tmp/
+~$*.docx
+
+# IDE and OS metadata
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local vault/runtime data
+vault.dat
+vault.secrets.dat
+.stealthsync/

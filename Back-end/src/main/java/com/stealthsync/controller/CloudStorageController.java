@@ -1,7 +1,7 @@
 package com.stealthsync.controller;
 
 import com.stealthsync.model.entity.CloudStorageLink;
-import com.stealthsync.service.MockDataStore;
+import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +17,7 @@ import java.util.Map;
 @Slf4j
 public class CloudStorageController {
 
-    private final MockDataStore dataStore;
+    private final AppDataService dataStore;
 
     @GetMapping("/links")
     public ResponseEntity<List<CloudStorageLink>> getLinks() {

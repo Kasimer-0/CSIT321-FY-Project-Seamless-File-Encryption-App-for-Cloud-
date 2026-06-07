@@ -1,7 +1,7 @@
 package com.stealthsync.controller;
 
 import com.stealthsync.model.dto.*;
-import com.stealthsync.service.MockDataStore;
+import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +18,7 @@ import java.util.Map;
 @Slf4j
 public class AdminController {
 
-    private final MockDataStore dataStore;
+    private final AppDataService dataStore;
 
     // ==========================================
     // 1. Dashboard Statistics Dashboard Interface

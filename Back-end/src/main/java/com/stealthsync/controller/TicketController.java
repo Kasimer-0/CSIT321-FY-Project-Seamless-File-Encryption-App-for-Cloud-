@@ -2,7 +2,7 @@ package com.stealthsync.controller;
 
 import com.stealthsync.model.dto.CreateTicketRequest;
 import com.stealthsync.model.entity.Ticket;
-import com.stealthsync.service.MockDataStore;
+import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -19,7 +19,7 @@ import java.util.Map;
 @Slf4j
 public class TicketController {
 
-    private final MockDataStore dataStore;
+    private final AppDataService dataStore;
 
     @GetMapping("/my")
     public ResponseEntity<List<Ticket>> getMyTickets() {

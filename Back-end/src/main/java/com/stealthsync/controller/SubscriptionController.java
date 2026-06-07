@@ -1,7 +1,7 @@
 package com.stealthsync.controller;
 
 import com.stealthsync.model.entity.Subscription;
-import com.stealthsync.service.MockDataStore;
+import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +16,7 @@ import java.util.List;
 @Slf4j
 public class SubscriptionController {
 
-    private final MockDataStore dataStore;
+    private final AppDataService dataStore;
 
     @GetMapping
     public ResponseEntity<List<Subscription>> getSubscriptions(@RequestParam(required = false) String search) {
