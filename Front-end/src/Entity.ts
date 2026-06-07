@@ -23,4 +23,12 @@ export type Ticket = {
     ticketStatus : string
     ticketRequester : UserAccount
     personInCharge : UserAccount | null
+    responses: TicketResponse[]
+}
+
+export type TicketResponse = {
+    responseId: number
+    message: string
+    senderRole: "admin" | "customer"
+    timestamp: string
 }

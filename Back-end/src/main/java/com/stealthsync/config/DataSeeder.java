@@ -5,6 +5,7 @@ import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.Plan;
 import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.model.entity.Ticket;
+import com.stealthsync.model.entity.TicketResponse;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.CloudStorageLinkRepository;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 
 @Component
 @RequiredArgsConstructor
@@ -88,21 +90,39 @@ public class DataSeeder implements CommandLineRunner {
         userAccountRepository.save(customer);
 
         if (ticketRepository.count() == 0) {
-            ticketRepository.save(new Ticket(
+            Ticket decryptTicket = new Ticket(
                     null,
                     "Cannot decrypt uploaded file",
                     "User reports that decryption fails after downloading an encrypted cloud backup.",
                     "open",
                     customer,
-                    null
+                    null,
+                    new ArrayList<>()
+            );
+            decryptTicket.getResponses().add(new TicketResponse(
+                    null,
+                    "I cannot decrypt the file I uploaded yesterday. Could someone help check it?",
+                    "customer",
+                    Instant.now().minusSeconds(7200),
+                    decryptTicket
             ));
+            decryptTicket.getResponses().add(new TicketResponse(
+                    null,
+                    "We are checking the encrypted file metadata and will update you here.",
+                    "admin",
+                    Instant.now().minusSeconds(3600),
+                    decryptTicket
+            ));
+            ticketRepository.save(decryptTicket);
+
             ticketRepository.save(new Ticket(
                     null,
                     "Plan upgrade question",
                     "Customer wants to confirm whether AES-256-GCM is included in the premium plan.",
                     "open",
                     customer,
-                    admin
+                    admin,
+                    new ArrayList<>()
             ));
         }
 

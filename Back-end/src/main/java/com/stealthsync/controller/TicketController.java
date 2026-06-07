@@ -1,7 +1,9 @@
 package com.stealthsync.controller;
 
+import com.stealthsync.model.dto.CreateTicketResponseRequest;
 import com.stealthsync.model.dto.CreateTicketRequest;
 import com.stealthsync.model.entity.Ticket;
+import com.stealthsync.model.entity.TicketResponse;
 import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +45,15 @@ public class TicketController {
             return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(dataStore.createTicket(request));
+    }
+
+    @PostMapping("/{id}/responses")
+    public ResponseEntity<TicketResponse> addResponse(
+            @PathVariable Long id,
+            @RequestBody CreateTicketResponseRequest request) {
+        return dataStore.addTicketResponse(id, request.getMessage(), request.getSenderRole())
+                .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PatchMapping("/{id}/assign")

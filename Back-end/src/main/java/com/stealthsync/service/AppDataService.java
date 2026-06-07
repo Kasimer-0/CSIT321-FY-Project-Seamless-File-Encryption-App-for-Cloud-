@@ -8,12 +8,14 @@ import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.Plan;
 import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.model.entity.Ticket;
+import com.stealthsync.model.entity.TicketResponse;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.CloudStorageLinkRepository;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
 import com.stealthsync.repository.PlanRepository;
 import com.stealthsync.repository.SubscriptionRepository;
 import com.stealthsync.repository.TicketRepository;
+import com.stealthsync.repository.TicketResponseRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -39,6 +42,7 @@ public class AppDataService {
     private final SubscriptionRepository subscriptionRepository;
     private final CloudStorageLinkRepository cloudStorageLinkRepository;
     private final EncryptedFileRecordRepository encryptedFileRecordRepository;
+    private final TicketResponseRepository ticketResponseRepository;
     private final PasswordEncoder passwordEncoder;
 
     public Optional<UserAccount> authenticate(String usernameOrEmail, String password) {
@@ -185,9 +189,26 @@ public class AppDataService {
                 request.getTicketDescription(),
                 "open",
                 requester,
-                null
+                null,
+                new ArrayList<>()
         );
         return ticketRepository.save(ticket);
+    }
+
+    @Transactional
+    public Optional<TicketResponse> addTicketResponse(Long ticketID, String message, String senderRole) {
+        if (isBlank(message)) {
+            throw new IllegalArgumentException("Message is required.");
+        }
+        String normalizedSenderRole = normalizeSenderRole(senderRole);
+
+        return findTicket(ticketID).map(ticket -> ticketResponseRepository.save(new TicketResponse(
+                null,
+                message.trim(),
+                normalizedSenderRole,
+                Instant.now(),
+                ticket
+        )));
     }
 
     @Transactional
@@ -396,6 +417,14 @@ public class AppDataService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private String normalizeSenderRole(String senderRole) {
+        String normalized = normalize(senderRole);
+        if (!"admin".equals(normalized) && !"customer".equals(normalized)) {
+            throw new IllegalArgumentException("senderRole must be either 'admin' or 'customer'.");
+        }
+        return normalized;
     }
 
     private String fileType(String filename) {

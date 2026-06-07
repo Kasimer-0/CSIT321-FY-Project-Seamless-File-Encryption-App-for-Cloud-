@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import type { CreateTicketDTO, TicketDTO, UserAccount } from "../Type"
+import type { CreateTicketDTO, TicketDTO, TicketResponse, UserAccount } from "../Type"
 import CustomerManageOwnTicket from "./CustomerManageOwnTicketPage"
 import CustomerCreateTicket from "./CustomerCreateTicketPage"
 import CustomerEncryptFile from "./CustomerEncryptFilePage"
@@ -86,6 +86,14 @@ function CustomerDashboard({ user, onLogout }: CustomerDashboardProps) {
         } catch (err) {
             toast.error("Server connection failed")
         }
+    }
+
+    const handleTicketResponseAdded = (ticketID: number, response: TicketResponse) => {
+        setTickets(prev => prev.map(ticket =>
+            ticket.ticketID === ticketID
+                ? { ...ticket, responses: [...(ticket.responses ?? []), response] }
+                : ticket
+        ))
     }
 
     const getPageTitle = () => {
@@ -217,6 +225,7 @@ function CustomerDashboard({ user, onLogout }: CustomerDashboardProps) {
                                     onCloseTicket={(id) => setTickets(prev => prev.map(t =>
                                         t.ticketID === id ? { ...t, ticketStatus: "closed" } : t
                                     ))}
+                                    onTicketResponseAdded={handleTicketResponseAdded}
                                 />
                             )}
                         </div>

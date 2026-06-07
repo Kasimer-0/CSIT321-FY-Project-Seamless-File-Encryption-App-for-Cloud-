@@ -33,6 +33,7 @@ export type Ticket = {
     ticketStatus : string
     ticketRequester: number
     personInCharge: number | null
+    responses: TicketResponse[]
 }
 
 export type EncryptedFile = {
@@ -74,12 +75,25 @@ export type TicketDTO = {
     ticketStatus : string
     ticketRequester: UserAccount
     personInCharge: UserAccount | null
+    responses: TicketResponse[]
 }
 
 export type CreateTicketDTO = {
     ticketTitle: string
     ticketDescription: string
     ticketRequesterID: number
+}
+
+export type TicketResponse = {
+    responseId: number
+    message: string
+    senderRole: "admin" | "customer"
+    timestamp: string
+}
+
+export type CreateTicketResponseDTO = {
+    message: string
+    senderRole: "admin" | "customer"
 }
 
 export type CloudStorageLink = {

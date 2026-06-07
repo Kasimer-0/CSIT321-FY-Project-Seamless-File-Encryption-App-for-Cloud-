@@ -1,24 +1,63 @@
 import { useState } from "react"
-import type { TicketDTO } from "../Type"
+import type { TicketDTO, TicketResponse } from "../Type"
+import toast from "react-hot-toast"
 
 type Props = {
     ticket: TicketDTO
     onBack: () => void
     onClose: (ticketID: number) => void
+    onResponseAdded: (response: TicketResponse) => void
 }
 
-function CustomerViewTicket({ ticket, onBack, onClose }: Props) {
+function CustomerViewTicket({ ticket, onBack, onClose, onResponseAdded }: Props) {
     const [showConfirm, setShowConfirm] = useState(false)
+    const [message, setMessage] = useState("")
+    const [sending, setSending] = useState(false)
+
+    const responses = ticket.responses ?? []
 
     const handleClose = async () => {
         await onClose(ticket.ticketID)
         setShowConfirm(false)
     }
 
+    const handleSendResponse = async () => {
+        const trimmedMessage = message.trim()
+        if (!trimmedMessage) return
+
+        setSending(true)
+
+        try {
+            const response = await fetch(`http://localhost:8080/tickets/${ticket.ticketID}/responses`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    message: trimmedMessage,
+                    senderRole: "customer"
+                })
+            })
+
+            if (!response.ok) {
+                toast.error("Failed to send response")
+                return
+            }
+
+            const savedResponse: TicketResponse = await response.json()
+            onResponseAdded(savedResponse)
+            setMessage("")
+            toast.success("Response sent")
+        } catch {
+            toast.error("Server connection failed")
+        } finally {
+            setSending(false)
+        }
+    }
+
     return (
         <>
             <button className="btn btn-outline-secondary mb-3" onClick={onBack}>
-                ← Back
+                Back
             </button>
 
             <div className="d-flex justify-content-between align-items-start mb-3">
@@ -33,9 +72,67 @@ function CustomerViewTicket({ ticket, onBack, onClose }: Props) {
                 Assigned To: {ticket.personInCharge?.username ?? <span className="text-danger">Unassigned</span>}
             </p>
 
-            <div className="card bg-light p-3 mb-4">
+            <div className="border rounded bg-light p-3 mb-4">
                 <small className="text-muted fw-semibold mb-1 d-block">Description</small>
                 <p className="mb-0" style={{ fontSize: 14 }}>{ticket.ticketDescription}</p>
+            </div>
+
+            <div className="mb-4">
+                <small className="text-muted fw-semibold mb-2 d-block">Conversation</small>
+                <div className="d-flex flex-column gap-2 mb-3" style={{ maxHeight: 300, overflowY: "auto" }}>
+                    {responses.length === 0 ? (
+                        <div className="text-muted" style={{ fontSize: 13 }}>No responses yet.</div>
+                    ) : responses.map(response => {
+                        const fromAdmin = response.senderRole === "admin"
+                        return (
+                            <div
+                                key={response.responseId}
+                                className={`d-flex ${fromAdmin ? "justify-content-end" : "justify-content-start"}`}
+                            >
+                                <div
+                                    className={`rounded px-3 py-2 ${fromAdmin ? "bg-primary text-white" : "bg-white border"}`}
+                                    style={{ maxWidth: "72%", fontSize: 14 }}
+                                >
+                                    <div
+                                        className={`fw-semibold mb-1 ${fromAdmin ? "text-white" : "text-muted"}`}
+                                        style={{ fontSize: 11 }}
+                                    >
+                                        {fromAdmin ? "Admin" : "Customer"}
+                                    </div>
+                                    <div>{response.message}</div>
+                                    <div className={fromAdmin ? "text-white-50" : "text-muted"} style={{ fontSize: 11 }}>
+                                        {new Date(response.timestamp).toLocaleString()}
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+
+                {ticket.ticketStatus === "open" && (
+                    <div className="d-flex gap-2">
+                        <input
+                            className="form-control"
+                            value={message}
+                            onChange={(event) => setMessage(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                    event.preventDefault()
+                                    handleSendResponse()
+                                }
+                            }}
+                            placeholder="Write a response..."
+                            disabled={sending}
+                        />
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleSendResponse}
+                            disabled={sending || !message.trim()}
+                        >
+                            {sending ? "Sending..." : "Send"}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {ticket.ticketStatus === "open" && (

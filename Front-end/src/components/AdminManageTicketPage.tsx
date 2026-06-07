@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import type { UserAccount, TicketDTO } from "../Type"
+import type { UserAccount, TicketDTO, TicketResponse } from "../Type"
 import AdminViewTicket from "./AdminViewTicketPage"
 import toast from "react-hot-toast"
 
@@ -132,6 +132,20 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
         }
     }
 
+    const handleResponseAdded = (response: TicketResponse) => {
+        if (!selectedTicket) return
+
+        const updatedTicket = {
+            ...selectedTicket,
+            responses: [...(selectedTicket.responses ?? []), response]
+        }
+
+        setSelectedTicket(updatedTicket)
+        setTickets(prev => prev.map(ticket =>
+            ticket.ticketID === updatedTicket.ticketID ? updatedTicket : ticket
+        ))
+    }
+
     if (view === "detail" && selectedTicket) {
         return (
             <AdminViewTicket
@@ -139,6 +153,7 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
                 onBack={handleBack}
                 onAssignToMe={handleAssignToMe}
                 onCloseTicket={handleCloseTicket}
+                onResponseAdded={handleResponseAdded}
                 showConfirm={showConfirm}
                 setShowConfirm={setShowConfirm}
             />

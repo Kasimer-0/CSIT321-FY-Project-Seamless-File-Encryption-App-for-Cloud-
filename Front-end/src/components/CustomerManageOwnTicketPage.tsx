@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { TicketDTO, UserAccount } from "../Type"
+import type { TicketDTO, TicketResponse, UserAccount } from "../Type"
 import CustomerViewTicket from "./CustomerViewTicketPage"
 import toast from "react-hot-toast"
 
@@ -7,9 +7,10 @@ type Props = {
     user: UserAccount
     tickets: TicketDTO[]
     onCloseTicket: (ticketID: number) => void
+    onTicketResponseAdded: (ticketID: number, response: TicketResponse) => void
 }
 
-function CustomerManageOwnTicket({ user, tickets, onCloseTicket }: Props) {
+function CustomerManageOwnTicket({ user, tickets, onCloseTicket, onTicketResponseAdded }: Props) {
     const [search, setSearch] = useState("")
     const [filterStatus, setFilterStatus] = useState("all")
     const [filterAssignee, setFilterAssignee] = useState("all")
@@ -62,12 +63,25 @@ function CustomerManageOwnTicket({ user, tickets, onCloseTicket }: Props) {
         }
     }
 
+    const handleResponseAdded = (response: TicketResponse) => {
+        if (!selectedTicket) return
+
+        const updatedTicket = {
+            ...selectedTicket,
+            responses: [...(selectedTicket.responses ?? []), response]
+        }
+
+        setSelectedTicket(updatedTicket)
+        onTicketResponseAdded(updatedTicket.ticketID, response)
+    }
+
     if (selectedTicket) {
         return (
             <CustomerViewTicket
                 ticket={selectedTicket}
                 onBack={() => setSelectedTicket(null)}
                 onClose={handleCloseTicket}
+                onResponseAdded={handleResponseAdded}
             />
         )
     }
