@@ -42,3 +42,33 @@ From `Front-end/`:
 ```powershell
 npm run build
 ```
+
+## Desktop App Packaging
+
+`dist-desktop/` is a generated Windows desktop app image, so it is intentionally not committed to GitHub. It is large, platform-specific, and can be rebuilt from source.
+
+To rebuild the desktop app image on Windows:
+
+```powershell
+.\scripts\build-desktop.ps1
+```
+
+The script:
+
+- builds the React frontend
+- copies the frontend build into `Back-end/src/main/resources/static`
+- packages the Spring Boot backend JAR
+- runs `jpackage` to create `dist-desktop/StealthSync/StealthSync.exe`
+
+Runtime database password is still read from the `DB_PASSWORD` environment variable:
+
+```powershell
+$env:DB_PASSWORD="your_postgres_password"
+& ".\dist-desktop\StealthSync\StealthSync.exe"
+```
+
+To create a Windows `.exe` or `.msi` installer instead of an app image, install WiX Toolset first, then run:
+
+```powershell
+.\scripts\build-desktop.ps1 -PackageType exe
+```
