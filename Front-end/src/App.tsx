@@ -16,6 +16,10 @@ function App() {
         setUser(null)
     }
 
+    const handleUserUpdate = (updatedUser: UserAccount) => {
+        setUser(updatedUser)
+    }
+
     return (
         <>
             <Toaster position="top-center" />
@@ -27,7 +31,7 @@ function App() {
             )}
 
             {user?.role === "customer" && (
-                <CustomerDashboard user={user} onLogout={handleLogout} />
+                <CustomerDashboard user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
             )}
         </>
     )

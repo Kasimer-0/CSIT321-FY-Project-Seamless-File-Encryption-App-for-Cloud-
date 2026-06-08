@@ -1,5 +1,7 @@
 package com.stealthsync.controller;
 
+import com.stealthsync.model.dto.PurchasePlanRequest;
+import com.stealthsync.model.dto.UserAccountDTO;
 import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,12 @@ public class SubscriptionController {
         return dataStore.findSubscription(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/purchase")
+    public ResponseEntity<UserAccountDTO> purchasePlan(@RequestBody PurchasePlanRequest request) {
+        log.info("Customer {} purchasing plan {}", request.getUserID(), request.getPlanID());
+        return ResponseEntity.ok(dataStore.purchasePlan(request.getUserID(), request.getPlanID()));
     }
 
     @PatchMapping("/{id}/cancel")

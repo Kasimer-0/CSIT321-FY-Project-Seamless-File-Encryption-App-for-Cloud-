@@ -5,7 +5,7 @@ export type UserAccount = {
     role : "admin" | "customer"
     isSubscribed : boolean
     isSuspended : boolean
-    subscription: number|null
+    subscription: number | SubscriptionDTO | null
 }
 
 export type Plan = {
@@ -55,7 +55,7 @@ export type UserAccountDTO = {
     role : "admin" | "customer"
     isSubscribed : boolean
     isSuspended : boolean
-    subscription: SubscriptionDTO
+    subscription: SubscriptionDTO | null
 }
 
 
@@ -95,6 +95,13 @@ export type CreateTicketResponseDTO = {
     message: string
     senderRole: "admin" | "customer"
 }
+
+export type PurchasePlanRequest = {
+    userID: number
+    planID: number
+}
+
+export type PurchasePlanResponse = UserAccount
 
 export type CloudStorageLink = {
     linkID: number

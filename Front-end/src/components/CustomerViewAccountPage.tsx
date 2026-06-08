@@ -4,7 +4,7 @@ import toast from "react-hot-toast"
 
 type Props = {
     user: UserAccount
-    onSubscribe?: (plan: Plan) => void
+    onSubscribe?: (plan: Plan) => Promise<UserAccount | void> | UserAccount | void
     onUpdateAccount?: (updated: { username: string; email: string }) => void
     onSuspendAccount?: () => void
     onCancelSubscription?: () => void
@@ -28,8 +28,15 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
 
     const [showCancelSubConfirm, setShowCancelSubConfirm] = useState(false)
     const [cancellingSub, setCancellingSub] = useState(false)
+    const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+    const [purchasingPlanID, setPurchasingPlanID] = useState<number | null>(null)
+    const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
     const initials = editUsername.slice(0, 2).toUpperCase()
+    const userSubscriptionID = typeof user.subscription === "number"
+        ? user.subscription
+        : user.subscription?.subscriptionID ?? null
+    const embeddedSubscription = typeof user.subscription === "number" ? null : user.subscription
 
     const handleCancelEdit = () => {
         setEditUsername(user.username)
@@ -120,17 +127,58 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         }
     }
 
+    const handleConfirmPurchase = async () => {
+        if (!selectedPlan || !onSubscribe) return
+
+        setPurchasingPlanID(selectedPlan.planID)
+        setPurchaseError(null)
+
+        try {
+            const updatedUser = await onSubscribe(selectedPlan)
+            if (selectedPlan.planPrice <= 0) {
+                setSubscription(null)
+            } else if (updatedUser?.subscription && typeof updatedUser.subscription !== "number") {
+                setSubscription(updatedUser.subscription)
+            }
+            toast.success(selectedPlan.planPrice <= 0
+                ? "Switched to Free Plan"
+                : `${selectedPlan.planTitle} activated`)
+            setSelectedPlan(null)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to update subscription"
+            setPurchaseError(message)
+            toast.error(message)
+        } finally {
+            setPurchasingPlanID(null)
+        }
+    }
+
     useEffect(() => {
-        if (!user.isSubscribed) return
+        if (!user.isSubscribed) {
+            setSubscription(null)
+            setLoadingSub(false)
+            return
+        }
+        if (embeddedSubscription) {
+            setSubscription(embeddedSubscription)
+            setLoadingSub(false)
+            return
+        }
+        if (!userSubscriptionID) {
+            setSubscription(null)
+            setLoadingSub(false)
+            return
+        }
+
         setLoadingSub(true)
 
-        fetch(`http://localhost:8080/subscriptions/${user.subscription}`, { credentials: "include" })
+        fetch(`http://localhost:8080/subscriptions/${userSubscriptionID}`, { credentials: "include" })
             .then(r => r.json())
             .then((data: SubscriptionDTO) => setSubscription(data))
             .catch(err => console.error("Failed to fetch subscription", err))
             .finally(() => setLoadingSub(false))
 
-    }, [user.isSubscribed, user.subscription])
+    }, [user.isSubscribed, userSubscriptionID, embeddedSubscription])
 
     useEffect(() => {
         if (!showPlans) return
@@ -186,7 +234,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                                 {saveError && <div className="text-danger" style={{ fontSize: 12 }}>{saveError}</div>}
                                 <div className="d-flex gap-2">
                                     <button className="btn btn-primary btn-sm" onClick={handleSaveEdit} disabled={saving}>
-                                        {saving ? "Saving…" : "Save"}
+                                        {saving ? "Saving..." : "Save"}
                                     </button>
                                     <button className="btn btn-outline-secondary btn-sm" onClick={handleCancelEdit} disabled={saving}>
                                         Cancel
@@ -215,7 +263,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                 </h6>
 
                 {loadingSub ? (
-                    <div className="text-muted" style={{ fontSize: 14 }}>Loading subscription…</div>
+                    <div className="text-muted" style={{ fontSize: 14 }}>Loading subscription...</div>
                 ) : user.isSubscribed && subscription ? (
                     <>
                         <div className="d-flex align-items-start justify-content-between gap-3">
@@ -272,11 +320,12 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                 {showPlans && (
                     <div className="mt-3">
                         {loadingPlans ? (
-                            <div className="text-muted" style={{ fontSize: 14 }}>Loading plans…</div>
+                            <div className="text-muted" style={{ fontSize: 14 }}>Loading plans...</div>
                         ) : (
                             <div className="row g-3">
                                 {availablePlans.map(plan => {
                                     const isCurrent = plan.planID === currentPlanID || (!user.isSubscribed && plan.planPrice === 0)
+                                    const isPurchasing = purchasingPlanID === plan.planID
                                     return (
                                         <div key={plan.planID} className="col-12 col-md-6">
                                             <div className="card h-100 p-3 position-relative" style={{ borderWidth: isCurrent ? 2 : 1, borderColor: isCurrent ? "var(--bs-primary)" : undefined }}>
@@ -295,9 +344,13 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                                                 ) : (
                                                     <button
                                                         className={`btn btn-${plan.planPrice === 0 ? "outline-secondary" : "primary"} btn-sm w-100 mt-auto`}
-                                                        onClick={() => onSubscribe?.(plan)}
+                                                        onClick={() => {
+                                                            setPurchaseError(null)
+                                                            setSelectedPlan(plan)
+                                                        }}
+                                                        disabled={!onSubscribe || purchasingPlanID !== null}
                                                     >
-                                                        {plan.planPrice === 0 ? "Downgrade" : "Upgrade"}
+                                                        {isPurchasing ? "Updating..." : plan.planPrice === 0 ? "Downgrade" : "Upgrade"}
                                                     </button>
                                                 )}
                                             </div>
@@ -355,7 +408,45 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                     <div className="d-flex justify-content-end gap-2">
                         <button className="btn btn-outline-secondary" onClick={() => setShowCancelSubConfirm(false)} disabled={cancellingSub}>Keep Subscription</button>
                         <button className="btn btn-danger" onClick={handleCancelSubscription} disabled={cancellingSub}>
-                            {cancellingSub ? "Cancelling…" : "Yes, Cancel"}
+                            {cancellingSub ? "Cancelling..." : "Yes, Cancel"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Purchase plan confirmation prompt */}
+        {selectedPlan && (
+            <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }} onClick={() => purchasingPlanID === null && setSelectedPlan(null)}>
+                <div className="card p-4" style={{ width: 420 }} onClick={e => e.stopPropagation()}>
+                    <h6 className="mb-1">
+                        {selectedPlan.planPrice === 0
+                            ? "Downgrade to Free Plan?"
+                            : user.isSubscribed ? "Switch Plan?" : "Upgrade Plan?"}
+                    </h6>
+                    <p className="text-muted mb-1" style={{ fontSize: 14 }}>
+                        You are about to {selectedPlan.planPrice === 0 ? "switch to" : "activate"} <b>{selectedPlan.planTitle}</b>.
+                    </p>
+                    <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+                        {selectedPlan.planPrice === 0
+                            ? "Your current paid subscription will be cancelled immediately."
+                            : `This demo purchase will start a 30-day subscription at $${selectedPlan.planPrice}/mo.`}
+                    </p>
+                    {purchaseError && (
+                        <div className="alert alert-danger py-2 mb-3" style={{ fontSize: 13 }}>
+                            {purchaseError}
+                        </div>
+                    )}
+                    <div className="d-flex justify-content-end gap-2">
+                        <button className="btn btn-outline-secondary" onClick={() => setSelectedPlan(null)} disabled={purchasingPlanID !== null}>Cancel</button>
+                        <button
+                            className={`btn btn-${selectedPlan.planPrice === 0 ? "outline-secondary" : "primary"}`}
+                            onClick={handleConfirmPurchase}
+                            disabled={purchasingPlanID !== null}
+                        >
+                            {purchasingPlanID === selectedPlan.planID
+                                ? "Updating..."
+                                : selectedPlan.planPrice === 0 ? "Downgrade" : "Confirm"}
                         </button>
                     </div>
                 </div>
@@ -372,7 +463,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                     <div className="d-flex justify-content-end gap-2">
                         <button className="btn btn-outline-secondary" onClick={() => setShowSuspendConfirm(false)} disabled={suspending}>Cancel</button>
                         <button className="btn btn-danger" onClick={handleSuspend} disabled={suspending}>
-                            {suspending ? "Suspending…" : "Yes, Suspend"}
+                            {suspending ? "Suspending..." : "Yes, Suspend"}
                         </button>
                     </div>
                 </div>

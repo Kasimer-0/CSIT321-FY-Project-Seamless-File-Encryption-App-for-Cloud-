@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -245,6 +246,56 @@ public class AppDataService {
     }
 
     @Transactional
+    public UserAccountDTO purchasePlan(Long userID, Long planID) {
+        if (userID == null || planID == null) {
+            throw new IllegalArgumentException("User ID and plan ID are required.");
+        }
+
+        UserAccount customer = findUser(userID)
+                .orElseThrow(() -> new IllegalArgumentException("Customer does not exist."));
+        if (!"customer".equalsIgnoreCase(customer.getRole())) {
+            throw new IllegalArgumentException("Only customer accounts can purchase plans.");
+        }
+
+        Plan plan = findPlan(planID)
+                .orElseThrow(() -> new IllegalArgumentException("Plan does not exist."));
+        if (!"active".equalsIgnoreCase(plan.getPlanStatus())) {
+            throw new IllegalArgumentException("Selected plan is not active.");
+        }
+
+        Optional<Subscription> currentSubscription = findCurrentSubscription(customer);
+        if (plan.getPlanPrice() <= 0) {
+            currentSubscription.ifPresent(subscription -> {
+                subscription.setSubcriptionStatus("cancelled");
+                subscriptionRepository.save(subscription);
+            });
+            customer.setSubscribed(false);
+            customer.setSubscription(null);
+            return toUserAccountDTO(userAccountRepository.save(customer));
+        }
+
+        LocalDate startDate = LocalDate.now();
+        Subscription subscription = currentSubscription.orElseGet(() -> new Subscription(
+                null,
+                plan,
+                customer,
+                "active",
+                startDate,
+                startDate.plusDays(30)
+        ));
+        subscription.setPlan(plan);
+        subscription.setSubscriber(customer);
+        subscription.setSubcriptionStatus("active");
+        subscription.setSubcriptionStartDate(startDate);
+        subscription.setSubscriptionEndDate(startDate.plusDays(30));
+
+        Subscription savedSubscription = subscriptionRepository.save(subscription);
+        customer.setSubscribed(true);
+        customer.setSubscription(savedSubscription.getSubscriptionID());
+        return toUserAccountDTO(userAccountRepository.save(customer));
+    }
+
+    @Transactional
     public Optional<Subscription> cancelSubscription(Long subscriptionID) {
         return findSubscription(subscriptionID).map(subscription -> {
             subscription.setSubcriptionStatus("cancelled");
@@ -377,6 +428,17 @@ public class AppDataService {
                 .or(() -> userAccountRepository.findAll().stream()
                         .filter(user -> "customer".equalsIgnoreCase(user.getRole()))
                         .findFirst());
+    }
+
+    private Optional<Subscription> findCurrentSubscription(UserAccount customer) {
+        if (customer == null || customer.getUserID() == null) {
+            return Optional.empty();
+        }
+        Optional<Subscription> linkedSubscription = customer.getSubscription() == null
+                ? Optional.empty()
+                : findSubscription(customer.getSubscription());
+        return linkedSubscription.or(() ->
+                subscriptionRepository.findFirstBySubscriber_UserIDOrderBySubscriptionIDDesc(customer.getUserID()));
     }
 
     private UserAccountDTO toUserAccountDTO(UserAccount user) {

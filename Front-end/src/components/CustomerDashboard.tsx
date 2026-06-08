@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import type { CreateTicketDTO, TicketDTO, TicketResponse, UserAccount } from "../Type"
+import type { CreateTicketDTO, Plan, PurchasePlanRequest, TicketDTO, TicketResponse, UserAccount } from "../Type"
 import CustomerManageOwnTicket from "./CustomerManageOwnTicketPage"
 import CustomerCreateTicket from "./CustomerCreateTicketPage"
 import CustomerEncryptFile from "./CustomerEncryptFilePage"
@@ -11,6 +11,7 @@ import toast from "react-hot-toast"
 type CustomerDashboardProps = {
     user: UserAccount
     onLogout: () => void
+    onUserUpdate: (updatedUser: UserAccount) => void
 }
 
 type TopSection = "files" | "keys" | "tickets" | "cloud" | "account"
@@ -33,7 +34,7 @@ const ticketSideBarItems: { key: TicketSub; label: string; icon: string }[] = [
     { key: "manageMyTicket", label: "Manage My Tickets", icon: "📄" },
 ]
 
-function CustomerDashboard({ user, onLogout }: CustomerDashboardProps) {
+function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardProps) {
     const [activeSection, setActiveSection] = useState<TopSection>("files")
     const [fileSub, setFileSub] = useState<FileSub>("encrypt")
     const [ticketSub, setTicketSub] = useState<TicketSub>("createTicket")
@@ -94,6 +95,29 @@ function CustomerDashboard({ user, onLogout }: CustomerDashboardProps) {
                 ? { ...ticket, responses: [...(ticket.responses ?? []), response] }
                 : ticket
         ))
+    }
+
+    const handlePurchasePlan = async (plan: Plan) => {
+        const request: PurchasePlanRequest = {
+            userID: user.userID,
+            planID: plan.planID
+        }
+
+        const response = await fetch("http://localhost:8080/subscriptions/purchase", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(request)
+        })
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => null)
+            throw new Error(error?.message ?? "Failed to update subscription")
+        }
+
+        const updatedUser: UserAccount = await response.json()
+        onUserUpdate(updatedUser)
+        return updatedUser
     }
 
     const getPageTitle = () => {
@@ -240,10 +264,10 @@ function CustomerDashboard({ user, onLogout }: CustomerDashboardProps) {
                     {activeSection === "account" && (
                         <CustomerViewAccount
                             user={user}
-                            onSubscribe={(planKey) => {
-                                // to do: wire up payment flow
-                                console.log("Subscribe to:", planKey)
-                            }}
+                            onSubscribe={handlePurchasePlan}
+                            onUpdateAccount={(updated) => onUserUpdate({ ...user, ...updated })}
+                            onSuspendAccount={() => onUserUpdate({ ...user, isSuspended: true })}
+                            onCancelSubscription={() => onUserUpdate({ ...user, isSubscribed: false, subscription: null })}
                         />
                     )}
 
