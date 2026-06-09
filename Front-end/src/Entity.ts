@@ -43,6 +43,44 @@ export type TicketResponse = {
     timestamp: string
 }
 
+export type EncryptionKeyRecord = {
+    keyID: number
+    ownerID: number
+    keyName: string
+    algorithm: string
+    status: "active" | "inactive" | "retired"
+    fingerprint: string
+    createdAt: Date
+    updatedAt: Date
+}
+
+export type PhysicalTokenRecord = {
+    tokenID: number
+    ownerID: number
+    tokenName: string
+    serialNumber: string
+    status: "active" | "inactive"
+    registeredAt: Date
+    lastUsedAt: Date | null
+}
+
+export type CloudStorageUsage = {
+    usedBytes: number
+    totalBytes: number
+    availableBytes: number
+    fileCount: number
+}
+
+export type SystemLog = {
+    logId: number
+    username: string
+    action: string
+    ipAddress: string
+    timestamp: string
+    isSuspicious: boolean
+    aiRiskReason: string
+}
+
 export type PurchasePlanRequest = {
     userID: number
     planID: number

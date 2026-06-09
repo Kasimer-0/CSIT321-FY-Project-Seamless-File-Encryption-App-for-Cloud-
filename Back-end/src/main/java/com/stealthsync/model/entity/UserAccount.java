@@ -33,6 +33,10 @@ public class UserAccount {
     @Column(name = "password_hash")
     private String passwordHash;
 
+    @JsonIgnore
+    @Column(name = "recovery_phrase_hash")
+    private String recoveryPhraseHash;
+
     @Column(nullable = false)
     private String role;          // "admin" | "customer"
 

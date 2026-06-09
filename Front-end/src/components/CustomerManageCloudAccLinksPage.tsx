@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import type { CloudStorageLink } from "../Type"
+import type { CloudStorageLink, CloudStorageUsage } from "../Type"
 import toast from "react-hot-toast"
 
 import googleDriveIcon from "../assets/googledrive.png"
@@ -20,6 +20,7 @@ function CustomerManageCloudAccLinks() {
     const [showAddModal, setShowAddModal] = useState(false)
     const [showRemoveConfirm, setShowRemoveConfirm] = useState<CloudStorageLink | null>(null)
     const [selectedProvider, setSelectedProvider] = useState("")
+    const [usage, setUsage] = useState<CloudStorageUsage | null>(null)
 
     const fetchLinks = async () => {
         try {
@@ -44,8 +45,22 @@ function CustomerManageCloudAccLinks() {
         }
     }
 
+    const fetchUsage = async () => {
+        try {
+            const response = await fetch("http://localhost:8080/cloud-storage/usage", {
+                credentials: "include"
+            })
+            if (response.ok) {
+                setUsage(await response.json())
+            }
+        } catch (err) {
+            console.error("Failed to fetch cloud storage usage")
+        }
+    }
+
     useEffect(() => {
         fetchLinks()
+        fetchUsage()
     }, [])
 
     
@@ -98,6 +113,29 @@ function CustomerManageCloudAccLinks() {
             await fetchLinks()
             setShowRemoveConfirm(null)
             toast.success("Cloud account removed successfully")
+
+        } catch (err) {
+            toast.error("Server connection failed")
+        }
+    }
+
+    const handleDeactivate = async (linkID: number) => {
+        try {
+            const response = await fetch(
+                `http://localhost:8080/cloud-storage/links/${linkID}/deactivate`,
+                {
+                    method: "PATCH",
+                    credentials: "include"
+                }
+            )
+
+            if (!response.ok) {
+                toast.error("Failed to deactivate cloud account")
+                return
+            }
+
+            await fetchLinks()
+            toast.success("Cloud account deactivated")
 
         } catch (err) {
             toast.error("Server connection failed")
@@ -160,6 +198,13 @@ function CustomerManageCloudAccLinks() {
     const linkedProviders = links.map(l => l.provider)
     const unlinkableProviders = availableProviders.filter(p => !linkedProviders.includes(p))
 
+    const formatBytes = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+        if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+        return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+    }
+
     return (
         <>
             <div className="d-flex justify-content-between align-items-center mb-4">
@@ -177,6 +222,24 @@ function CustomerManageCloudAccLinks() {
                     + Link Account
                 </button>
             </div>
+
+            {usage && (
+                <div className="border rounded p-3 mb-3">
+                    <div className="d-flex justify-content-between">
+                        <span className="fw-semibold">Cloud Storage Usage</span>
+                        <span className="text-muted" style={{ fontSize: 13 }}>{usage.fileCount} encrypted files</span>
+                    </div>
+                    <div className="progress mt-2" style={{ height: 8 }}>
+                        <div
+                            className="progress-bar"
+                            style={{ width: `${Math.min(100, (usage.usedBytes / usage.totalBytes) * 100)}%` }}
+                        />
+                    </div>
+                    <small className="text-muted">
+                        {formatBytes(usage.usedBytes)} used of {formatBytes(usage.totalBytes)}.
+                    </small>
+                </div>
+            )}
 
             {loading ? (
                 <p className="text-muted" style={{ fontSize: 13 }}>Loading accounts...</p>
@@ -229,6 +292,14 @@ function CustomerManageCloudAccLinks() {
                                         onClick={() => handleSetActive(link.linkID)}
                                     >
                                         Set Active
+                                    </button>
+                                )}
+                                {link.isActive && (
+                                    <button
+                                        className="btn btn-outline-secondary btn-sm"
+                                        onClick={() => handleDeactivate(link.linkID)}
+                                    >
+                                        Deactivate
                                     </button>
                                 )}
                                 {link.status === "expired" && (

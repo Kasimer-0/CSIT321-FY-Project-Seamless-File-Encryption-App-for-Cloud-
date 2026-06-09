@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -348,6 +349,15 @@ public class AppDataService {
     }
 
     @Transactional
+    public Optional<CloudStorageLink> deactivateCloudStorageLink(Long linkID) {
+        return findCloudStorageLink(linkID).map(link -> {
+            link.setActive(false);
+            link.setStatus("disconnected");
+            return cloudStorageLinkRepository.save(link);
+        });
+    }
+
+    @Transactional
     public boolean removeCloudStorageLink(Long linkID) {
         if (linkID == null || !cloudStorageLinkRepository.existsById(linkID)) {
             return false;
@@ -393,6 +403,19 @@ public class AppDataService {
 
     public List<EncryptedFileRecord> listEncryptedFiles() {
         return encryptedFileRecordRepository.findAll(Sort.by(Sort.Direction.DESC, "uploadedAt"));
+    }
+
+    public Map<String, Object> cloudStorageUsage() {
+        long usedBytes = encryptedFileRecordRepository.findAll().stream()
+                .mapToLong(EncryptedFileRecord::getFileSize)
+                .sum();
+        long totalBytes = 5L * 1024L * 1024L * 1024L;
+        return Map.of(
+                "usedBytes", usedBytes,
+                "totalBytes", totalBytes,
+                "availableBytes", Math.max(0, totalBytes - usedBytes),
+                "fileCount", encryptedFileRecordRepository.count()
+        );
     }
 
     @Transactional

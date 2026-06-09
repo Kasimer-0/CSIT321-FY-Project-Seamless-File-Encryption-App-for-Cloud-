@@ -4,6 +4,7 @@ import AdminManageAccount from "./AdminManageAccountPage"
 import AdminManagePlan from "./AdminManagePlanPage"
 import AdminManageTicket from "./AdminManageTicketPage"
 import AdminManageSubscription from "./AdminManageSubscriptionPage"
+import AdminReportsLogsPage from "./AdminReportsLogsPage"
 
 type DashboardStats = {
     totalUsers: number
@@ -17,14 +18,15 @@ type AdminDashboardProps = {
     onLogout: () => void
 }
 
-type Tab = "overview" | "users" | "plans" | "tickets" | "subscription"
+type Tab = "overview" | "users" | "plans" | "tickets" | "subscription" | "reports"
 
 const pageTitles: Record<Tab, string> = {
     overview: "Overview",
     users: "Manage Users",
     plans: "Manage Plans",
     tickets: "Manage Tickets",
-    subscription: "Manage Subscription"
+    subscription: "Manage Subscription",
+    reports: "Reports & Logs"
 }
 
 const tabConfig: Record<Tab, { label: string; icon: string }> = {
@@ -32,7 +34,8 @@ const tabConfig: Record<Tab, { label: string; icon: string }> = {
     users: { label: "Manage Users", icon: "👥" },
     plans: { label: "Manage Plans", icon: "💳" },
     tickets: { label: "Manage Tickets", icon: "🎫" },
-    subscription: { label: "Manage Subscription", icon: "" }
+    subscription: { label: "Manage Subscription", icon: "" },
+    reports: { label: "Reports & Logs", icon: "" }
 }
 
 function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
@@ -80,7 +83,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
     const initials = user.username.slice(0, 2).toUpperCase()
 
-    const tabs: Tab[] = ["overview", "users", "plans", "tickets", "subscription"]
+    const tabs: Tab[] = ["overview", "users", "plans", "tickets", "subscription", "reports"]
 
     return (
         <div className="d-flex vh-100 overflow-hidden">
@@ -231,6 +234,12 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                     {activeTab === "subscription" && (
                         <div className="card p-4">
                             <AdminManageSubscription />
+                        </div>
+                    )}
+
+                    {activeTab === "reports" && (
+                        <div className="card p-4">
+                            <AdminReportsLogsPage />
                         </div>
                     )}
 

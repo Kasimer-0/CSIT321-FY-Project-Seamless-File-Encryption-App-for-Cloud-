@@ -8,6 +8,8 @@ type LoginFormProps = {
 function LoginForm({ onLogin }: LoginFormProps) {
     const [usernameOrEmail, setUsernameOrEmail] = useState("")
     const [password, setPassword] = useState("")
+    const [recoveryPhrase, setRecoveryPhrase] = useState("")
+    const [useRecovery, setUseRecovery] = useState(false)
     const [error, setError] = useState("")
     const [loading, setLoading] = useState(false)
 
@@ -44,6 +46,33 @@ function LoginForm({ onLogin }: LoginFormProps) {
         }
     }
 
+    const handleRecoveryLogin = async () => {
+        setError("")
+        setLoading(true)
+
+        try {
+            const response = await fetch("http://localhost:8080/account/recovery-phrase/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ usernameOrEmail, recoveryPhrase })
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                setError(data.message || "Invalid recovery phrase")
+                return
+            }
+
+            onLogin(data.user)
+        } catch (err) {
+            setError("Server connection failed")
+        } finally {
+            setLoading(false)
+        }
+    }
+
     return (
         <>
             <h2 className="mb-3 text-center">Login</h2>
@@ -64,20 +93,41 @@ function LoginForm({ onLogin }: LoginFormProps) {
                 onChange={(e) => setUsernameOrEmail(e.target.value)}
             />
 
-            <input
-                className="form-control mb-3"
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-            />
+            {useRecovery ? (
+                <input
+                    className="form-control mb-3"
+                    type="text"
+                    placeholder="Recovery phrase"
+                    value={recoveryPhrase}
+                    onChange={(e) => setRecoveryPhrase(e.target.value)}
+                />
+            ) : (
+                <input
+                    className="form-control mb-3"
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                />
+            )}
 
             <button
                 className="btn btn-primary w-100"
-                onClick={handleLogin}
+                onClick={useRecovery ? handleRecoveryLogin : handleLogin}
                 disabled={loading}
             >
-                {loading ? "Logging in..." : "Login"}
+                {loading ? "Logging in..." : useRecovery ? "Login with Recovery Phrase" : "Login"}
+            </button>
+
+            <button
+                className="btn btn-link w-100 mt-2"
+                type="button"
+                onClick={() => {
+                    setUseRecovery(v => !v)
+                    setError("")
+                }}
+            >
+                {useRecovery ? "Use password login" : "Use recovery phrase"}
             </button>
         </>
     )

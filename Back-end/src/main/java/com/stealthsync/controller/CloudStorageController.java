@@ -31,6 +31,18 @@ public class CloudStorageController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @PatchMapping("/links/{id}/deactivate")
+    public ResponseEntity<CloudStorageLink> deactivate(@PathVariable Long id) {
+        return dataStore.deactivateCloudStorageLink(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/usage")
+    public ResponseEntity<Map<String, Object>> getUsage() {
+        return ResponseEntity.ok(dataStore.cloudStorageUsage());
+    }
+
     @DeleteMapping("/links/{id}")
     public ResponseEntity<Void> remove(@PathVariable Long id) {
         return dataStore.removeCloudStorageLink(id)

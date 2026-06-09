@@ -6,6 +6,8 @@ import CustomerEncryptFile from "./CustomerEncryptFilePage"
 import CustomerDecryptFile from "./CustomerDecryptFilePage"
 import CustomerManageCloudAccLinks from "./CustomerManageCloudAccLinksPage"
 import CustomerViewAccount from "./CustomerViewAccountPage"
+import CustomerManageEncryptionKeysPage from "./CustomerManageEncryptionKeysPage"
+import CustomerSecurityPage from "./CustomerSecurityPage"
 import toast from "react-hot-toast"
 
 type CustomerDashboardProps = {
@@ -14,14 +16,16 @@ type CustomerDashboardProps = {
     onUserUpdate: (updatedUser: UserAccount) => void
 }
 
-type TopSection = "files" | "keys" | "tickets" | "cloud" | "account"
+type TopSection = "files" | "keys" | "tickets" | "cloud" | "security" | "account"
 type FileSub = "encrypt" | "decrypt"
 type TicketSub = "createTicket" | "manageMyTicket"
 
 const topSections: { key: TopSection; label: string; icon: string }[] = [
-    { key: "files", label: "File Management", icon: "🗂️" },
-    { key: "cloud", label: "Cloud Storage Link", icon: "☁️" },
-    { key: "tickets", label: "Tickets", icon: "🎫" },
+    { key: "files", label: "File Management", icon: "Files" },
+    { key: "keys", label: "Encryption Keys", icon: "Keys" },
+    { key: "cloud", label: "Cloud Storage Link", icon: "Cloud" },
+    { key: "tickets", label: "Tickets", icon: "Tickets" },
+    { key: "security", label: "Security", icon: "Security" },
 ]
 
 const fileSidebarItems: { key: FileSub; label: string; icon: string }[] = [
@@ -124,6 +128,8 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
         if (activeSection === "files") return fileSidebarItems.find(i => i.key === fileSub)?.label ?? "Files"
         if (activeSection === "tickets") return ticketSideBarItems.find(i => i.key === ticketSub)?.label ?? "Tickets"
         if (activeSection === "cloud") return "Cloud Storage Link"
+        if (activeSection === "keys") return "Encryption Keys"
+        if (activeSection === "security") return "Security"
         if (activeSection === "account") return "My Account"
         return ""
     }
@@ -259,6 +265,16 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
                         <div className="card p-4">
                             <CustomerManageCloudAccLinks />
                         </div>
+                    )}
+
+                    {activeSection === "keys" && (
+                        <div className="card p-4">
+                            <CustomerManageEncryptionKeysPage user={user} />
+                        </div>
+                    )}
+
+                    {activeSection === "security" && (
+                        <CustomerSecurityPage user={user} onUserUpdate={onUserUpdate} />
                     )}
 
                     {activeSection === "account" && (

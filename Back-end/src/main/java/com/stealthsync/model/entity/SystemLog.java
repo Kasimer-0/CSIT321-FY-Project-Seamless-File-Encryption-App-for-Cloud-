@@ -1,5 +1,6 @@
 package com.stealthsync.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -36,4 +37,14 @@ public class SystemLog {
 
     @Column(length = 1000)
     private String aiRiskReason;
+
+    @JsonProperty("isSuspicious")
+    public boolean isSuspicious() {
+        return isSuspicious;
+    }
+
+    @JsonProperty("isSuspicious")
+    public void setSuspicious(boolean suspicious) {
+        isSuspicious = suspicious;
+    }
 }

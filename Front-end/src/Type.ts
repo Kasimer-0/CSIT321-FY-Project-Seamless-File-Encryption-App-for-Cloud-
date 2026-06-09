@@ -46,6 +46,67 @@ export type EncryptedFile = {
     keyID: number
 }
 
+export type EncryptionKeyRecord = {
+    keyID: number
+    ownerID: number
+    keyName: string
+    algorithm: string
+    status: "active" | "inactive" | "retired"
+    fingerprint: string
+    createdAt: Date
+    updatedAt: Date
+}
+
+export type PhysicalTokenRecord = {
+    tokenID: number
+    ownerID: number
+    tokenName: string
+    serialNumber: string
+    status: "active" | "inactive"
+    registeredAt: Date
+    lastUsedAt: Date | null
+}
+
+export type CloudStorageUsage = {
+    usedBytes: number
+    totalBytes: number
+    availableBytes: number
+    fileCount: number
+}
+
+export type PerformanceReport = {
+    generatedAt: string
+    totalUsers: number
+    premiumUsers: number
+    openTickets: number
+    encryptedFiles: number
+    cloudLinks: number
+    activeCloudLinks: number
+}
+
+export type FinancialReport = {
+    generatedAt: string
+    activeSubscriptions: number
+    monthlyRevenue: number
+    paidPlanCount: number
+    averageRevenuePerSubscription: number
+    planRevenue: Array<{
+        planTitle: string
+        subscriberCount: number
+        monthlyRevenue: number
+    }>
+}
+
+export type SystemLog = {
+    logId: number
+    username: string
+    action: string
+    ipAddress: string
+    timestamp: string
+    isSuspicious: boolean
+    aiRiskReason: string
+}
+
 
 
 export type UserAccountDTO = {

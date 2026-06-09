@@ -5,6 +5,8 @@ function CustomerEncryptFile() {
     const [dragOver, setDragOver] = useState(false)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [uploading, setUploading] = useState(false)
+    const [privacyWarnings, setPrivacyWarnings] = useState<string[]>([])
+    const [showPrivacyConfirm, setShowPrivacyConfirm] = useState(false)
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault()
@@ -18,12 +20,39 @@ function CustomerEncryptFile() {
         if (file) setSelectedFile(file)
     }
 
-    const handleUpload = async () => {
+    const scanForSensitiveData = async (file: File) => {
+        let sample = ""
+        try {
+            sample = (await file.text()).slice(0, 20000)
+        } catch {
+            sample = ""
+        }
+        const response = await fetch("http://localhost:8080/privacy/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ filename: file.name, sample })
+        })
+        if (!response.ok) return []
+        const data = await response.json()
+        return Array.isArray(data.warnings) ? data.warnings : []
+    }
+
+    const handleUpload = async (skipPrivacyScan = false) => {
         if (!selectedFile) return
 
         setUploading(true)
 
         try {
+            if (!skipPrivacyScan) {
+                const warnings = await scanForSensitiveData(selectedFile)
+                if (warnings.length > 0) {
+                    setPrivacyWarnings(warnings)
+                    setShowPrivacyConfirm(true)
+                    return
+                }
+            }
+
             const formData = new FormData()
             formData.append("file", selectedFile)
 
@@ -40,6 +69,7 @@ function CustomerEncryptFile() {
 
             toast.success(`${selectedFile.name} encrypted and uploaded successfully`)
             setSelectedFile(null)
+            setPrivacyWarnings([])
 
         } catch (err) {
             toast.error("Server connection failed")
@@ -99,13 +129,40 @@ function CustomerEncryptFile() {
 
             <button
                 className="btn btn-primary"
-                onClick={handleUpload}
+                onClick={() => handleUpload()}
                 disabled={!selectedFile || uploading}
             >
                 {uploading ? "Encrypting and Uploading..." : "Encrypt and Upload"}
             </button>
+
+            {showPrivacyConfirm && selectedFile && (
+                <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }} onClick={() => setShowPrivacyConfirm(false)}>
+                    <div className="card p-4" style={{ width: 420 }} onClick={event => event.stopPropagation()}>
+                        <h6 className="mb-1">Sensitive Data Warning</h6>
+                        <p className="text-muted mb-2" style={{ fontSize: 14 }}>
+                            This file may contain sensitive data. Review before encrypting and uploading.
+                        </p>
+                        <ul className="mb-3" style={{ fontSize: 13 }}>
+                            {privacyWarnings.map(warning => <li key={warning}>{warning}</li>)}
+                        </ul>
+                        <div className="d-flex justify-content-end gap-2">
+                            <button className="btn btn-outline-secondary" onClick={() => setShowPrivacyConfirm(false)}>
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => {
+                                    setShowPrivacyConfirm(false)
+                                    handleUpload(true)
+                                }}
+                            >
+                                Encrypt Anyway
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     )
 }
-
 export default CustomerEncryptFile
