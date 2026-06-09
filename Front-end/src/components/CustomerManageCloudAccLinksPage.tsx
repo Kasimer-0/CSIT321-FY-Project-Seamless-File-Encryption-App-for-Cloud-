@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import type { CloudStorageLink, CloudStorageUsage } from "../Type"
+import type { CloudStorageLink, CloudStorageUsage, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 
 import googleDriveIcon from "../assets/googledrive.png"
@@ -14,19 +14,24 @@ const providerLabels: Record<string, { label: string; icon: string }> = {
 
 const availableProviders = ["google_drive", "dropbox", "onedrive"]
 
-function CustomerManageCloudAccLinks() {
+type Props = {
+    user: UserAccount
+}
+
+function CustomerManageCloudAccLinks({ user }: Props) {
     const [links, setLinks] = useState<CloudStorageLink[]>([])
     const [loading, setLoading] = useState(true)
     const [showAddModal, setShowAddModal] = useState(false)
     const [showRemoveConfirm, setShowRemoveConfirm] = useState<CloudStorageLink | null>(null)
     const [selectedProvider, setSelectedProvider] = useState("")
     const [usage, setUsage] = useState<CloudStorageUsage | null>(null)
+    const [providerLimit, setProviderLimit] = useState(user.isSubscribed ? 5 : 1)
 
     const fetchLinks = async () => {
         try {
             setLoading(true)
 
-            const response = await fetch("http://localhost:8080/cloud-storage/links", {
+            const response = await fetch(`http://localhost:8080/cloud-storage/links?ownerID=${user.userID}`, {
                 credentials: "include"
             })
 
@@ -58,10 +63,25 @@ function CustomerManageCloudAccLinks() {
         }
     }
 
+    const fetchProviderInfo = async () => {
+        try {
+            const response = await fetch(`http://localhost:8080/cloud-storage/providers?ownerID=${user.userID}`, {
+                credentials: "include"
+            })
+            if (response.ok) {
+                const data = await response.json()
+                setProviderLimit(Number(data.providerLimit ?? (user.isSubscribed ? 5 : 1)))
+            }
+        } catch (err) {
+            console.error("Failed to fetch cloud provider info")
+        }
+    }
+
     useEffect(() => {
         fetchLinks()
         fetchUsage()
-    }, [])
+        fetchProviderInfo()
+    }, [user.userID, user.isSubscribed])
 
     
     /*uncomment when Electron code is done
@@ -170,12 +190,13 @@ function CustomerManageCloudAccLinks() {
 
         try {
             const response = await fetch(
-                `http://localhost:8080/cloud-storage/auth/${selectedProvider}`,
+                `http://localhost:8080/cloud-storage/auth/${selectedProvider}?ownerID=${user.userID}`,
                 { credentials: "include" }
             )
 
             if (!response.ok) {
-                toast.error("Failed to initiate cloud account connection")
+                const data = await response.json().catch(() => null)
+                toast.error(data?.message ?? "Failed to initiate cloud account connection")
                 return
             }
 
@@ -197,6 +218,7 @@ function CustomerManageCloudAccLinks() {
 
     const linkedProviders = links.map(l => l.provider)
     const unlinkableProviders = availableProviders.filter(p => !linkedProviders.includes(p))
+    const providerLimitReached = linkedProviders.length >= providerLimit
 
     const formatBytes = (bytes: number) => {
         if (bytes < 1024) return `${bytes} B`
@@ -211,16 +233,20 @@ function CustomerManageCloudAccLinks() {
                 <div>
                     <h5 className="mb-1">Cloud Storage Accounts</h5>
                     <p className="text-muted mb-0" style={{ fontSize: 13 }}>
-                        Link your cloud storage accounts. Only one can be active at a time.
+                        Supports Google Drive, Dropbox, and OneDrive. {user.isSubscribed ? "Premium users can link up to 5 providers." : "Free tier can link 1 provider."}
                     </p>
                 </div>
                 <button
                     className="btn btn-primary flex-shrink-0"
                     onClick={() => setShowAddModal(true)}
-                    disabled={unlinkableProviders.length === 0}
+                    disabled={unlinkableProviders.length === 0 || providerLimitReached}
                 >
                     + Link Account
                 </button>
+            </div>
+
+            <div className="alert alert-info py-2 mb-3" style={{ fontSize: 13 }}>
+                Linked providers: {linkedProviders.length}/{providerLimit}. Available providers: Google Drive, Dropbox, OneDrive.
             </div>
 
             {usage && (
@@ -247,7 +273,7 @@ function CustomerManageCloudAccLinks() {
                 <div className="text-center py-5">
                     <div style={{ fontSize: 40 }} className="mb-2">☁️</div>
                     <p className="text-muted">No cloud storage accounts linked yet.</p>
-                    <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+                    <button className="btn btn-primary" onClick={() => setShowAddModal(true)} disabled={providerLimitReached}>
                         Link your first account
                     </button>
                 </div>
@@ -335,6 +361,12 @@ function CustomerManageCloudAccLinks() {
                             Select a provider then click Connect. A browser window will open for you to log in and approve access.
                         </p>
 
+                        {providerLimitReached && (
+                            <div className="alert alert-warning py-2" style={{ fontSize: 12 }}>
+                                Your current plan can link up to {providerLimit} provider{providerLimit === 1 ? "" : "s"}.
+                            </div>
+                        )}
+
                         {unlinkableProviders.map(p => (
                             <div
                                 key={p}
@@ -366,7 +398,7 @@ function CustomerManageCloudAccLinks() {
                             <button
                                 className="btn btn-primary"
                                 onClick={handleAddAccount}
-                                disabled={!selectedProvider}
+                                disabled={!selectedProvider || providerLimitReached}
                             >
                                 Connect
                             </button>

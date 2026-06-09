@@ -263,7 +263,7 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
 
                     {activeSection === "cloud" && (
                         <div className="card p-4">
-                            <CustomerManageCloudAccLinks />
+                            <CustomerManageCloudAccLinks user={user} />
                         </div>
                     )}
 

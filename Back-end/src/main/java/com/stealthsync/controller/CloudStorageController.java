@@ -20,8 +20,16 @@ public class CloudStorageController {
     private final AppDataService dataStore;
 
     @GetMapping("/links")
-    public ResponseEntity<List<CloudStorageLink>> getLinks() {
-        return ResponseEntity.ok(dataStore.listCloudStorageLinks());
+    public ResponseEntity<List<CloudStorageLink>> getLinks(@RequestParam(required = false) Long ownerID) {
+        return ResponseEntity.ok(dataStore.listCloudStorageLinks(ownerID));
+    }
+
+    @GetMapping("/providers")
+    public ResponseEntity<Map<String, Object>> getProviders(@RequestParam(required = false) Long ownerID) {
+        return ResponseEntity.ok(Map.of(
+                "providers", dataStore.supportedCloudProviders(),
+                "providerLimit", dataStore.cloudProviderLimitFor(ownerID)
+        ));
     }
 
     @PatchMapping("/links/{id}/set-active")
@@ -58,8 +66,12 @@ public class CloudStorageController {
     }
 
     @GetMapping("/auth/{provider}")
-    public ResponseEntity<Map<String, Object>> startOAuth(@PathVariable String provider) {
-        CloudStorageLink link = dataStore.linkCloudProvider(provider);
+    public ResponseEntity<Map<String, Object>> startOAuth(
+            @PathVariable String provider,
+            @RequestParam(required = false) Long ownerID) {
+        CloudStorageLink link = ownerID == null
+                ? dataStore.linkCloudProvider(provider)
+                : dataStore.linkCloudProvider(provider, ownerID);
         return ResponseEntity.ok(Map.<String, Object>of(
                 "authUrl", "https://example.com/oauth/" + provider,
                 "link", link

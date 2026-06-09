@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +38,9 @@ import java.util.Optional;
 public class AppDataService {
 
     private static final String DEFAULT_CUSTOMER_EMAIL = "user@stealthsync.com";
+    private static final Set<String> SUPPORTED_CLOUD_PROVIDERS = Set.of("google_drive", "dropbox", "onedrive");
+    private static final int FREE_TIER_CLOUD_PROVIDER_LIMIT = 1;
+    private static final int PREMIUM_CLOUD_PROVIDER_LIMIT = 5;
 
     private final UserAccountRepository userAccountRepository;
     private final PlanRepository planRepository;
@@ -337,6 +341,15 @@ public class AppDataService {
         return cloudStorageLinkRepository.findAll(Sort.by("linkID"));
     }
 
+    public List<CloudStorageLink> listCloudStorageLinks(Long ownerID) {
+        if (ownerID == null) {
+            return listCloudStorageLinks();
+        }
+        return cloudStorageLinkRepository.findByOwnerID(ownerID).stream()
+                .sorted((left, right) -> left.getLinkID().compareTo(right.getLinkID()))
+                .toList();
+    }
+
     @Transactional
     public Optional<CloudStorageLink> setActiveCloudStorageLink(Long linkID) {
         Optional<CloudStorageLink> selected = findCloudStorageLink(linkID);
@@ -377,28 +390,48 @@ public class AppDataService {
 
     @Transactional
     public CloudStorageLink linkCloudProvider(String provider) {
-        return cloudStorageLinkRepository.findByProviderIgnoreCase(provider)
+        Long ownerID = defaultCustomer()
+                .map(UserAccount::getUserID)
+                .orElseThrow(() -> new IllegalArgumentException("Default customer does not exist."));
+        return linkCloudProvider(provider, ownerID);
+    }
+
+    @Transactional
+    public CloudStorageLink linkCloudProvider(String provider, Long ownerID) {
+        String normalizedProvider = normalizeCloudProvider(provider);
+        UserAccount owner = findUser(ownerID)
+                .orElseThrow(() -> new IllegalArgumentException("Cloud storage owner does not exist."));
+
+        return cloudStorageLinkRepository.findByOwnerIDAndProviderIgnoreCase(owner.getUserID(), normalizedProvider)
                 .map(link -> {
                     link.setStatus("connected");
                     link.setLinkedAt(Instant.now());
                     return cloudStorageLinkRepository.save(link);
                 })
                 .orElseGet(() -> {
-                    boolean firstLink = cloudStorageLinkRepository.count() == 0;
-                    Long ownerID = defaultCustomer()
-                            .map(UserAccount::getUserID)
-                            .orElseThrow(() -> new IllegalArgumentException("Default customer does not exist."));
+                    enforceCloudProviderLimit(owner);
+                    boolean firstLink = cloudStorageLinkRepository.findByOwnerID(owner.getUserID()).isEmpty();
                     CloudStorageLink link = new CloudStorageLink(
                             null,
-                            provider,
-                            provider.replace("_", ".") + ".user@example.com",
+                            normalizedProvider,
+                            normalizedProvider.replace("_", ".") + ".user@example.com",
                             Instant.now(),
                             "connected",
                             firstLink,
-                            ownerID
+                            owner.getUserID()
                     );
                     return cloudStorageLinkRepository.save(link);
                 });
+    }
+
+    public Set<String> supportedCloudProviders() {
+        return SUPPORTED_CLOUD_PROVIDERS;
+    }
+
+    public int cloudProviderLimitFor(Long ownerID) {
+        return findUser(ownerID)
+                .map(user -> user.isSubscribed() ? PREMIUM_CLOUD_PROVIDER_LIMIT : FREE_TIER_CLOUD_PROVIDER_LIMIT)
+                .orElse(FREE_TIER_CLOUD_PROVIDER_LIMIT);
     }
 
     public List<EncryptedFileRecord> listEncryptedFiles() {
@@ -498,6 +531,27 @@ public class AppDataService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeCloudProvider(String provider) {
+        String normalized = normalize(provider);
+        if (!SUPPORTED_CLOUD_PROVIDERS.contains(normalized)) {
+            throw new IllegalArgumentException("Unsupported cloud storage provider: " + provider);
+        }
+        return normalized;
+    }
+
+    private void enforceCloudProviderLimit(UserAccount owner) {
+        int limit = owner.isSubscribed() ? PREMIUM_CLOUD_PROVIDER_LIMIT : FREE_TIER_CLOUD_PROVIDER_LIMIT;
+        int linkedProviderCount = (int) cloudStorageLinkRepository.findByOwnerID(owner.getUserID()).stream()
+                .map(CloudStorageLink::getProvider)
+                .map(this::normalize)
+                .distinct()
+                .count();
+        if (linkedProviderCount >= limit) {
+            throw new IllegalArgumentException("Your plan can link up to " + limit + " cloud storage provider"
+                    + (limit == 1 ? "." : "s."));
+        }
     }
 
     private boolean isBlank(String value) {
