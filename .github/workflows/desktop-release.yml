@@ -1,0 +1,68 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Windows app image and publish release
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Front-end/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: Front-end
+        run: npm ci
+
+      - name: Build desktop app image
+        shell: pwsh
+        run: ./scripts/build-desktop.ps1 -PackageType app-image -SkipTests
+
+      - name: Zip desktop app image
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -LiteralPath dist-desktop/StealthSync `
+            -DestinationPath dist-desktop/StealthSync-Windows-App.zip `
+            -CompressionLevel Optimal `
+            -Force
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          gh release create $env:RELEASE_TAG `
+            dist-desktop/StealthSync-Windows-App.zip `
+            --title "StealthSync Windows Desktop App" `
+            --notes "Windows desktop app image for StealthSync.
+
+          Included asset:
+          - StealthSync-Windows-App.zip
+
+          How to run:
+          1. Extract the zip file.
+          2. Set DB_PASSWORD in the Windows environment.
+          3. Run StealthSync.exe from the extracted StealthSync folder."
