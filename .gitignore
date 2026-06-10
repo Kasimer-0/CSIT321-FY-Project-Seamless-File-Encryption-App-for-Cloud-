@@ -6,6 +6,8 @@ Front-end/node_modules/
 Back-end/target/
 Front-end/dist/
 dist-desktop/
+installer/
+outputs/
 
 # Logs and temporary files
 *.log

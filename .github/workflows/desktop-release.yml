@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build Windows app image and publish release
+    name: Test and publish Windows installer
     runs-on: windows-latest
 
     steps:
@@ -35,18 +35,21 @@ jobs:
         working-directory: Front-end
         run: npm ci
 
-      - name: Build desktop app image
+      - name: Build smoke-test app image
         shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType app-image -SkipTests
+        run: ./scripts/build-desktop.ps1 -PackageType app-image -SkipTests -JdkHome $env:JAVA_HOME -ServerPort 18080 -OpenBrowser:$false
 
-      - name: Zip desktop app image
+      - name: Smoke-test packaged application
         shell: pwsh
-        run: |
-          Compress-Archive `
-            -LiteralPath dist-desktop/StealthSync `
-            -DestinationPath dist-desktop/StealthSync-Windows-App.zip `
-            -CompressionLevel Optimal `
-            -Force
+        run: ./scripts/test-desktop-app.ps1 -Port 18080
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./scripts/build-desktop.ps1 -PackageType exe -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.0.1
+
+      - name: Build Windows MSI
+        shell: pwsh
+        run: ./scripts/build-desktop.ps1 -PackageType msi -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.0.1
 
       - name: Publish GitHub Release
         env:
@@ -55,14 +58,17 @@ jobs:
         shell: pwsh
         run: |
           gh release create $env:RELEASE_TAG `
-            dist-desktop/StealthSync-Windows-App.zip `
-            --title "StealthSync Windows Desktop App" `
-            --notes "Windows desktop app image for StealthSync.
+            dist-desktop/StealthSync-1.0.1.exe `
+            dist-desktop/StealthSync-1.0.1.msi `
+            --title "StealthSync Windows Installer" `
+            --notes "Self-contained Windows installer for StealthSync.
 
           Included asset:
-          - StealthSync-Windows-App.zip
+          - StealthSync-1.0.1.exe
+          - StealthSync-1.0.1.msi
 
           How to run:
-          1. Extract the zip file.
-          2. Set DB_PASSWORD in the Windows environment.
-          3. Run StealthSync.exe from the extracted StealthSync folder."
+          1. Download and run the installer.
+          2. Launch StealthSync from the desktop or Start Menu shortcut.
+
+          This desktop build includes its own Java runtime and local database. PostgreSQL and DB_PASSWORD are not required."

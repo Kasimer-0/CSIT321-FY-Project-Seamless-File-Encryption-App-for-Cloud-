@@ -60,15 +60,16 @@ The script:
 - packages the Spring Boot backend JAR
 - runs `jpackage` to create `dist-desktop/StealthSync/StealthSync.exe`
 
-Runtime database password is still read from the `DB_PASSWORD` environment variable:
-
-```powershell
-$env:DB_PASSWORD="your_postgres_password"
-& ".\dist-desktop\StealthSync\StealthSync.exe"
-```
+Desktop packages use a local H2 database stored under the current user's
+`.stealthsync` directory. They do not require PostgreSQL or a `DB_PASSWORD`
+environment variable. Normal backend development continues to use PostgreSQL.
 
 To create a Windows `.exe` or `.msi` installer instead of an app image, install WiX Toolset first, then run:
 
 ```powershell
 .\scripts\build-desktop.ps1 -PackageType exe
 ```
+
+Use a standard Temurin/OpenJDK 21 installation for packaging. Full JDK builds
+that enable both client and server JVMs are rejected because they can generate
+a Windows launcher that reports `Failed to launch JVM`.
