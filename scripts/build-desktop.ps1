@@ -8,7 +8,7 @@ param(
     [switch]$WinConsole,
 
     [string]$JdkHome,
-    [string]$AppVersion = "1.0.1",
+    [string]$AppVersion = "1.0.2",
     [string]$UpgradeUuid = "8c96c4aa-8c5f-4ed0-a9f4-8dcb48c2b6b7",
     [int]$ServerPort = 8080,
     [bool]$OpenBrowser = $true
@@ -122,14 +122,22 @@ if (-not (Test-Path $JarPath)) {
 Write-Host "Creating Windows desktop package with jpackage..."
 New-Item -ItemType Directory -Path $DesktopDist -Force | Out-Null
 
-$PackageOutput = if ($PackageType -eq "app-image") {
+$GeneratedPackageOutput = if ($PackageType -eq "app-image") {
     Join-Path $DesktopDist "StealthSync"
 }
 else {
     Join-Path $DesktopDist "StealthSync-$AppVersion.$PackageType"
 }
-if (Test-Path $PackageOutput) {
-    Remove-Item -LiteralPath $PackageOutput -Recurse -Force
+$PackageOutput = if ($PackageType -eq "exe") {
+    Join-Path $DesktopDist "StealthSync-Setup-$AppVersion.exe"
+}
+else {
+    $GeneratedPackageOutput
+}
+foreach ($ExistingOutput in @($GeneratedPackageOutput, $PackageOutput) | Select-Object -Unique) {
+    if (Test-Path $ExistingOutput) {
+        Remove-Item -LiteralPath $ExistingOutput -Recurse -Force
+    }
 }
 
 $ResolvedJdkHome = Resolve-JdkHome
@@ -178,8 +186,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "jpackage failed with exit code $LASTEXITCODE."
 }
 
+if ($PackageType -eq "exe") {
+    Move-Item -LiteralPath $GeneratedPackageOutput -Destination $PackageOutput
+}
+
 Write-Host "Desktop package created in: $DesktopDist"
 Write-Host "Packaging JDK: $ResolvedJdkHome"
+if ($PackageType -in @("exe", "msi")) {
+    Write-Host "Installer: $PackageOutput"
+}
 if ($PackageType -eq "app-image") {
     Write-Host "Executable: $(Join-Path $DesktopDist 'StealthSync\StealthSync.exe')"
 }

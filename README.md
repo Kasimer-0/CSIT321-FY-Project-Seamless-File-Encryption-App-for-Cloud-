@@ -70,6 +70,11 @@ To create a Windows `.exe` or `.msi` installer instead of an app image, install 
 .\scripts\build-desktop.ps1 -PackageType exe
 ```
 
+The EXE output is named `StealthSync-Setup-<version>.exe` to distinguish the
+installer from the installed application. After installation, launch
+StealthSync from its desktop or Start Menu shortcut. Reopening the setup file
+only enters the Windows installer flow.
+
 Use a standard Temurin/OpenJDK 21 installation for packaging. Full JDK builds
 that enable both client and server JVMs are rejected because they can generate
 a Windows launcher that reports `Failed to launch JVM`.

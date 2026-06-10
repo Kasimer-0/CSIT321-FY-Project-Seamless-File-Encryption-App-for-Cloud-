@@ -45,11 +45,11 @@ jobs:
 
       - name: Build Windows installer
         shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType exe -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.0.1
+        run: ./scripts/build-desktop.ps1 -PackageType exe -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.0.2
 
       - name: Build Windows MSI
         shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType msi -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.0.1
+        run: ./scripts/build-desktop.ps1 -PackageType msi -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.0.2
 
       - name: Publish GitHub Release
         env:
@@ -58,17 +58,17 @@ jobs:
         shell: pwsh
         run: |
           gh release create $env:RELEASE_TAG `
-            dist-desktop/StealthSync-1.0.1.exe `
-            dist-desktop/StealthSync-1.0.1.msi `
+            dist-desktop/StealthSync-Setup-1.0.2.exe `
+            dist-desktop/StealthSync-1.0.2.msi `
             --title "StealthSync Windows Installer" `
             --notes "Self-contained Windows installer for StealthSync.
 
           Included asset:
-          - StealthSync-1.0.1.exe
-          - StealthSync-1.0.1.msi
+          - StealthSync-Setup-1.0.2.exe
+          - StealthSync-1.0.2.msi
 
           How to run:
-          1. Download and run the installer.
-          2. Launch StealthSync from the desktop or Start Menu shortcut.
+          1. Download and run StealthSync-Setup-1.0.2.exe.
+          2. Launch StealthSync from the desktop or Start Menu shortcut after installation.
 
           This desktop build includes its own Java runtime and local database. PostgreSQL and DB_PASSWORD are not required."

@@ -6,7 +6,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-import java.awt.Desktop;
 import java.net.URI;
 
 @Component
@@ -24,12 +23,9 @@ public class DesktopBrowserLauncher {
         if (!openBrowser) {
             return;
         }
-        try {
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI.create("http://localhost:" + serverPort));
-            }
-        } catch (Exception exception) {
-            log.warn("Unable to open the default browser automatically.", exception);
+        URI applicationUri = URI.create("http://localhost:" + serverPort);
+        if (!SystemBrowserLauncher.open(applicationUri)) {
+            log.warn("Unable to open the default browser automatically. Open {} manually.", applicationUri);
         }
     }
 }
