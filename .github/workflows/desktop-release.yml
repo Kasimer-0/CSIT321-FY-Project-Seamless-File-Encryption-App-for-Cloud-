@@ -45,11 +45,11 @@ jobs:
 
       - name: Build Windows installer
         shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType exe -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.1.0
+        run: ./scripts/build-desktop.ps1 -PackageType exe -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.2.0
 
       - name: Build Windows MSI
         shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType msi -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.1.0
+        run: ./scripts/build-desktop.ps1 -PackageType msi -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.2.0
 
       - name: Publish GitHub Release
         env:
@@ -58,17 +58,17 @@ jobs:
         shell: pwsh
         run: |
           gh release create $env:RELEASE_TAG `
-            dist-desktop/StealthSync-Setup-1.1.0.exe `
-            dist-desktop/StealthSync-1.1.0.msi `
+            dist-desktop/StealthSync-Setup-1.2.0.exe `
+            dist-desktop/StealthSync-1.2.0.msi `
             --title "StealthSync Windows Installer" `
             --notes "Self-contained Windows installer for StealthSync.
 
           Included asset:
-          - StealthSync-Setup-1.1.0.exe
-          - StealthSync-1.1.0.msi
+          - StealthSync-Setup-1.2.0.exe
+          - StealthSync-1.2.0.msi
 
           How to run:
-          1. Download and run StealthSync-Setup-1.1.0.exe.
+          1. Download and run StealthSync-Setup-1.2.0.exe.
           2. Launch StealthSync from the desktop or Start Menu shortcut after installation.
 
-          Version 1.1.0 opens in a dedicated desktop window and includes seeded admin and normal-customer test accounts. It includes its own Java runtime and local database; PostgreSQL and DB_PASSWORD are not required."
+          Version 1.2.0 adds real Google OAuth and encrypted Google Drive upload/download support. Set GOOGLE_DRIVE_CLIENT_ID and GOOGLE_DRIVE_CLIENT_SECRET before launch to enable it. The app includes its own Java runtime and local database; PostgreSQL and DB_PASSWORD are not required."

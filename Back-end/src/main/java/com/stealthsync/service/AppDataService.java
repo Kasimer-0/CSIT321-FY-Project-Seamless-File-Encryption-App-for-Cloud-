@@ -354,7 +354,7 @@ public class AppDataService {
     public Optional<CloudStorageLink> setActiveCloudStorageLink(Long linkID) {
         Optional<CloudStorageLink> selected = findCloudStorageLink(linkID);
         selected.ifPresent(link -> {
-            List<CloudStorageLink> links = cloudStorageLinkRepository.findAll();
+            List<CloudStorageLink> links = cloudStorageLinkRepository.findByOwnerID(link.getOwnerID());
             links.forEach(existing -> existing.setActive(existing.getLinkID().equals(linkID)));
             cloudStorageLinkRepository.saveAll(links);
         });
@@ -399,11 +399,22 @@ public class AppDataService {
     @Transactional
     public CloudStorageLink linkCloudProvider(String provider, Long ownerID) {
         String normalizedProvider = normalizeCloudProvider(provider);
+        return linkCloudProvider(
+                normalizedProvider,
+                ownerID,
+                normalizedProvider.replace("_", ".") + ".user@example.com"
+        );
+    }
+
+    @Transactional
+    public CloudStorageLink linkCloudProvider(String provider, Long ownerID, String accountEmail) {
+        String normalizedProvider = normalizeCloudProvider(provider);
         UserAccount owner = findUser(ownerID)
                 .orElseThrow(() -> new IllegalArgumentException("Cloud storage owner does not exist."));
 
         return cloudStorageLinkRepository.findByOwnerIDAndProviderIgnoreCase(owner.getUserID(), normalizedProvider)
                 .map(link -> {
+                    link.setAccountEmail(accountEmail);
                     link.setStatus("connected");
                     link.setLinkedAt(Instant.now());
                     return cloudStorageLinkRepository.save(link);
@@ -414,7 +425,7 @@ public class AppDataService {
                     CloudStorageLink link = new CloudStorageLink(
                             null,
                             normalizedProvider,
-                            normalizedProvider.replace("_", ".") + ".user@example.com",
+                            accountEmail,
                             Instant.now(),
                             "connected",
                             firstLink,
@@ -422,6 +433,10 @@ public class AppDataService {
                     );
                     return cloudStorageLinkRepository.save(link);
                 });
+    }
+
+    public Optional<CloudStorageLink> findCloudStorageLink(Long linkID) {
+        return linkID == null ? Optional.empty() : cloudStorageLinkRepository.findById(linkID);
     }
 
     public Set<String> supportedCloudProviders() {
@@ -475,9 +490,6 @@ public class AppDataService {
         return ticketID == null ? Optional.empty() : ticketRepository.findById(ticketID);
     }
 
-    private Optional<CloudStorageLink> findCloudStorageLink(Long linkID) {
-        return linkID == null ? Optional.empty() : cloudStorageLinkRepository.findById(linkID);
-    }
 
     private Optional<UserAccount> defaultCustomer() {
         return userAccountRepository.findByEmailIgnoreCase(DEFAULT_CUSTOMER_EMAIL)

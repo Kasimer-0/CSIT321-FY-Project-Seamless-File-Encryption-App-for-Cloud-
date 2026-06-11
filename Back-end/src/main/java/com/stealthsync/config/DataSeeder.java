@@ -141,20 +141,11 @@ public class DataSeeder implements CommandLineRunner {
         if (cloudStorageLinkRepository.count() == 0) {
             cloudStorageLinkRepository.save(new CloudStorageLink(
                     null,
-                    "google_drive",
-                    "premium.user@gmail.com",
-                    Instant.now().minusSeconds(86400 * 7),
-                    "connected",
-                    true,
-                    customer.getUserID()
-            ));
-            cloudStorageLinkRepository.save(new CloudStorageLink(
-                    null,
                     "dropbox",
                     "premium.user@dropbox.example",
                     Instant.now().minusSeconds(86400 * 3),
                     "expired",
-                    false,
+                    true,
                     customer.getUserID()
             ));
         }

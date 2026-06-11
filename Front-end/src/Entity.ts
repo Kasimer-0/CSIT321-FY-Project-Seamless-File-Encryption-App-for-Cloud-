@@ -71,6 +71,15 @@ export type CloudStorageUsage = {
     fileCount: number
 }
 
+export type GoogleDriveFile = {
+    fileId: string
+    fileName: string
+    originalName: string
+    fileSize: number
+    createdAt: string | null
+    modifiedAt: string | null
+}
+
 export type SystemLog = {
     logId: number
     username: string

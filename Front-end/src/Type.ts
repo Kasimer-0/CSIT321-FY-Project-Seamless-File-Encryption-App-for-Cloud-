@@ -173,3 +173,12 @@ export type CloudStorageLink = {
     isActive: boolean
     ownerID: number
 }
+
+export type GoogleDriveFile = {
+    fileId: string
+    fileName: string
+    originalName: string
+    fileSize: number
+    createdAt: string | null
+    modifiedAt: string | null
+}

@@ -106,3 +106,68 @@ psql -U postgres -d stealthsync -f scripts/init_data.sql
 
 The SQL script is idempotent and stores BCrypt password hashes rather than
 plain-text passwords.
+
+## Development Prerequisites
+
+Use these versions in the user manual:
+
+| Component | Project version |
+| --- | --- |
+| Java | `21` (the current local and desktop build uses `21.0.2`) |
+| Spring Boot | `3.2.5` |
+| Apache Maven | `3.9.16` |
+| PostgreSQL server | `16` recommended for backend development |
+| PostgreSQL JDBC driver | `42.6.2` |
+
+The PostgreSQL server version is not controlled by Maven; the project pins the
+JDBC driver version. The packaged desktop application uses its bundled H2
+database and does not require PostgreSQL or Maven on the end user's computer.
+
+## Google Drive Integration
+
+StealthSync uses Google OAuth 2.0 and the Google Drive API to link a user's
+account. Files uploaded through the Google Drive section are encrypted with
+AES-256-GCM before they leave the application. Downloads are retrieved as
+ciphertext and decrypted locally before being saved by the user.
+
+Google Drive setup:
+
+Reference: [Google OAuth 2.0 web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server)
+and [Google Drive API upload guide](https://developers.google.com/drive/api/guides/manage-uploads).
+
+1. Create or select a project in Google Cloud Console.
+2. Enable the Google Drive API.
+3. Configure an OAuth consent screen and add the test users who will use the
+   course-project build.
+4. Create an OAuth client with application type `Web application`.
+5. Add this authorized redirect URI exactly:
+
+```text
+http://localhost:8080/cloud-storage/oauth/google/callback
+```
+
+6. Set these environment variables before starting the backend or desktop app:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+    "GOOGLE_DRIVE_CLIENT_ID",
+    "your-client-id.apps.googleusercontent.com",
+    "User"
+)
+[Environment]::SetEnvironmentVariable(
+    "GOOGLE_DRIVE_CLIENT_SECRET",
+    "your-client-secret",
+    "User"
+)
+```
+
+Restart StealthSync after changing these user environment variables.
+
+If a different server port is used, set `GOOGLE_DRIVE_REDIRECT_URI` to the
+matching callback URL and add the same URI to the Google OAuth client.
+
+The integration requests the least-privilege `drive.file` scope, so it lists
+and manages files created by StealthSync instead of requesting access to every
+file in the user's Drive. OAuth access and refresh tokens are encrypted before
+being stored in the application database. Never commit the Google client secret
+or export it into a public installer or GitHub Actions log.
