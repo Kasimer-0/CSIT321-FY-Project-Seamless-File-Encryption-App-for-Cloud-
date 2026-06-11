@@ -60,6 +60,11 @@ The script:
 - packages the Spring Boot backend JAR
 - runs `jpackage` to create `dist-desktop/StealthSync/StealthSync.exe`
 
+The packaged application opens the React interface inside its own JavaFX
+desktop window. It does not open the system browser. Closing the window also
+stops the local Spring Boot service, and launching the app again focuses the
+existing window instead of starting another server process.
+
 Desktop packages use a local H2 database stored under the current user's
 `.stealthsync` directory. They do not require PostgreSQL or a `DB_PASSWORD`
 environment variable. Normal backend development continues to use PostgreSQL.
@@ -78,3 +83,26 @@ only enters the Windows installer flow.
 Use a standard Temurin/OpenJDK 21 installation for packaging. Full JDK builds
 that enable both client and server JVMs are rejected because they can generate
 a Windows launcher that reports `Failed to launch JVM`.
+
+## Test Accounts
+
+The backend checks and creates these accounts whenever it starts with a new or
+existing database:
+
+| Permission | Username | Email | Password |
+| --- | --- | --- | --- |
+| Administrator | `admin` | `admin@stealthsync.com` | `Admin@123` |
+| Normal customer | `testuser` | `testuser@stealthsync.com` | `User@123` |
+| Premium demo customer | `PremiumUser` | `user@stealthsync.com` | `User@1234` |
+
+Desktop installations use the local H2 database and seed these accounts on
+first launch automatically. For a PostgreSQL development database, automatic
+seeding also runs when the backend starts. The same two required test accounts
+can be created or reset manually with:
+
+```powershell
+psql -U postgres -d stealthsync -f scripts/init_data.sql
+```
+
+The SQL script is idempotent and stores BCrypt password hashes rather than
+plain-text passwords.

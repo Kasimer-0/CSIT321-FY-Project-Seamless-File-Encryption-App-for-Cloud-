@@ -8,10 +8,10 @@ param(
     [switch]$WinConsole,
 
     [string]$JdkHome,
-    [string]$AppVersion = "1.0.2",
+    [string]$AppVersion = "1.1.0",
     [string]$UpgradeUuid = "8c96c4aa-8c5f-4ed0-a9f4-8dcb48c2b6b7",
     [int]$ServerPort = 8080,
-    [bool]$OpenBrowser = $true
+    [bool]$OpenBrowser = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,6 +80,9 @@ if (-not $SkipFrontendBuild) {
     try {
         Require-Command "npm" | Out-Null
         npm run build
+        if ($LASTEXITCODE -ne 0) {
+            throw "Frontend build failed with exit code $LASTEXITCODE."
+        }
     }
     finally {
         Pop-Location
@@ -107,6 +110,9 @@ if (-not $SkipBackendBuild) {
         }
         else {
             mvn clean package
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Backend build failed with exit code $LASTEXITCODE."
         }
     }
     finally {

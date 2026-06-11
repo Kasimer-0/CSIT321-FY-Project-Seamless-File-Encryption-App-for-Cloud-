@@ -66,7 +66,15 @@ public class DataSeeder implements CommandLineRunner {
                 "admin@stealthsync.com",
                 "Admin@123",
                 "admin",
-                true,
+                false,
+                false
+        );
+        seedUser(
+                "testuser",
+                "testuser@stealthsync.com",
+                "User@123",
+                "customer",
+                false,
                 false
         );
         UserAccount customer = seedUser(

@@ -28,8 +28,8 @@ public final class DesktopLaunchSupport {
             return false;
         }
 
-        log.info("StealthSync is already running. Opening {}.", applicationUri);
-        SystemBrowserLauncher.open(applicationUri);
+        requestWindowFocus(applicationUri);
+        log.info("StealthSync is already running. Requested focus for the existing desktop window.");
         return true;
     }
 
@@ -56,6 +56,21 @@ public final class DesktopLaunchSupport {
             return response.statusCode() == 200 && response.body().contains(APPLICATION_MARKER);
         } catch (Exception exception) {
             return false;
+        }
+    }
+
+    private static void requestWindowFocus(URI applicationUri) {
+        try {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(REQUEST_TIMEOUT)
+                    .build();
+            HttpRequest request = HttpRequest.newBuilder(applicationUri.resolve("/desktop/focus"))
+                    .timeout(REQUEST_TIMEOUT)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+            client.send(request, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception exception) {
+            log.debug("The running StealthSync instance could not be focused.", exception);
         }
     }
 }
