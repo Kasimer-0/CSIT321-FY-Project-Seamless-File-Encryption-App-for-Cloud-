@@ -33,6 +33,7 @@ import java.util.Map;
 @RequestMapping("/admin")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
+/** Builds admin reports and exposes security-relevant system logs and CSV downloads. */
 public class AdminInsightsController {
 
     private final UserAccountRepository userAccountRepository;

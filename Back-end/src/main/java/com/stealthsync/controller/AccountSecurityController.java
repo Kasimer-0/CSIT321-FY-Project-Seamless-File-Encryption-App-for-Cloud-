@@ -26,6 +26,7 @@ import java.util.Map;
 @RequestMapping("/account")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
+/** Exposes password reset, recovery-phrase, and destructive account-reset operations. */
 public class AccountSecurityController {
 
     private static final List<String> RECOVERY_WORDS = List.of(

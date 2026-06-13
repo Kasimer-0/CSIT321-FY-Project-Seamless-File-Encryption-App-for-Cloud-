@@ -12,6 +12,7 @@ import java.net.URI;
 @Component
 @Profile("!desktop")
 @Slf4j
+/** Legacy browser launcher retained as a fallback; current desktop builds use the JavaFX window. */
 public class DesktopBrowserLauncher {
 
     @Value("${stealthsync.open-browser:false}")

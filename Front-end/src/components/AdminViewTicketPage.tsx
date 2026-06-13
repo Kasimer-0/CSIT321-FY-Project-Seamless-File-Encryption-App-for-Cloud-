@@ -2,6 +2,11 @@ import { useState } from "react"
 import type { TicketDTO, TicketResponse } from "../Type"
 import toast from "react-hot-toast"
 
+/**
+ * Codex-added ticket conversation view for administrators.
+ * Replies are persisted as TicketResponse records, and senderRole controls the visual
+ * side of each message without exposing or duplicating a user ID in every response.
+ */
 type AdminViewTicketProps = {
     ticket: TicketDTO
     onBack: () => void
@@ -26,6 +31,7 @@ function AdminViewTicket({
 
     const responses = ticket.responses ?? []
 
+    // Save the reply first, then let the parent merge the returned database record into local state.
     const handleSendResponse = async () => {
         const trimmedMessage = message.trim()
         if (!trimmedMessage) return

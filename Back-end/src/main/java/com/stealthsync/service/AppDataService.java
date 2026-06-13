@@ -35,6 +35,10 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+/**
+ * Central application service for account, plan, ticket, subscription, cloud-link, and file workflows.
+ * Controllers delegate here so validation and database updates stay consistent across API endpoints.
+ */
 public class AppDataService {
 
     private static final String DEFAULT_CUSTOMER_EMAIL = "user@stealthsync.com";
@@ -202,6 +206,7 @@ public class AppDataService {
     }
 
     @Transactional
+    /** Persists one normalized admin/customer message and attaches it to its parent ticket. */
     public Optional<TicketResponse> addTicketResponse(Long ticketID, String message, String senderRole) {
         if (isBlank(message)) {
             throw new IllegalArgumentException("Message is required.");
@@ -251,6 +256,10 @@ public class AppDataService {
     }
 
     @Transactional
+    /**
+     * Applies the course-project demo purchase immediately.
+     * Paid plans create/update a 30-day subscription; a free plan removes the current subscription.
+     */
     public UserAccountDTO purchasePlan(Long userID, Long planID) {
         if (userID == null || planID == null) {
             throw new IllegalArgumentException("User ID and plan ID are required.");
@@ -407,6 +416,7 @@ public class AppDataService {
     }
 
     @Transactional
+    /** Links a supported provider after enforcing the free/premium account limit. */
     public CloudStorageLink linkCloudProvider(String provider, Long ownerID, String accountEmail) {
         String normalizedProvider = normalizeCloudProvider(provider);
         UserAccount owner = findUser(ownerID)
@@ -553,6 +563,7 @@ public class AppDataService {
         return normalized;
     }
 
+    // Count distinct providers so reconnecting the same provider does not consume another slot.
     private void enforceCloudProviderLimit(UserAccount owner) {
         int limit = owner.isSubscribed() ? PREMIUM_CLOUD_PROVIDER_LIMIT : FREE_TIER_CLOUD_PROVIDER_LIMIT;
         int linkedProviderCount = (int) cloudStorageLinkRepository.findByOwnerID(owner.getUserID()).stream()

@@ -26,6 +26,7 @@ import java.util.List;
 @AllArgsConstructor
 @Entity
 @Table(name = "tickets")
+/** Support ticket aggregate containing requester, optional assignee, and ordered responses. */
 public class Ticket {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

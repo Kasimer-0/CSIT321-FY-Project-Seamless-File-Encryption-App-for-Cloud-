@@ -12,6 +12,7 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 
 @Service
+/** Creates, derives, fingerprints, and clears cryptographic keys used by vault/file services. */
 public class KeyManagementService {
 
     private static final int AES_KEY_LENGTH_BITS = 256;

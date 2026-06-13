@@ -10,6 +10,11 @@ type Props = {
     onCancelSubscription?: () => void
 }
 
+/**
+ * The teammate's account page is preserved here; Codex connected its plan controls to the backend.
+ * The added purchase state provides confirmation, progress, and error feedback because plan changes
+ * take effect immediately in this course-project demo rather than passing through a payment gateway.
+ */
 function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAccount, onCancelSubscription }: Props) {
     const [subscription, setSubscription] = useState<SubscriptionDTO | null>(null)
     const [availablePlans, setAvailablePlans] = useState<Plan[]>([])
@@ -127,6 +132,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         }
     }
 
+    // Wait for the parent purchase call to refresh the root user before closing the confirmation dialog.
     const handleConfirmPurchase = async () => {
         if (!selectedPlan || !onSubscribe) return
 

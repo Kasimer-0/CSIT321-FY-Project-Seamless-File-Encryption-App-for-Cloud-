@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Entity
 @Table(name = "user_accounts")
+/** Login account and role/subscription status shared by administrators and customers. */
 public class UserAccount {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.Arrays;
 
 @Slf4j
+/** Shares desktop launch flags and single-instance coordination between startup components. */
 public final class DesktopLaunchSupport {
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(2);

@@ -63,6 +63,8 @@ function CustomerManageOwnTicket({ user, tickets, onCloseTicket, onTicketRespons
         }
     }
 
+    // Codex integration note: synchronize both the selected detail and dashboard ticket list
+    // after a response is saved, preventing the conversation from disappearing on navigation.
     const handleResponseAdded = (response: TicketResponse) => {
         if (!selectedTicket) return
 

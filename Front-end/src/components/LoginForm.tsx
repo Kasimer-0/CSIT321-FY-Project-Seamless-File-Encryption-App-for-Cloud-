@@ -8,6 +8,8 @@ type LoginFormProps = {
 function LoginForm({ onLogin }: LoginFormProps) {
     const [usernameOrEmail, setUsernameOrEmail] = useState("")
     const [password, setPassword] = useState("")
+    // Codex integration note: recovery login is an alternate credential flow from the security user story.
+    // It is kept inside the existing login form to preserve the teammate's original page structure.
     const [recoveryPhrase, setRecoveryPhrase] = useState("")
     const [useRecovery, setUseRecovery] = useState(false)
     const [error, setError] = useState("")
@@ -46,6 +48,7 @@ function LoginForm({ onLogin }: LoginFormProps) {
         }
     }
 
+    // Recovery phrases are sent to their dedicated endpoint and never mixed with password login.
     const handleRecoveryLogin = async () => {
         setError("")
         setLoading(true)

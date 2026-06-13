@@ -8,6 +8,7 @@ import java.io.InputStream;
 
 @Service
 @RequiredArgsConstructor
+/** Keeps cloud/file workflows independent from the concrete AES-GCM implementation. */
 public class FileOrchestrationService {
 
     private final AesGcmService aesGcmService;

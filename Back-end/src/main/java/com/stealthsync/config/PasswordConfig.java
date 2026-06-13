@@ -6,6 +6,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
+/** Provides the one-way password encoder shared by login, registration, reset, and seed data. */
 public class PasswordConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {

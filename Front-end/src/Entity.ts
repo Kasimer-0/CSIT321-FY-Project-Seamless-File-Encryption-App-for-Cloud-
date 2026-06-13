@@ -1,3 +1,9 @@
+/**
+ * Codex integration note: shared API entity contracts used by the added backend flows.
+ * These types mirror nested responses such as ticket conversations, subscriptions,
+ * encryption keys, security tokens, reports, and Google Drive files so the UI does
+ * not fall back to untyped arrays or loosely shaped objects.
+ */
 export type UserAccount = {
     userID: number
     username: string

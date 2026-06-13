@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 
 @Slf4j
+/** Opens external authorization pages with OS-specific fallbacks when Desktop.browse is unavailable. */
 public final class SystemBrowserLauncher {
 
     private SystemBrowserLauncher() {

@@ -22,6 +22,10 @@ import java.util.concurrent.atomic.AtomicReference;
 @Profile("desktop")
 @RequiredArgsConstructor
 @Slf4j
+/**
+ * Hosts the embedded Spring UI inside JavaFX for native desktop-window behavior.
+ * Closing the primary window also closes Spring so no hidden backend process remains.
+ */
 public class DesktopWindowLauncher {
 
     private static final AtomicBoolean TOOLKIT_STARTED = new AtomicBoolean();
@@ -35,6 +39,7 @@ public class DesktopWindowLauncher {
 
     @EventListener(ApplicationReadyEvent.class)
     public void openDesktopWindow() {
+        // JavaFX toolkit startup is process-wide and may only happen once.
         Runnable createWindow = () -> createAndShowWindow(applicationUrl(serverPort));
         if (TOOLKIT_STARTED.compareAndSet(false, true)) {
             Platform.startup(createWindow);
@@ -99,6 +104,7 @@ public class DesktopWindowLauncher {
     }
 
     private void shutdownApplication() {
+        // Guard shutdown because JavaFX and Spring lifecycle callbacks may both reach this path.
         if (!SHUTTING_DOWN.compareAndSet(false, true)) {
             return;
         }

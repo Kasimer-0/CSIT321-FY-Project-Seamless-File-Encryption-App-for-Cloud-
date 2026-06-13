@@ -23,6 +23,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Entity
 @Table(name = "ticket_responses")
+/** One persisted ticket message, classified by admin/customer role and ordered by timestamp. */
 public class TicketResponse {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -20,6 +20,7 @@ import java.util.HashMap;
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true") // Allow React (Vite) frontend to make cross-origin requests
 @RequiredArgsConstructor
 @Slf4j
+/** Handles login, logout, and customer registration using the HTTP session. */
 public class AuthController {
 
     private final AppDataService dataStore;

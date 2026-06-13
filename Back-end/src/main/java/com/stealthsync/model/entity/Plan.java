@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Entity
 @Table(name = "plans")
+/** Purchasable free or paid plan including status and advertised encryption method. */
 public class Plan {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

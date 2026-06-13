@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+/** Detects common sensitive-data patterns in a bounded client-provided text sample. */
 public class PrivacyScannerService {
 
     public List<String> scanText(String text) {

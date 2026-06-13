@@ -22,6 +22,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true") // Allow cross-origin access to the Vite frontend via the default port.
 @Slf4j
+/** Provides local encryption/decryption downloads and the demo encrypted-file storage workflow. */
 public class FileController {
 
     private static final String DEFAULT_PASSPHRASE = "stealthsync-demo-passphrase";

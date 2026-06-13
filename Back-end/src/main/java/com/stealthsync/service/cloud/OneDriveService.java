@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import java.io.InputStream;
 
 @Service
+/** Prototype OneDrive adapter; remote file I/O is intentionally not implemented yet. */
 public class OneDriveService implements CloudStorageAdapter {
 
     @Override

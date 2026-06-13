@@ -3,6 +3,7 @@ package com.stealthsync.model.dto;
 import lombok.Data;
 
 @Data
+/** API representation of a subscription plan. */
 public class PlanDTO {
     private String planID;
     private String planTitle;

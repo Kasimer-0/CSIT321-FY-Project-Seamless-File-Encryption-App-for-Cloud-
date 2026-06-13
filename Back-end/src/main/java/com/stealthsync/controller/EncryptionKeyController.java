@@ -27,6 +27,7 @@ import java.util.UUID;
 @RequestMapping("/encryption-keys")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
+/** Provides owner-scoped CRUD for key metadata without exposing raw key material. */
 public class EncryptionKeyController {
 
     private final EncryptionKeyRepository encryptionKeyRepository;

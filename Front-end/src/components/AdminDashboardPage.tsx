@@ -4,6 +4,7 @@ import AdminManageAccount from "./AdminManageAccountPage"
 import AdminManagePlan from "./AdminManagePlanPage"
 import AdminManageTicket from "./AdminManageTicketPage"
 import AdminManageSubscription from "./AdminManageSubscriptionPage"
+// Codex integration note: reports/logs were added to cover the admin monitoring user stories.
 import AdminReportsLogsPage from "./AdminReportsLogsPage"
 
 type DashboardStats = {
@@ -18,6 +19,7 @@ type AdminDashboardProps = {
     onLogout: () => void
 }
 
+// The reports tab extends the teammate's original dashboard without changing its layout pattern.
 type Tab = "overview" | "users" | "plans" | "tickets" | "subscription" | "reports"
 
 const pageTitles: Record<Tab, string> = {

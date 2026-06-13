@@ -20,6 +20,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Entity
 @Table(name = "subscriptions")
+/** Time-bounded relationship between a customer and a paid plan. */
 public class Subscription {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

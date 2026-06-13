@@ -5,6 +5,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
+/** Allows the local Vite server to call the Spring API with session cookies during development. */
 public class CorsConfig implements WebMvcConfigurer {
 
     @Override

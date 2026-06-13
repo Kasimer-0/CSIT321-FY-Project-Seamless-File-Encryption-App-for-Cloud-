@@ -17,6 +17,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Entity
 @Table(name = "physical_tokens")
+/** Registration and lifecycle state for a premium customer's physical security token. */
 public class PhysicalTokenRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

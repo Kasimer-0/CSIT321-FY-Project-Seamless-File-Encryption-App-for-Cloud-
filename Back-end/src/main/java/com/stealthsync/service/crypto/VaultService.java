@@ -18,6 +18,10 @@ import java.util.Arrays;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * Maintains the in-memory unlocked vault key and verifies later unlock attempts.
+ * The derived key is cleared on lock and is never serialized through the API.
+ */
 public class VaultService {
 
     private static final byte[] MAGIC = "SVLT".getBytes(StandardCharsets.US_ASCII);

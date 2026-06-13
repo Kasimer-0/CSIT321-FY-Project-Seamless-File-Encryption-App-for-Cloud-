@@ -29,6 +29,10 @@ import java.util.Map;
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
+/**
+ * Coordinates cloud-link management and Google Drive OAuth/file operations.
+ * Google Drive is real integration; Dropbox and OneDrive links remain prototype records.
+ */
 public class CloudStorageController {
 
     private static final String DEFAULT_PASSPHRASE = "stealthsync-demo-passphrase";
@@ -142,6 +146,7 @@ public class CloudStorageController {
             @RequestParam Long ownerID,
             @RequestParam("file") MultipartFile file) throws Exception {
         String originalName = safeFilename(file.getOriginalFilename(), "uploaded-file");
+        // Encrypt locally before the stream is handed to the Google Drive client.
         try (InputStream encrypted = aesGcmService.encryptStream(file.getInputStream(), DEFAULT_PASSPHRASE)) {
             return ResponseEntity.ok(googleDriveService.uploadEncrypted(ownerID, originalName, encrypted));
         }
@@ -151,6 +156,7 @@ public class CloudStorageController {
     public ResponseEntity<InputStreamResource> decryptGoogleDriveFile(
             @PathVariable String fileId,
             @RequestParam Long ownerID) throws Exception {
+        // Download encrypted bytes first, then return only locally decrypted content to the customer.
         GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
         InputStream decrypted = aesGcmService.decryptStream(
                 new ByteArrayInputStream(driveFile.encryptedContent()),

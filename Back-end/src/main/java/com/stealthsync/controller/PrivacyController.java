@@ -17,6 +17,7 @@ import java.util.Map;
 @RequestMapping("/privacy")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
+/** Runs lightweight sensitive-data checks before a customer confirms file upload. */
 public class PrivacyController {
 
     private final PrivacyScannerService privacyScannerService;

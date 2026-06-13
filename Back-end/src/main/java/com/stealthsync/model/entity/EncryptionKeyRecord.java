@@ -17,6 +17,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Entity
 @Table(name = "encryption_keys")
+/** Customer-owned key metadata; it intentionally stores a fingerprint rather than exposed raw key bytes. */
 public class EncryptionKeyRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

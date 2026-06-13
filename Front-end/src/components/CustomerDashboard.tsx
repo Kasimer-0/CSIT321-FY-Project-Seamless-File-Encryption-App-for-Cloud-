@@ -13,9 +13,12 @@ import toast from "react-hot-toast"
 type CustomerDashboardProps = {
     user: UserAccount
     onLogout: () => void
+    // Codex integration note: child workflows return fresh account data after plan/security changes.
+    // Lifting that state to App keeps all customer sections consistent without a page reload.
     onUserUpdate: (updatedUser: UserAccount) => void
 }
 
+// Codex integration note: keys and security extend the teammate's original navigation using the same section pattern.
 type TopSection = "files" | "keys" | "tickets" | "cloud" | "security" | "account"
 type FileSub = "encrypt" | "decrypt"
 type TicketSub = "createTicket" | "manageMyTicket"
@@ -93,6 +96,7 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
         }
     }
 
+    // Merge a persisted response into the dashboard cache so list/detail navigation shows it immediately.
     const handleTicketResponseAdded = (ticketID: number, response: TicketResponse) => {
         setTickets(prev => prev.map(ticket =>
             ticket.ticketID === ticketID
@@ -101,6 +105,8 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
         ))
     }
 
+    // Codex integration note: replace the original console-only Subscribe action with the demo purchase API.
+    // The endpoint activates/switches paid plans or removes the subscription when the free plan is selected.
     const handlePurchasePlan = async (plan: Plan) => {
         const request: PurchasePlanRequest = {
             userID: user.userID,

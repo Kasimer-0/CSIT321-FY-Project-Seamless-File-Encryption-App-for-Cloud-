@@ -14,6 +14,11 @@ const providerLabels: Record<string, { label: string; icon: string }> = {
 
 const availableProviders = ["google_drive", "dropbox", "onedrive"]
 
+/**
+ * Codex integration note: this page extends the teammate's cloud-link UI with persisted provider links,
+ * free/premium provider limits, and the complete Google Drive OAuth/encrypted-file workflow.
+ * Dropbox and OneDrive remain visible prototype providers; only Google Drive performs real remote I/O.
+ */
 type Props = {
     user: UserAccount
 }
@@ -68,6 +73,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
+    // The backend owns the 1-provider free / 5-provider premium rule, so the UI reads the effective limit.
     const fetchProviderInfo = async () => {
         try {
             const response = await fetch(`http://localhost:8080/cloud-storage/providers?ownerID=${user.userID}`, {
@@ -82,6 +88,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
+    // Check OAuth configuration and connection independently to distinguish setup errors from an unlinked account.
     const fetchDriveStatus = async () => {
         try {
             const response = await fetch(
@@ -101,6 +108,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         return false
     }
 
+    // Only StealthSync-tagged encrypted objects are returned by the backend Drive integration.
     const fetchDriveFiles = async () => {
         try {
             setDriveLoading(true)
@@ -213,6 +221,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
+    // Poll the local callback result because Google completes authorization in the system browser,
+    // outside the packaged JavaFX desktop window.
     const waitForGoogleConnection = async () => {
         for (let attempt = 0; attempt < 45; attempt += 1) {
             await new Promise(resolve => window.setTimeout(resolve, 2000))
@@ -226,6 +236,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         toast.error("Google Drive authorization was not completed. Try Connect again.")
     }
 
+    // Google Drive starts real OAuth; Dropbox and OneDrive intentionally use prototype link records.
     const beginProviderConnection = async (provider: string) => {
         const response = await fetch(
             `http://localhost:8080/cloud-storage/auth/${provider}?ownerID=${user.userID}`,
@@ -287,6 +298,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
+    // Send plaintext only to the local backend; encryption occurs before the resulting bytes leave for Drive.
     const handleDriveUpload = async (file: File) => {
         const formData = new FormData()
         formData.append("file", file)
@@ -309,6 +321,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
+    // The backend downloads and decrypts the remote object; the UI only saves the returned plaintext blob.
     const handleDriveDownload = async (file: GoogleDriveFile) => {
         try {
             const response = await fetch(

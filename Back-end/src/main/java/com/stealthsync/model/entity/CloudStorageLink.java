@@ -18,6 +18,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Entity
 @Table(name = "cloud_storage_links")
+/** Persisted link between one customer and a supported cloud provider account. */
 public class CloudStorageLink {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

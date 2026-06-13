@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Profile("desktop")
 @RequestMapping("/desktop")
+/** Desktop-only bridge for opening external URLs and focusing the primary application window. */
 public class DesktopController {
 
     @PostMapping("/focus")

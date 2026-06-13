@@ -2,6 +2,11 @@ import { useEffect, useState } from "react"
 import type { PhysicalTokenRecord, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 
+/**
+ * Codex-added security user-story page.
+ * It keeps password reset, recovery phrase generation, factory reset, and premium physical-token
+ * management together because all four operations change account security state.
+ */
 type Props = {
     user: UserAccount
     onUserUpdate: (updatedUser: UserAccount) => void
@@ -61,6 +66,7 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
         }
     }
 
+    // Factory reset intentionally clears dependent security/cloud records; refresh the root user afterwards.
     const factoryReset = async () => {
         if (!window.confirm("Factory reset will clear linked cloud accounts, encryption keys, tokens, and subscription state. Continue?")) return
         try {
@@ -82,6 +88,7 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
         }
     }
 
+    // The phrase is displayed only from the generation response so users can record it immediately.
     const generateRecoveryPhrase = async () => {
         try {
             const response = await fetch("http://localhost:8080/account/recovery-phrase/generate", {

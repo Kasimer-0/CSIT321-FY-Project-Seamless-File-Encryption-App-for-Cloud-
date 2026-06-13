@@ -15,6 +15,7 @@ import java.time.Instant;
 @NoArgsConstructor
 @Entity
 @Table(name = "google_drive_credentials")
+/** Encrypted OAuth credentials and expiry data for one customer's Google Drive connection. */
 public class GoogleDriveCredential {
 
     @Id

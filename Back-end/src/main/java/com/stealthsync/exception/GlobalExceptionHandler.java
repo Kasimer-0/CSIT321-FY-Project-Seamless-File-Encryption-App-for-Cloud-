@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 @Slf4j
+/** Converts validation and server failures into a consistent JSON error body for the frontend. */
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)

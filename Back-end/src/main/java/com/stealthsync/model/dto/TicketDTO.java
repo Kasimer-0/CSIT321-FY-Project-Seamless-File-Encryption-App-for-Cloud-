@@ -6,6 +6,7 @@ import lombok.Data;
 import java.util.List;
 
 @Data
+/** Ticket API view with nested requester, assignee, and conversation responses. */
 public class TicketDTO {
     private String ticketID;
     private String ticketTitle;

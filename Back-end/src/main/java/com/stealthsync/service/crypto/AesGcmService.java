@@ -16,6 +16,7 @@ import java.security.SecureRandom;
 
 @Service
 @RequiredArgsConstructor
+/** Performs authenticated AES-GCM streaming with a passphrase-derived key and per-file salt/IV. */
 public class AesGcmService {
 
     private static final String ALGORITHM = "AES/GCM/NoPadding";

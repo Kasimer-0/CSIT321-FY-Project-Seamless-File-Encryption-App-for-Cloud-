@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
+/** Owner-scoped database access for encryption-key metadata. */
 public interface EncryptionKeyRepository extends JpaRepository<EncryptionKeyRecord, Long> {
     List<EncryptionKeyRecord> findByOwnerIDOrderByCreatedAtDesc(Long ownerID);
 

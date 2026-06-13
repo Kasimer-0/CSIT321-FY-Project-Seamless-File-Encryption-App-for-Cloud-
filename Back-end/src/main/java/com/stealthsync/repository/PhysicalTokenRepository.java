@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
+/** Owner-scoped database access for physical-token registrations. */
 public interface PhysicalTokenRepository extends JpaRepository<PhysicalTokenRecord, Long> {
     List<PhysicalTokenRecord> findByOwnerIDOrderByRegisteredAtDesc(Long ownerID);
 

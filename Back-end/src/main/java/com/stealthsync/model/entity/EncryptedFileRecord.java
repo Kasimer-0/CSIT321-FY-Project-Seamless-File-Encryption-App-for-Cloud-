@@ -18,6 +18,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Entity
 @Table(name = "encrypted_files")
+/** Metadata and encrypted bytes for files stored by the local demonstration repository. */
 public class EncryptedFileRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

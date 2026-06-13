@@ -33,6 +33,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * Implements Google OAuth, encrypted credential persistence, token refresh, and Drive file transfer.
+ * Access and refresh tokens are encrypted with an installation secret before JPA persistence.
+ */
 public class GoogleDriveService {
 
     private static final String AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -76,6 +80,7 @@ public class GoogleDriveService {
                         && "connected".equalsIgnoreCase(link.getStatus()));
     }
 
+    /** Creates a short-lived state token that binds the OAuth callback to one local customer. */
     public String createAuthorizationUrl(Long ownerID) {
         requireConfigured();
         if (ownerID == null) {
@@ -98,6 +103,7 @@ public class GoogleDriveService {
     }
 
     @Transactional
+    /** Exchanges Google's callback code, records the account email, and stores encrypted tokens. */
     public CloudStorageLink completeAuthorization(String code, String state) throws IOException, InterruptedException {
         requireConfigured();
         if (isBlank(state)) {
@@ -231,6 +237,7 @@ public class GoogleDriveService {
         return objectMapper.readTree(response.body());
     }
 
+    // Retry one unauthorized request after forcing token refresh; other HTTP failures are surfaced unchanged.
     private <T> HttpResponse<T> send(Long ownerID, HttpRequest.Builder requestBuilder,
                                      HttpResponse.BodyHandler<T> bodyHandler)
             throws IOException, InterruptedException {
@@ -251,6 +258,7 @@ public class GoogleDriveService {
         return response;
     }
 
+    // Prevent parallel transfers from racing while replacing an expired access token.
     private synchronized String validAccessToken(GoogleDriveCredential credential, boolean forceRefresh)
             throws IOException, InterruptedException {
         if (!forceRefresh && credential.getExpiresAt().isAfter(Instant.now().plusSeconds(60))) {

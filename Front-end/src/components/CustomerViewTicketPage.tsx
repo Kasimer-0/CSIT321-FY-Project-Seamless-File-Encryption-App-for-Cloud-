@@ -2,6 +2,11 @@ import { useState } from "react"
 import type { TicketDTO, TicketResponse } from "../Type"
 import toast from "react-hot-toast"
 
+/**
+ * Codex-added customer conversation view.
+ * It mirrors the admin response flow while always sending the customer role, which keeps
+ * bubble alignment and authorization intent explicit in the stored response data.
+ */
 type Props = {
     ticket: TicketDTO
     onBack: () => void
@@ -21,6 +26,7 @@ function CustomerViewTicket({ ticket, onBack, onClose, onResponseAdded }: Props)
         setShowConfirm(false)
     }
 
+    // The backend timestamp and response ID are authoritative, so append its returned object.
     const handleSendResponse = async () => {
         const trimmedMessage = message.trim()
         if (!trimmedMessage) return

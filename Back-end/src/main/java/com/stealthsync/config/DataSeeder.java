@@ -28,6 +28,10 @@ import java.util.ArrayList;
 
 @Component
 @RequiredArgsConstructor
+/**
+ * Creates deterministic demo plans, test accounts, and sample records at startup.
+ * Lookups are idempotent so repeated launches do not duplicate seeded business data.
+ */
 public class DataSeeder implements CommandLineRunner {
 
     private final UserAccountRepository userAccountRepository;
@@ -42,6 +46,7 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        // Plans and users are seeded first because subscriptions and tickets reference them.
         planRepository.findByPlanTitleIgnoreCase("Basic Free Tier")
                 .orElseGet(() -> planRepository.save(new Plan(
                         null,
@@ -86,6 +91,7 @@ public class DataSeeder implements CommandLineRunner {
                 false
         );
 
+        // Preserve an existing premium subscription; otherwise create the demo subscription state.
         Subscription subscription = subscriptionRepository.findAll().stream()
                 .filter(existing -> existing.getSubscriber().getUserID().equals(customer.getUserID()))
                 .findFirst()
@@ -101,6 +107,7 @@ public class DataSeeder implements CommandLineRunner {
         customer.setSubscription(subscription.getSubscriptionID());
         userAccountRepository.save(customer);
 
+        // Sample operational data is inserted only into empty tables to avoid overwriting user work.
         if (ticketRepository.count() == 0) {
             Ticket decryptTicket = new Ticket(
                     null,

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
+/** Database access for plans, including case-insensitive title lookup. */
 public interface PlanRepository extends JpaRepository<Plan, Long> {
     Optional<Plan> findByPlanTitleIgnoreCase(String planTitle);
 }

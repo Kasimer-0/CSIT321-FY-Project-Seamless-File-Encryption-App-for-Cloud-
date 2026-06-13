@@ -16,6 +16,7 @@ import java.util.Map;
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
+/** Exposes plan catalogue administration and active-plan discovery for customers. */
 public class PlanController {
 
     private final AppDataService dataStore;

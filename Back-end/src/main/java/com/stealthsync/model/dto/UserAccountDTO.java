@@ -5,6 +5,7 @@ import com.stealthsync.model.entity.Subscription;
 import lombok.Data;
 
 @Data
+/** Public account representation that omits password and recovery-phrase hashes. */
 public class UserAccountDTO {
     private Long userID;
     private String username;

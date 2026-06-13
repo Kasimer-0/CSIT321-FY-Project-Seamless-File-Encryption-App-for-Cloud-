@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import java.io.InputStream;
 
 @Service
+/** Prototype Dropbox adapter; remote file I/O is intentionally not implemented yet. */
 public class DropboxService implements CloudStorageAdapter {
 
     @Override

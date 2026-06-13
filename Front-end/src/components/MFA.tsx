@@ -1,3 +1,5 @@
+// Codex integration note: this placeholder remains for the teammate's planned MFA screen.
+// An unused React import was removed here so strict TypeScript builds could complete.
 function MFA(){
 
 

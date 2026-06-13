@@ -1,5 +1,10 @@
 import { useEffect, useState, type CSSProperties } from "react"
 
+/**
+ * Codex-added compatibility module for the react-hot-toast imports already used by the UI.
+ * The original dependency was unavailable in the project setup, so this small adapter preserves
+ * the same success/error API and prevents the Vite application from failing at startup.
+ */
 type ToastType = "success" | "error" | "loading"
 
 type ToastEvent = {

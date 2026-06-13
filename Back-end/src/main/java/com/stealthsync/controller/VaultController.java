@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/vault")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
+/** Exposes vault lifecycle operations without returning the derived encryption key. */
 public class VaultController {
 
     private final VaultService vaultService;

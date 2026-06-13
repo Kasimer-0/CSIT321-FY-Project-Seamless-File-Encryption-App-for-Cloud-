@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @Data
 @Entity
 @Table(name = "system_logs")
+/** Auditable application event with optional anomaly flag and explanation. */
 public class SystemLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

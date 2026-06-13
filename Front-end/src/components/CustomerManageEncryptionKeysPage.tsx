@@ -2,6 +2,11 @@ import { useEffect, useState } from "react"
 import type { EncryptionKeyRecord, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 
+/**
+ * Codex-added encryption-key management page.
+ * It implements the key CRUD user story and scopes every request to the logged-in customer so one
+ * account cannot list or modify another account's key metadata.
+ */
 type Props = {
     user: UserAccount
 }
@@ -31,6 +36,7 @@ function CustomerManageEncryptionKeysPage({ user }: Props) {
         }
     }
 
+    // Debounce search to avoid issuing a backend request for every immediate keystroke.
     useEffect(() => {
         const timer = setTimeout(fetchKeys, 300)
         return () => clearTimeout(timer)
