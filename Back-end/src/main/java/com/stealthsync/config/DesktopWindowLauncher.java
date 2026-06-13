@@ -35,12 +35,19 @@ public class DesktopWindowLauncher {
 
     @EventListener(ApplicationReadyEvent.class)
     public void openDesktopWindow() {
-        Runnable createWindow = () -> createAndShowWindow("http://127.0.0.1:" + serverPort);
+        Runnable createWindow = () -> createAndShowWindow(applicationUrl(serverPort));
         if (TOOLKIT_STARTED.compareAndSet(false, true)) {
             Platform.startup(createWindow);
         } else {
             Platform.runLater(createWindow);
         }
+    }
+
+    static String applicationUrl(int serverPort) {
+        // The existing frontend sends API requests to localhost. Loading the page from
+        // the same host keeps those requests same-origin inside JavaFX WebView; using
+        // 127.0.0.1 here causes WebView to block login as a cross-origin request.
+        return "http://localhost:" + serverPort;
     }
 
     public static boolean focusPrimaryWindow() {

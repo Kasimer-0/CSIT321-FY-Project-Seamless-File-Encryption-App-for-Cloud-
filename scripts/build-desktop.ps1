@@ -8,7 +8,7 @@ param(
     [switch]$WinConsole,
 
     [string]$JdkHome,
-    [string]$AppVersion = "1.2.0",
+    [string]$AppVersion = "1.2.1",
     [string]$UpgradeUuid = "8c96c4aa-8c5f-4ed0-a9f4-8dcb48c2b6b7",
     [int]$ServerPort = 8080,
     [bool]$OpenBrowser = $false
