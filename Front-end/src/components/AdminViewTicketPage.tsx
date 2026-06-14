@@ -3,7 +3,7 @@ import type { TicketDTO, TicketResponse } from "../Type"
 import toast from "react-hot-toast"
 
 /**
- * Codex-added ticket conversation view for administrators.
+ * Ticket conversation view for administrators.
  * Replies are persisted as TicketResponse records, and senderRole controls the visual
  * side of each message without exposing or duplicating a user ID in every response.
  */

@@ -3,7 +3,7 @@ import type { TicketDTO, TicketResponse } from "../Type"
 import toast from "react-hot-toast"
 
 /**
- * Codex-added customer conversation view.
+ * Customer ticket conversation view.
  * It mirrors the admin response flow while always sending the customer role, which keeps
  * bubble alignment and authorization intent explicit in the stored response data.
  */

@@ -16,7 +16,7 @@ function App() {
         setUser(null)
     }
 
-    // Codex integration note: keep the authenticated user object in the app root.
+    // Keep the authenticated user object in the app root.
     // Purchase and security APIs return updated account data, so the dashboard can refresh without another login.
     const handleUserUpdate = (updatedUser: UserAccount) => {
         setUser(updatedUser)

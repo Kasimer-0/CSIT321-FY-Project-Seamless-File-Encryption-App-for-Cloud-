@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      // Codex integration note: route existing imports to the local compatibility module so Vite can bundle reliably.
+      // Route existing imports to the local compatibility module so Vite can bundle reliably.
       'react-hot-toast': '/src/lib/reactHotToast.tsx',
     },
   },

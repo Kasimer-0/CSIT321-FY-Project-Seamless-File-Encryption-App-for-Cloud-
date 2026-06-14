@@ -8,7 +8,7 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
-      /* Codex integration note: keep TypeScript resolution identical to the Vite alias. */
+      /* Keep TypeScript resolution identical to the Vite alias. */
       "react-hot-toast": ["src/lib/reactHotToast.tsx"]
     },
     "skipLibCheck": true,

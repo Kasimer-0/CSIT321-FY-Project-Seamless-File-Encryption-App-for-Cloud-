@@ -3,7 +3,7 @@ import type { EncryptionKeyRecord, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 
 /**
- * Codex-added encryption-key management page.
+ * Encryption-key management page.
  * It implements the key CRUD user story and scopes every request to the logged-in customer so one
  * account cannot list or modify another account's key metadata.
  */

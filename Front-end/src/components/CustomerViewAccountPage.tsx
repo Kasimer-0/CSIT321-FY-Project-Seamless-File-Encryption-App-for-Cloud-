@@ -11,7 +11,7 @@ type Props = {
 }
 
 /**
- * The teammate's account page is preserved here; Codex connected its plan controls to the backend.
+ * The existing account page connects its plan controls to the backend.
  * The added purchase state provides confirmation, progress, and error feedback because plan changes
  * take effect immediately in this course-project demo rather than passing through a payment gateway.
  */

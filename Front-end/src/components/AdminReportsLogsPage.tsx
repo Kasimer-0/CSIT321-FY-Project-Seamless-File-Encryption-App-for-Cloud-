@@ -3,7 +3,7 @@ import type { FinancialReport, PerformanceReport, SystemLog } from "../Type"
 import toast from "react-hot-toast"
 
 /**
- * Codex-added user-story page.
+ * Admin reporting and logging user-story page.
  * It groups operational/financial reports and auditable system logs in one admin view
  * because both datasets are supplied by the same backend insights endpoints.
  */

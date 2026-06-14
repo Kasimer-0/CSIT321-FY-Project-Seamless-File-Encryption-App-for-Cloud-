@@ -1,6 +1,6 @@
 /**
- * Codex integration note: runtime-facing frontend contracts kept in sync with Entity.ts.
- * This file remains because the teammate's original components import Type.ts; extending
+ * Runtime-facing frontend contracts kept in sync with Entity.ts.
+ * Existing components import Type.ts, so extending this file
  * it avoids a disruptive import rewrite while still typing every added API workflow.
  */
 export type UserAccount = {

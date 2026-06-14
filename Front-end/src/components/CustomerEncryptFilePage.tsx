@@ -20,7 +20,7 @@ function CustomerEncryptFile() {
         if (file) setSelectedFile(file)
     }
 
-    // Codex integration note: run the privacy user-story check before encryption/upload.
+    // Run the privacy user-story check before encryption/upload.
     // Only a bounded text sample is inspected; binary/unreadable files safely produce an empty sample.
     const scanForSensitiveData = async (file: File) => {
         let sample = ""

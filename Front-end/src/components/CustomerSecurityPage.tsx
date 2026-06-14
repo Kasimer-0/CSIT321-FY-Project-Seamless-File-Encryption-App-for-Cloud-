@@ -3,7 +3,7 @@ import type { PhysicalTokenRecord, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 
 /**
- * Codex-added security user-story page.
+ * Account security user-story page.
  * It keeps password reset, recovery phrase generation, factory reset, and premium physical-token
  * management together because all four operations change account security state.
  */

@@ -15,7 +15,7 @@ const providerLabels: Record<string, { label: string; icon: string }> = {
 const availableProviders = ["google_drive", "dropbox", "onedrive"]
 
 /**
- * Codex integration note: this page extends the teammate's cloud-link UI with persisted provider links,
+ * This page provides persisted cloud links,
  * free/premium provider limits, and the complete Google Drive OAuth/encrypted-file workflow.
  * Dropbox and OneDrive remain visible prototype providers; only Google Drive performs real remote I/O.
  */

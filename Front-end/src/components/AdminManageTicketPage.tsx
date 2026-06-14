@@ -4,7 +4,7 @@ import AdminViewTicket from "./AdminViewTicketPage"
 import toast from "react-hot-toast"
 
 type AdminManageTicketProps = {
-    // Codex integration note: the active admin ID is required by the "Assign to me" endpoint.
+    // The active admin ID is required by the "Assign to me" endpoint.
     currentUser: UserAccount
 }
 
@@ -133,7 +133,7 @@ function AdminManageTicket({ currentUser }: AdminManageTicketProps) {
         }
     }
 
-    // Codex integration note: update both detail and list state with the persisted response.
+    // Update both detail and list state with the persisted response.
     // This keeps the conversation visible when the admin returns to the ticket list and opens it again.
     const handleResponseAdded = (response: TicketResponse) => {
         if (!selectedTicket) return
