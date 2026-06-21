@@ -44,6 +44,8 @@ public class GoogleDriveService {
     private static final String USER_INFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
     private static final String DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
     private static final String DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files";
+    // Keep the least-privilege scope. The configured demo folder is already
+    // accessible to this app, so broader full-Drive authorization is unnecessary.
     private static final String DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
     private static final String USER_EMAIL_SCOPE = "openid https://www.googleapis.com/auth/userinfo.email";
     private static final Duration STATE_LIFETIME = Duration.ofMinutes(10);
@@ -68,6 +70,15 @@ public class GoogleDriveService {
     @Value("${stealthsync.google-drive.redirect-uri:}")
     private String redirectUri;
 
+    // Selects the intended demo account but never bypasses Google authentication.
+    @Value("${stealthsync.google-drive.login-hint:}")
+    private String loginHint;
+
+    // When set, list and upload operations stay inside this Drive folder. An
+    // empty value preserves the original app-owned-files behavior.
+    @Value("${stealthsync.google-drive.folder-id:}")
+    private String folderId;
+
     public boolean isConfigured() {
         return !isBlank(clientId) && !isBlank(clientSecret) && !isBlank(redirectUri);
     }
@@ -91,7 +102,7 @@ public class GoogleDriveService {
         String state = newState();
         pendingAuthorizations.put(state, new PendingAuthorization(ownerID, Instant.now().plus(STATE_LIFETIME)));
 
-        return AUTHORIZATION_ENDPOINT
+        String authorizationUrl = AUTHORIZATION_ENDPOINT
                 + "?client_id=" + encode(clientId)
                 + "&redirect_uri=" + encode(redirectUri)
                 + "&response_type=code"
@@ -100,6 +111,11 @@ public class GoogleDriveService {
                 + "&include_granted_scopes=true"
                 + "&prompt=consent%20select_account"
                 + "&state=" + encode(state);
+        if (!isBlank(loginHint)) {
+            // A hint controls account selection only; Google still asks for consent.
+            authorizationUrl += "&login_hint=" + encode(loginHint);
+        }
+        return authorizationUrl;
     }
 
     @Transactional
@@ -153,6 +169,10 @@ public class GoogleDriveService {
 
     public List<GoogleDriveFileDTO> listEncryptedFiles(Long ownerID) throws IOException, InterruptedException {
         String query = "trashed = false and appProperties has { key='stealthsync' and value='encrypted' }";
+        if (!isBlank(folderId)) {
+            // Drive query syntax requires a quoted parent folder ID.
+            query += " and '" + folderId.replace("'", "\\'") + "' in parents";
+        }
         URI uri = URI.create(DRIVE_FILES_ENDPOINT
                 + "?q=" + encode(query)
                 + "&orderBy=modifiedTime%20desc"
@@ -172,12 +192,16 @@ public class GoogleDriveService {
         String driveName = originalName + ".stealthsync.enc";
         String boundary = "stealthsync-" + newState();
 
-        JsonNode metadata = objectMapper.createObjectNode()
+        var metadata = objectMapper.createObjectNode()
                 .put("name", driveName)
-                .put("mimeType", "application/octet-stream")
-                .set("appProperties", objectMapper.createObjectNode()
-                        .put("stealthsync", "encrypted")
-                        .put("originalName", originalName));
+                .put("mimeType", "application/octet-stream");
+        metadata.set("appProperties", objectMapper.createObjectNode()
+                .put("stealthsync", "encrypted")
+                .put("originalName", originalName));
+        if (!isBlank(folderId)) {
+            // Set the parent in metadata so ciphertext never lands in Drive root.
+            metadata.putArray("parents").add(folderId);
+        }
 
         ByteArrayOutputStream body = new ByteArrayOutputStream();
         writeUtf8(body, "--" + boundary + "\r\n");
@@ -195,6 +219,17 @@ public class GoogleDriveService {
                 .header("Content-Type", "multipart/related; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()));
         return toFileDTO(sendJson(ownerID, request));
+    }
+
+    /** Deletes only the Drive file ID selected by the authenticated owner. */
+    public void deleteEncryptedFile(Long ownerID, String fileId) throws IOException, InterruptedException {
+        URI uri = URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId));
+        HttpResponse<String> response = send(
+                ownerID,
+                HttpRequest.newBuilder(uri).DELETE(),
+                HttpResponse.BodyHandlers.ofString()
+        );
+        ensureSuccess(response.statusCode(), response.body() == null ? "" : response.body());
     }
 
     public DownloadedDriveFile downloadEncrypted(Long ownerID, String fileId)

@@ -496,6 +496,16 @@ public class AppDataService {
         return fileID == null ? Optional.empty() : encryptedFileRecordRepository.findById(fileID);
     }
 
+    /** Deletes one local file record without treating an unknown ID as success. */
+    @Transactional
+    public boolean deleteEncryptedFile(Long fileID) {
+        if (fileID == null || !encryptedFileRecordRepository.existsById(fileID)) {
+            return false;
+        }
+        encryptedFileRecordRepository.deleteById(fileID);
+        return true;
+    }
+
     private Optional<Ticket> findTicket(Long ticketID) {
         return ticketID == null ? Optional.empty() : ticketRepository.findById(ticketID);
     }

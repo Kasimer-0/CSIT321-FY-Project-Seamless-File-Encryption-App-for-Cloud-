@@ -244,7 +244,7 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
 
                     {activeSection === "files" && (
                         <div className="card p-4">
-                            {fileSub === "encrypt" && <CustomerEncryptFile />}
+                            {fileSub === "encrypt" && <CustomerEncryptFile user={user} />}
                             {fileSub === "decrypt" && <CustomerDecryptFile />}
                         </div>
                     )}

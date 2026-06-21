@@ -6,6 +6,22 @@ function CustomerDecryptFile() {
     const [files, setFiles] = useState<EncryptedFile[]>([])
     const [downloading, setDownloading] = useState<number | null>(null)
     const [loading, setLoading] = useState(true)
+    const [lastSavedPath, setLastSavedPath] = useState("")
+
+    // Local records and Drive files have separate delete endpoints so this
+    // legacy page cannot accidentally remove a remote object.
+    const removeFile = async (file: EncryptedFile) => {
+        const response = await fetch(`http://localhost:8080/files/${file.fileID}`, {
+            method: "DELETE",
+            credentials: "include"
+        })
+        if (!response.ok) {
+            toast.error("Failed to delete the local encrypted record")
+            return
+        }
+        setFiles(current => current.filter(item => item.fileID !== file.fileID))
+        toast.success(`${file.fileName} deleted`)
+    }
 
     useEffect(() => {
         const fetchFiles = async () => {
@@ -36,26 +52,23 @@ function CustomerDecryptFile() {
 
         try {
             const response = await fetch(
-                `http://localhost:8080/files/${file.fileID}/decrypt-download`,
+                `http://localhost:8080/files/${file.fileID}/decrypt-save`,
                 {
-                    method: "GET",
+                    method: "POST",
                     credentials: "include"
                 }
             )
 
             if (!response.ok) {
-                toast.error("Failed to decrypt and download file")
+                toast.error("Failed to decrypt and save file")
                 return
             }
 
-            const blob = await response.blob()
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement("a")
-            a.href = url
-            a.download = file.fileName
-            a.click()
-            window.URL.revokeObjectURL(url)
-            toast.success(`${file.fileName} decrypted and downloaded successfully`)
+            // The backend writes the file because JavaFX WebView cannot reliably
+            // persist a browser Blob download in the desktop application.
+            const result = await response.json() as { savedPath: string }
+            setLastSavedPath(result.savedPath)
+            toast.success(`${file.fileName} saved to ${result.savedPath}`)
 
         } catch (err) {
             toast.error("Server connection failed")
@@ -74,8 +87,14 @@ function CustomerDecryptFile() {
         <>
             <h5 className="mb-1">Decrypt and Download</h5>
             <p className="text-muted mb-4" style={{ fontSize: 13 }}>
-                Files stored in your cloud storage that is set as active link. Click to decrypt and download to your device.
+                Legacy encrypted records stored locally by StealthSync. Cloud files are managed under Cloud Storage Link.
             </p>
+            {lastSavedPath && (
+                <div className="alert alert-success py-2" role="status">
+                    <div className="fw-semibold">Decrypted file saved successfully</div>
+                    <code style={{ overflowWrap: "anywhere" }}>{lastSavedPath}</code>
+                </div>
+            )}
 
             {loading ? (
                 <p className="text-muted" style={{ fontSize: 13 }}>Loading files...</p>
@@ -103,13 +122,18 @@ function CustomerDecryptFile() {
                                 </div>
                             </div>
 
-                            <button
-                                className="btn btn-outline-primary btn-sm"
-                                onClick={() => handleDecryptDownload(file)}
-                                disabled={downloading === file.fileID}
-                            >
-                                {downloading === file.fileID ? "Decrypting..." : "⬇ Decrypt & Download"}
-                            </button>
+                            <div className="d-flex gap-2">
+                                <button
+                                    className="btn btn-outline-primary btn-sm"
+                                    onClick={() => handleDecryptDownload(file)}
+                                    disabled={downloading === file.fileID}
+                                >
+                                    {downloading === file.fileID ? "Decrypting..." : "⬇ Decrypt & Download"}
+                                </button>
+                                <button className="btn btn-outline-danger btn-sm" onClick={() => removeFile(file)}>
+                                    Delete
+                                </button>
+                            </div>
                         </li>
                     ))}
                 </ul>

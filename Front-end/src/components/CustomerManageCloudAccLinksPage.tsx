@@ -36,6 +36,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
     const [driveLoading, setDriveLoading] = useState(false)
     const [driveUploading, setDriveUploading] = useState(false)
+    const [lastDriveSavedPath, setLastDriveSavedPath] = useState("")
 
     const fetchLinks = async () => {
         try {
@@ -321,27 +322,39 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    // The backend downloads and decrypts the remote object; the UI only saves the returned plaintext blob.
+    // JavaFX WebView cannot persist Blob downloads, so the backend saves the
+    // locally decrypted plaintext and returns its absolute Downloads path.
     const handleDriveDownload = async (file: GoogleDriveFile) => {
         try {
             const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-download?ownerID=${user.userID}`,
-                { credentials: "include" }
+                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save?ownerID=${user.userID}`,
+                { method: "POST", credentials: "include" }
             )
             if (!response.ok) {
                 const data = await response.json().catch(() => null)
                 throw new Error(data?.message ?? "Google Drive download failed")
             }
-            const blob = await response.blob()
-            const url = URL.createObjectURL(blob)
-            const anchor = document.createElement("a")
-            anchor.href = url
-            anchor.download = file.originalName
-            anchor.click()
-            URL.revokeObjectURL(url)
-            toast.success(`${file.originalName} decrypted successfully`)
+            const result = await response.json() as { savedPath: string }
+            setLastDriveSavedPath(result.savedPath)
+            toast.success(`${file.originalName} saved to ${result.savedPath}`)
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Google Drive download failed")
+        }
+    }
+
+    const handleDriveDelete = async (file: GoogleDriveFile) => {
+        try {
+            // Hide the row only after Drive confirms deletion, so a failed API
+            // request never makes a still-existing remote file disappear locally.
+            const response = await fetch(
+                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}?ownerID=${user.userID}`,
+                { method: "DELETE", credentials: "include" }
+            )
+            if (!response.ok) throw new Error("Google Drive delete failed")
+            setDriveFiles(current => current.filter(item => item.fileId !== file.fileId))
+            toast.success(`${file.originalName} deleted from Google Drive`)
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Google Drive delete failed")
         }
     }
 
@@ -509,6 +522,13 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                     </div>
                 </div>
 
+                {lastDriveSavedPath && (
+                    <div className="alert alert-success py-2" role="status">
+                        <div className="fw-semibold">Decrypted Google Drive file saved successfully</div>
+                        <code style={{ overflowWrap: "anywhere" }}>{lastDriveSavedPath}</code>
+                    </div>
+                )}
+
                 {!driveConfigured ? (
                     <div className="alert alert-warning py-2 mb-0" style={{ fontSize: 13 }}>
                         Google Drive OAuth is not configured on this installation. Add the Google client ID and secret described in README.
@@ -533,12 +553,14 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                         {formatBytes(file.fileSize)}{file.modifiedAt ? ` · ${new Date(file.modifiedAt).toLocaleString()}` : ""}
                                     </small>
                                 </div>
-                                <button
-                                    className="btn btn-outline-primary btn-sm flex-shrink-0"
-                                    onClick={() => handleDriveDownload(file)}
-                                >
-                                    Decrypt & download
-                                </button>
+                                <div className="d-flex gap-2 flex-shrink-0">
+                                    <button className="btn btn-outline-primary btn-sm" onClick={() => handleDriveDownload(file)}>
+                                        Decrypt & download
+                                    </button>
+                                    <button className="btn btn-outline-danger btn-sm" onClick={() => handleDriveDelete(file)}>
+                                        Delete
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>

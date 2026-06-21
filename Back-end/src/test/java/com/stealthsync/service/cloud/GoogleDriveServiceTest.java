@@ -21,6 +21,8 @@ class GoogleDriveServiceTest {
         ReflectionTestUtils.setField(service, "clientId", "client-id");
         ReflectionTestUtils.setField(service, "clientSecret", "client-secret");
         ReflectionTestUtils.setField(service, "redirectUri", "http://localhost:8080/cloud-storage/oauth/google/callback");
+        // Verify that an optional account hint is encoded without changing OAuth security.
+        ReflectionTestUtils.setField(service, "loginHint", "demo@example.com");
 
         URI authorizationUri = URI.create(service.createAuthorizationUrl(7L));
         String query = authorizationUri.getRawQuery();
@@ -28,6 +30,7 @@ class GoogleDriveServiceTest {
         assertEquals("accounts.google.com", authorizationUri.getHost());
         assertTrue(query.contains("access_type=offline"));
         assertTrue(query.contains("drive.file"));
+        assertTrue(query.contains("login_hint=demo%40example.com"));
         assertTrue(query.contains("state="));
         assertTrue(query.contains("redirect_uri=http%3A%2F%2Flocalhost%3A8080"));
     }

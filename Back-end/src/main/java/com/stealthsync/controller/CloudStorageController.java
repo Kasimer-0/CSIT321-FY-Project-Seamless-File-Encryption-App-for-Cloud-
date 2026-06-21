@@ -21,6 +21,8 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -171,6 +173,101 @@ public class CloudStorageController {
                 .body(new InputStreamResource(decrypted));
     }
 
+    /** Deletes the selected encrypted object from the owner's linked Drive account. */
+    @DeleteMapping("/google-drive/files/{fileId}")
+    public ResponseEntity<Void> deleteGoogleDriveFile(
+            @PathVariable String fileId,
+            @RequestParam Long ownerID) throws Exception {
+        googleDriveService.deleteEncryptedFile(ownerID, fileId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * JavaFX WebView cannot persist Blob downloads. The desktop UI uses this
+     * endpoint to decrypt the Drive object locally, save it to Downloads, and
+     * show the exact destination path to the user.
+     */
+    @PostMapping("/google-drive/files/{fileId}/decrypt-save")
+    public ResponseEntity<Map<String, Object>> decryptAndSaveGoogleDriveFile(
+            @PathVariable String fileId,
+            @RequestParam Long ownerID) {
+        try {
+            GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
+            byte[] plaintext;
+            try (InputStream decrypted = aesGcmService.decryptStream(
+                    new ByteArrayInputStream(driveFile.encryptedContent()),
+                    DEFAULT_PASSPHRASE)) {
+                plaintext = decrypted.readAllBytes();
+            }
+
+            Path downloads = Path.of(System.getProperty("user.home"), "Downloads");
+            Files.createDirectories(downloads);
+            Path destination = availableDestination(
+                    downloads,
+                    safeFilename(driveFile.originalName(), "decrypted-drive-file")
+            );
+            Files.write(destination, plaintext);
+
+            return ResponseEntity.ok(Map.of(
+                    "fileName", destination.getFileName().toString(),
+                    "savedPath", destination.toAbsolutePath().toString(),
+                    "size", plaintext.length
+            ));
+        } catch (Exception e) {
+            log.error("Google Drive decrypt-save failed", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "message", "Unable to decrypt and save the Google Drive file."
+            ));
+        }
+    }
+
+    /**
+     * Resolves JavaFX WebView file:// drag payloads to real local metadata.
+     * WebView reports these payloads as zero-byte File objects, so the backend
+     * reads the native path before the UI displays the file name and size.
+     */
+    @PostMapping(value = "/google-drive/local-file-info", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> localFileInfo(@RequestBody Map<String, String> request) {
+        try {
+            Path path = resolveLocalUserFile(request.get("fileUri"));
+            return ResponseEntity.ok(Map.of(
+                    "fileName", path.getFileName().toString(),
+                    "fileSize", Files.size(path),
+                    "fileUri", path.toUri().toString()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "The dropped local file could not be read."
+            ));
+        }
+    }
+
+    /**
+     * Encrypts a native drag-and-drop path as a stream and uploads only its
+     * ciphertext. resolveLocalUserFile validates the path before it is opened.
+     */
+    @PostMapping(value = "/google-drive/files/encrypt-upload-path", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> encryptAndUploadLocalPath(
+            @RequestParam Long ownerID,
+            @RequestBody Map<String, String> request) {
+        try {
+            Path path = resolveLocalUserFile(request.get("fileUri"));
+            try (InputStream input = Files.newInputStream(path);
+                 InputStream encrypted = aesGcmService.encryptStream(input, DEFAULT_PASSPHRASE)) {
+                return ResponseEntity.ok(googleDriveService.uploadEncrypted(
+                        ownerID,
+                        safeFilename(path.getFileName().toString(), "uploaded-file"),
+                        encrypted
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Encrypt-upload from local drag path failed", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "The dropped local file could not be encrypted and uploaded."
+            ));
+        }
+    }
+
     private ResponseEntity<String> htmlResponse(String title, String message) {
         String html = """
                 <!doctype html>
@@ -189,6 +286,46 @@ public class CloudStorageController {
             return fallback;
         }
         return filename.replace("\\", "_").replace("/", "_");
+    }
+
+    /** Keeps previous downloads by adding " (n)" instead of overwriting them. */
+    private Path availableDestination(Path directory, String filename) {
+        Path initial = directory.resolve(filename);
+        if (!Files.exists(initial)) {
+            return initial;
+        }
+
+        int dot = filename.lastIndexOf('.');
+        String stem = dot > 0 ? filename.substring(0, dot) : filename;
+        String extension = dot > 0 ? filename.substring(dot) : "";
+        for (int suffix = 1; suffix < 10_000; suffix++) {
+            Path candidate = directory.resolve(stem + " (" + suffix + ")" + extension);
+            if (!Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Unable to choose an available download filename.");
+    }
+
+    /**
+     * Restricts the native-file bridge to regular files inside the signed-in
+     * Windows user's profile. This prevents crafted UI requests from reading
+     * arbitrary system paths.
+     */
+    private Path resolveLocalUserFile(String fileUri) throws Exception {
+        if (fileUri == null || fileUri.isBlank()) {
+            throw new IllegalArgumentException("A local file URI is required.");
+        }
+        URI uri = URI.create(fileUri);
+        if (!"file".equalsIgnoreCase(uri.getScheme())) {
+            throw new IllegalArgumentException("Only local file URIs are supported.");
+        }
+        Path file = Path.of(uri).toRealPath();
+        Path userHome = Path.of(System.getProperty("user.home")).toRealPath();
+        if (!file.startsWith(userHome) || !Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("The dropped file must be inside the current user profile.");
+        }
+        return file;
     }
 
     private String escapeHtml(String value) {
