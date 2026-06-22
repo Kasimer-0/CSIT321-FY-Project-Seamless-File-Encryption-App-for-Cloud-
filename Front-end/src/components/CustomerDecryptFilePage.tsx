@@ -1,16 +1,122 @@
-import { useState, useEffect } from "react"
-import type { EncryptedFile } from "../Type"
+import { useEffect, useState } from "react"
+import type { EncryptedFile, GoogleDriveFile, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 
-function CustomerDecryptFile() {
-    const [files, setFiles] = useState<EncryptedFile[]>([])
-    const [downloading, setDownloading] = useState<number | null>(null)
+type Props = {
+    user: UserAccount
+}
+
+type SavedFileResult = {
+    savedPath: string
+}
+
+function CustomerDecryptFile({ user }: Props) {
+    const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
+    const [localFiles, setLocalFiles] = useState<EncryptedFile[]>([])
+    const [driveError, setDriveError] = useState("")
     const [loading, setLoading] = useState(true)
+    const [downloadingDriveFile, setDownloadingDriveFile] = useState<string | null>(null)
+    const [downloadingLocalFile, setDownloadingLocalFile] = useState<number | null>(null)
     const [lastSavedPath, setLastSavedPath] = useState("")
 
-    // Local records and Drive files have separate delete endpoints so this
-    // legacy page cannot accidentally remove a remote object.
-    const removeFile = async (file: EncryptedFile) => {
+    useEffect(() => {
+        let cancelled = false
+
+        const fetchFiles = async () => {
+            setLoading(true)
+            setDriveError("")
+
+            try {
+                // Uploads are stored in Google Drive, while early prototype records remain
+                // in the local database. Load both sources so users can find every file here.
+                const [driveResponse, localResponse] = await Promise.all([
+                    fetch(`http://localhost:8080/cloud-storage/google-drive/files?ownerID=${user.userID}`, {
+                        credentials: "include"
+                    }),
+                    fetch("http://localhost:8080/files", { credentials: "include" })
+                ])
+
+                if (cancelled) return
+
+                if (driveResponse.ok) {
+                    setDriveFiles(await driveResponse.json())
+                } else {
+                    const error = await driveResponse.json().catch(() => null)
+                    setDriveFiles([])
+                    setDriveError(error?.message ?? "Google Drive files could not be loaded.")
+                }
+
+                if (localResponse.ok) {
+                    setLocalFiles(await localResponse.json())
+                } else {
+                    setLocalFiles([])
+                }
+            } catch {
+                if (!cancelled) {
+                    setDriveFiles([])
+                    setLocalFiles([])
+                    setDriveError("Server connection failed.")
+                }
+            } finally {
+                if (!cancelled) setLoading(false)
+            }
+        }
+
+        void fetchFiles()
+        return () => {
+            cancelled = true
+        }
+    }, [user.userID])
+
+    const decryptDriveFile = async (file: GoogleDriveFile) => {
+        setDownloadingDriveFile(file.fileId)
+        try {
+            // JavaFX WebView cannot reliably save browser Blob downloads. The backend
+            // decrypts locally, writes the plaintext to Downloads, and returns its path.
+            const response = await fetch(
+                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save?ownerID=${user.userID}`,
+                { method: "POST", credentials: "include" }
+            )
+            if (!response.ok) {
+                const error = await response.json().catch(() => null)
+                toast.error(error?.message ?? "Failed to decrypt and save the Google Drive file")
+                return
+            }
+
+            const result = await response.json() as SavedFileResult
+            setLastSavedPath(result.savedPath)
+            toast.success(`${file.originalName} saved to ${result.savedPath}`)
+        } catch {
+            toast.error("Server connection failed")
+        } finally {
+            setDownloadingDriveFile(null)
+        }
+    }
+
+    const decryptLocalFile = async (file: EncryptedFile) => {
+        setDownloadingLocalFile(file.fileID)
+        try {
+            const response = await fetch(`http://localhost:8080/files/${file.fileID}/decrypt-save`, {
+                method: "POST",
+                credentials: "include"
+            })
+            if (!response.ok) {
+                toast.error("Failed to decrypt and save the local file")
+                return
+            }
+
+            const result = await response.json() as SavedFileResult
+            setLastSavedPath(result.savedPath)
+            toast.success(`${file.fileName} saved to ${result.savedPath}`)
+        } catch {
+            toast.error("Server connection failed")
+        } finally {
+            setDownloadingLocalFile(null)
+        }
+    }
+
+    const removeLocalFile = async (file: EncryptedFile) => {
+        // Local records use a separate endpoint so this action cannot remove a Drive object.
         const response = await fetch(`http://localhost:8080/files/${file.fileID}`, {
             method: "DELETE",
             credentials: "include"
@@ -19,62 +125,8 @@ function CustomerDecryptFile() {
             toast.error("Failed to delete the local encrypted record")
             return
         }
-        setFiles(current => current.filter(item => item.fileID !== file.fileID))
+        setLocalFiles(current => current.filter(item => item.fileID !== file.fileID))
         toast.success(`${file.fileName} deleted`)
-    }
-
-    useEffect(() => {
-        const fetchFiles = async () => {
-            try {
-                const response = await fetch("http://localhost:8080/files", {
-                    credentials: "include"
-                })
-
-                if (!response.ok) {
-                    console.error("Failed to fetch files")
-                    return
-                }
-
-                const data = await response.json()
-                setFiles(data)
-
-            } catch (err) {
-                console.error("Failed to fetch files")
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchFiles()
-    }, [])
-
-    const handleDecryptDownload = async (file: EncryptedFile) => {
-        setDownloading(file.fileID)
-
-        try {
-            const response = await fetch(
-                `http://localhost:8080/files/${file.fileID}/decrypt-save`,
-                {
-                    method: "POST",
-                    credentials: "include"
-                }
-            )
-
-            if (!response.ok) {
-                toast.error("Failed to decrypt and save file")
-                return
-            }
-
-            // The backend writes the file because JavaFX WebView cannot reliably
-            // persist a browser Blob download in the desktop application.
-            const result = await response.json() as { savedPath: string }
-            setLastSavedPath(result.savedPath)
-            toast.success(`${file.fileName} saved to ${result.savedPath}`)
-
-        } catch (err) {
-            toast.error("Server connection failed")
-        } finally {
-            setDownloading(null)
-        }
     }
 
     const formatFileSize = (bytes: number) => {
@@ -86,9 +138,10 @@ function CustomerDecryptFile() {
     return (
         <>
             <h5 className="mb-1">Decrypt and Download</h5>
-            <p className="text-muted mb-4" style={{ fontSize: 13 }}>
-                Legacy encrypted records stored locally by StealthSync. Cloud files are managed under Cloud Storage Link.
+            <p className="text-muted mb-3" style={{ fontSize: 13 }}>
+                Encrypted files from your linked Google Drive account.
             </p>
+
             {lastSavedPath && (
                 <div className="alert alert-success py-2" role="status">
                     <div className="fw-semibold">Decrypted file saved successfully</div>
@@ -96,47 +149,72 @@ function CustomerDecryptFile() {
                 </div>
             )}
 
+            <h6 className="mb-2">Google Drive files</h6>
             {loading ? (
                 <p className="text-muted" style={{ fontSize: 13 }}>Loading files...</p>
-            ) : files.length === 0 ? (
-                <p className="text-muted" style={{ fontSize: 13 }}>No encrypted files found in your cloud storage.</p>
+            ) : driveError ? (
+                <div className="alert alert-warning py-2" style={{ fontSize: 13 }}>{driveError}</div>
+            ) : driveFiles.length === 0 ? (
+                <p className="text-muted" style={{ fontSize: 13 }}>No encrypted Google Drive files found.</p>
             ) : (
-                <ul className="list-group" style={{ maxHeight: 620, overflowY: "auto" }}>
-                    {files.map(file => (
-                        <li
-                            key={file.fileID}
-                            className="list-group-item d-flex align-items-center justify-content-between"
-                        >
-                            <div className="d-flex align-items-center gap-3">
-                                <span
-                                    className="badge bg-secondary"
-                                    style={{ fontFamily: "monospace", fontSize: 10, minWidth: 40 }}
-                                >
-                                    {file.fileType.toUpperCase()}
-                                </span>
-                                <div>
-                                    <div className="fw-medium" style={{ fontSize: 14 }}>{file.fileName}</div>
+                <ul className="list-group mb-4" style={{ maxHeight: 420, overflowY: "auto" }}>
+                    {driveFiles.map(file => (
+                        <li key={file.fileId} className="list-group-item d-flex align-items-center justify-content-between gap-3">
+                            <div className="d-flex align-items-center gap-3 min-w-0">
+                                <span className="badge bg-primary" style={{ fontSize: 10, minWidth: 48 }}>DRIVE</span>
+                                <div style={{ minWidth: 0 }}>
+                                    <div className="fw-medium text-break" style={{ fontSize: 14 }}>{file.originalName}</div>
                                     <small className="text-muted">
-                                        {formatFileSize(file.fileSize)} · {file.encMethod} · {new Date(file.uploadedAt).toLocaleDateString()}
+                                        {formatFileSize(file.fileSize)} | {file.fileName}
+                                        {file.modifiedAt ? ` | ${new Date(file.modifiedAt).toLocaleDateString()}` : ""}
                                     </small>
                                 </div>
                             </div>
-
-                            <div className="d-flex gap-2">
-                                <button
-                                    className="btn btn-outline-primary btn-sm"
-                                    onClick={() => handleDecryptDownload(file)}
-                                    disabled={downloading === file.fileID}
-                                >
-                                    {downloading === file.fileID ? "Decrypting..." : "⬇ Decrypt & Download"}
-                                </button>
-                                <button className="btn btn-outline-danger btn-sm" onClick={() => removeFile(file)}>
-                                    Delete
-                                </button>
-                            </div>
+                            <button
+                                className="btn btn-outline-primary btn-sm flex-shrink-0"
+                                onClick={() => decryptDriveFile(file)}
+                                disabled={downloadingDriveFile === file.fileId}
+                            >
+                                {downloadingDriveFile === file.fileId ? "Decrypting..." : "Decrypt & Download"}
+                            </button>
                         </li>
                     ))}
                 </ul>
+            )}
+
+            {!loading && localFiles.length > 0 && (
+                <>
+                    <h6 className="mb-2">Legacy local files</h6>
+                    <ul className="list-group" style={{ maxHeight: 300, overflowY: "auto" }}>
+                        {localFiles.map(file => (
+                            <li key={file.fileID} className="list-group-item d-flex align-items-center justify-content-between gap-3">
+                                <div className="d-flex align-items-center gap-3">
+                                    <span className="badge bg-secondary" style={{ fontFamily: "monospace", fontSize: 10, minWidth: 40 }}>
+                                        {file.fileType.toUpperCase()}
+                                    </span>
+                                    <div>
+                                        <div className="fw-medium" style={{ fontSize: 14 }}>{file.fileName}</div>
+                                        <small className="text-muted">
+                                            {formatFileSize(file.fileSize)} | {file.encMethod} | {new Date(file.uploadedAt).toLocaleDateString()}
+                                        </small>
+                                    </div>
+                                </div>
+                                <div className="d-flex gap-2 flex-shrink-0">
+                                    <button
+                                        className="btn btn-outline-primary btn-sm"
+                                        onClick={() => decryptLocalFile(file)}
+                                        disabled={downloadingLocalFile === file.fileID}
+                                    >
+                                        {downloadingLocalFile === file.fileID ? "Decrypting..." : "Decrypt & Download"}
+                                    </button>
+                                    <button className="btn btn-outline-danger btn-sm" onClick={() => removeLocalFile(file)}>
+                                        Delete
+                                    </button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </>
             )}
         </>
     )

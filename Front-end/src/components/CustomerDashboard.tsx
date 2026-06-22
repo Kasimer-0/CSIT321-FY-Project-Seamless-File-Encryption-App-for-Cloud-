@@ -245,7 +245,8 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
                     {activeSection === "files" && (
                         <div className="card p-4">
                             {fileSub === "encrypt" && <CustomerEncryptFile user={user} />}
-                            {fileSub === "decrypt" && <CustomerDecryptFile />}
+                            {/* The decrypt page needs the account ID to list that user's Drive files. */}
+                            {fileSub === "decrypt" && <CustomerDecryptFile user={user} />}
                         </div>
                     )}
 
