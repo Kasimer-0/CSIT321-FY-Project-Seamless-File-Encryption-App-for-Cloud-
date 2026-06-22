@@ -1,10 +1,8 @@
+import { apiFetch } from "../lib/api"
 import { useState } from "react"
 import toast from "react-hot-toast"
-import type { UserAccount } from "../Type"
 
-type Props = { user: UserAccount }
-
-function CustomerEncryptFile({ user }: Props) {
+function CustomerEncryptFile() {
     const [dragOver, setDragOver] = useState(false)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [droppedFileUri, setDroppedFileUri] = useState("")
@@ -30,7 +28,7 @@ function CustomerEncryptFile({ user }: Props) {
         // JavaFX WebView exposes dragged files as zero-byte file:// placeholders.
         if (file.size === 0 && file.name.startsWith("file:")) {
             try {
-                const response = await fetch("http://localhost:8080/cloud-storage/google-drive/local-file-info", {
+                const response = await apiFetch("http://localhost:8080/cloud-storage/google-drive/local-file-info", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
@@ -70,7 +68,7 @@ function CustomerEncryptFile({ user }: Props) {
         } catch {
             sample = ""
         }
-        const response = await fetch("http://localhost:8080/privacy/scan", {
+        const response = await apiFetch("http://localhost:8080/privacy/scan", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
@@ -102,7 +100,7 @@ function CustomerEncryptFile({ user }: Props) {
             const uploadName = droppedFileName || selectedFile.name.replace(/^.*[\\/]/, "")
             let response: Response
             if (droppedFileUri) {
-                response = await fetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload-path?ownerID=${user.userID}`, {
+                response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload-path`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
@@ -111,7 +109,7 @@ function CustomerEncryptFile({ user }: Props) {
             } else {
                 const formData = new FormData()
                 formData.append("file", selectedFile, uploadName)
-                response = await fetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload?ownerID=${user.userID}`, {
+                response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload`, {
                     method: "POST",
                     credentials: "include",
                     body: formData

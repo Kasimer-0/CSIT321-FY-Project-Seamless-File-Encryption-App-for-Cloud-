@@ -1,8 +1,8 @@
+import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
 import type { UserAccount } from "../Type"
 import AdminManageAccount from "./AdminManageAccountPage"
 import AdminManagePlan from "./AdminManagePlanPage"
-import AdminManageTicket from "./AdminManageTicketPage"
 import AdminManageSubscription from "./AdminManageSubscriptionPage"
 // Reports and logs cover the admin monitoring user stories.
 import AdminReportsLogsPage from "./AdminReportsLogsPage"
@@ -11,7 +11,6 @@ type DashboardStats = {
     totalUsers: number
     premiumUsers: number
     inactiveUsers: number
-    openTickets: number
 }
 
 type AdminDashboardProps = {
@@ -20,13 +19,12 @@ type AdminDashboardProps = {
 }
 
 // The reports tab follows the existing dashboard layout pattern.
-type Tab = "overview" | "users" | "plans" | "tickets" | "subscription" | "reports"
+type Tab = "overview" | "users" | "plans" | "subscription" | "reports"
 
 const pageTitles: Record<Tab, string> = {
     overview: "Overview",
     users: "Manage Users",
     plans: "Manage Plans",
-    tickets: "Manage Tickets",
     subscription: "Manage Subscription",
     reports: "Reports & Logs"
 }
@@ -35,7 +33,6 @@ const tabConfig: Record<Tab, { label: string; icon: string }> = {
     overview: { label: "Overview", icon: "📊" },
     users: { label: "Manage Users", icon: "👥" },
     plans: { label: "Manage Plans", icon: "💳" },
-    tickets: { label: "Manage Tickets", icon: "🎫" },
     subscription: { label: "Manage Subscription", icon: "" },
     reports: { label: "Reports & Logs", icon: "" }
 }
@@ -47,7 +44,6 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
         totalUsers: 0,
         premiumUsers: 0,
         inactiveUsers: 0,
-        openTickets: 0,
     })
 
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
@@ -55,7 +51,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await fetch("http://localhost:8080/admin/dashboard-stats", {
+                const res = await apiFetch("http://localhost:8080/admin/dashboard-stats", {
                     credentials: "include"
                 })
 
@@ -72,7 +68,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
     const handleLogout = async () => {
         try {
-            await fetch("http://localhost:8080/logout", {
+            await apiFetch("http://localhost:8080/logout", {
                 method: "POST",
                 credentials: "include"
             })
@@ -85,7 +81,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
     const initials = user.username.slice(0, 2).toUpperCase()
 
-    const tabs: Tab[] = ["overview", "users", "plans", "tickets", "subscription", "reports"]
+    const tabs: Tab[] = ["overview", "users", "plans", "subscription", "reports"]
 
     return (
         <div className="d-flex vh-100 overflow-hidden">
@@ -179,12 +175,6 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                                         sub: "No activity for 1 year",
                                         color: "text-warning"
                                     },
-                                    {
-                                        label: "Tickets opened",
-                                        value: stats.openTickets,
-                                        sub: "Needs review",
-                                        color: "text-danger"
-                                    },
                                 ].map((stat) => (
                                     <div className="col-3" key={stat.label}>
                                         <div className="card p-3">
@@ -222,13 +212,6 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                     {activeTab === "plans" && (
                         <div className="card p-4">
                             <AdminManagePlan />
-                        </div>
-                    )}
-
-                    {/* manage ticket*/}
-                    {activeTab === "tickets" && (
-                        <div className="card p-4">
-                            <AdminManageTicket currentUser={user} />
                         </div>
                     )}
 

@@ -1,9 +1,4 @@
-/**
- * Shared API entity contracts used by the added backend flows.
- * These types mirror nested responses such as ticket conversations, subscriptions,
- * encryption keys, security tokens, reports, and Google Drive files so the UI does
- * not fall back to untyped arrays or loosely shaped objects.
- */
+/** Stable entity contracts for backend-owned data returned to the frontend. */
 export type UserAccount = {
     userID: number
     username: string
@@ -30,23 +25,6 @@ export type SubscriptionDTO = {
     subcriptionStatus: string
     subcriptionStartDate: Date
     subscriptionEndDate: Date
-}
-
-export type Ticket = {
-    ticketID: number
-    ticketTitle: string
-    ticketDescription: string
-    ticketStatus: string
-    ticketRequester: UserAccount
-    personInCharge: UserAccount | null
-    responses: TicketResponse[]
-}
-
-export type TicketResponse = {
-    responseId: number
-    message: string
-    senderRole: "admin" | "customer"
-    timestamp: string
 }
 
 export type EncryptionKeyRecord = {
@@ -97,7 +75,6 @@ export type SystemLog = {
 }
 
 export type PurchasePlanRequest = {
-    userID: number
     planID: number
 }
 

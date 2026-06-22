@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
 import type { CloudStorageLink, CloudStorageUsage, GoogleDriveFile, UserAccount } from "../Type"
 import toast from "react-hot-toast"
@@ -42,7 +43,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         try {
             setLoading(true)
 
-            const response = await fetch(`http://localhost:8080/cloud-storage/links?ownerID=${user.userID}`, {
+            const response = await apiFetch(`http://localhost:8080/cloud-storage/links`, {
                 credentials: "include"
             })
 
@@ -63,7 +64,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
     const fetchUsage = async () => {
         try {
-            const response = await fetch("http://localhost:8080/cloud-storage/usage", {
+            const response = await apiFetch("http://localhost:8080/cloud-storage/usage", {
                 credentials: "include"
             })
             if (response.ok) {
@@ -77,7 +78,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     // The backend owns the 1-provider free / 5-provider premium rule, so the UI reads the effective limit.
     const fetchProviderInfo = async () => {
         try {
-            const response = await fetch(`http://localhost:8080/cloud-storage/providers?ownerID=${user.userID}`, {
+            const response = await apiFetch(`http://localhost:8080/cloud-storage/providers`, {
                 credentials: "include"
             })
             if (response.ok) {
@@ -92,8 +93,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     // Check OAuth configuration and connection independently to distinguish setup errors from an unlinked account.
     const fetchDriveStatus = async () => {
         try {
-            const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/status?ownerID=${user.userID}`,
+            const response = await apiFetch(
+                `http://localhost:8080/cloud-storage/google-drive/status`,
                 { credentials: "include" }
             )
             if (response.ok) {
@@ -113,8 +114,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const fetchDriveFiles = async () => {
         try {
             setDriveLoading(true)
-            const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/files?ownerID=${user.userID}`,
+            const response = await apiFetch(
+                `http://localhost:8080/cloud-storage/google-drive/files`,
                 { credentials: "include" }
             )
             if (!response.ok) {
@@ -141,7 +142,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const handleSetActive = async (linkID: number) => {
         const selectedLink = links.find(link => link.linkID === linkID)
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}/set-active`,
                 {
                     method: "PATCH",
@@ -169,7 +170,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const handleRemove = async (linkID: number) => {
         const removedLink = links.find(link => link.linkID === linkID)
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}`,
                 {
                     method: "DELETE",
@@ -198,7 +199,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const handleDeactivate = async (linkID: number) => {
         const selectedLink = links.find(link => link.linkID === linkID)
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}/deactivate`,
                 {
                     method: "PATCH",
@@ -239,8 +240,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
     // Google Drive starts real OAuth; Dropbox and OneDrive intentionally use prototype link records.
     const beginProviderConnection = async (provider: string) => {
-        const response = await fetch(
-            `http://localhost:8080/cloud-storage/auth/${provider}?ownerID=${user.userID}`,
+        const response = await apiFetch(
+            `http://localhost:8080/cloud-storage/auth/${provider}`,
             { credentials: "include" }
         )
         if (!response.ok) {
@@ -273,7 +274,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
 
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}/reconnect`,
                 { method: "PATCH", credentials: "include" }
             )
@@ -305,8 +306,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         formData.append("file", file)
         try {
             setDriveUploading(true)
-            const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload?ownerID=${user.userID}`,
+            const response = await apiFetch(
+                `http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload`,
                 { method: "POST", credentials: "include", body: formData }
             )
             if (!response.ok) {
@@ -326,8 +327,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     // locally decrypted plaintext and returns its absolute Downloads path.
     const handleDriveDownload = async (file: GoogleDriveFile) => {
         try {
-            const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save?ownerID=${user.userID}`,
+            const response = await apiFetch(
+                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save`,
                 { method: "POST", credentials: "include" }
             )
             if (!response.ok) {
@@ -346,8 +347,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         try {
             // Hide the row only after Drive confirms deletion, so a failed API
             // request never makes a still-existing remote file disappear locally.
-            const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}?ownerID=${user.userID}`,
+            const response = await apiFetch(
+                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}`,
                 { method: "DELETE", credentials: "include" }
             )
             if (!response.ok) throw new Error("Google Drive delete failed")

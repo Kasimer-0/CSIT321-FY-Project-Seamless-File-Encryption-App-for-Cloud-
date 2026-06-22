@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
 import type { Plan } from "../Type"
 import AdminCreatePlan from "./AdminCreatePlanPage"
@@ -15,7 +16,7 @@ function AdminManagePlan() {
         try {
             setLoading(true)
 
-            const response = await fetch("http://localhost:8080/plans", {
+            const response = await apiFetch("http://localhost:8080/plans", {
                 credentials: "include"
             })
 
@@ -36,7 +37,7 @@ function AdminManagePlan() {
 
     const fetchEncMethods = async () => {
         try {
-            const response = await fetch("http://localhost:8080/enc-methods", {
+            const response = await apiFetch("http://localhost:8080/enc-methods", {
                 credentials: "include"
             })
 
@@ -77,7 +78,7 @@ function AdminManagePlan() {
 
     const handleEdit = async (updated: Plan) => {
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/plans/${updated.planID}`,
                 {
                     method: "PUT",
@@ -103,7 +104,7 @@ function AdminManagePlan() {
 
     const handleUpdateStatus = async (plan: Plan, status: "active" | "inactive") => {
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/plans/${plan.planID}/status`,
                 {
                     method: "PATCH",

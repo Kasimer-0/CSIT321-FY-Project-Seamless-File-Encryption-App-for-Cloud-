@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
 import type { UserAccountDTO } from "../Type"
 import AdminViewAccount from "./AdminViewAccountPage"
@@ -18,7 +19,7 @@ function AdminManageAccount() {
             const params = new URLSearchParams()
             if (search) params.append("search", search)
 
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/users?${params.toString()}`,
                 { credentials: "include" }
             )
@@ -60,7 +61,7 @@ function AdminManageAccount() {
         const newStatus = !selectedUser.isSuspended
 
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/users/${selectedUser.userID}/suspend`,
                 {
                     method: "PATCH",

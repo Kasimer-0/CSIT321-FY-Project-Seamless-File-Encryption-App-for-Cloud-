@@ -10,5 +10,4 @@ public class DashboardStatsResponse {
     private int totalUsers;
     private int premiumUsers;
     private int inactiveUsers;
-    private int openTickets;
 }

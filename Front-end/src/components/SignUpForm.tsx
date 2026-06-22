@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState } from "react"
 
 function SignUpForm() {
@@ -8,7 +9,7 @@ function SignUpForm() {
     const [dob, setDob] = useState("")
 
     const [message, setMessage] = useState("")
-    const [messageType, setMessageType] = useState("") 
+    const [messageType, setMessageType] = useState("")
 
     const handleSignup = async () => {
         setMessage("")
@@ -47,7 +48,7 @@ function SignUpForm() {
         }
 
         try {
-            const response = await fetch("http://localhost:8080/signup", {
+            const response = await apiFetch("http://localhost:8080/signup", {
                 method: "POST",
                 headers: {
                 "Content-Type": "application/json"

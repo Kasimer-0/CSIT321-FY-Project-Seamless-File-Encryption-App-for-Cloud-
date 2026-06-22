@@ -5,15 +5,12 @@ import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.Plan;
 import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.model.entity.SystemLog;
-import com.stealthsync.model.entity.Ticket;
-import com.stealthsync.model.entity.TicketResponse;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.CloudStorageLinkRepository;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
 import com.stealthsync.repository.PlanRepository;
 import com.stealthsync.repository.SubscriptionRepository;
 import com.stealthsync.repository.SystemLogRepository;
-import com.stealthsync.repository.TicketRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
@@ -24,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 
 @Component
 @RequiredArgsConstructor
@@ -36,7 +32,6 @@ public class DataSeeder implements CommandLineRunner {
 
     private final UserAccountRepository userAccountRepository;
     private final PlanRepository planRepository;
-    private final TicketRepository ticketRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final CloudStorageLinkRepository cloudStorageLinkRepository;
     private final EncryptedFileRecordRepository encryptedFileRecordRepository;
@@ -46,7 +41,7 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        // Plans and users are seeded first because subscriptions and tickets reference them.
+        // Plans and users are seeded first because subscriptions reference them.
         planRepository.findByPlanTitleIgnoreCase("Basic Free Tier")
                 .orElseGet(() -> planRepository.save(new Plan(
                         null,
@@ -66,7 +61,7 @@ public class DataSeeder implements CommandLineRunner {
                         "AES-256-GCM"
                 )));
 
-        UserAccount admin = seedUser(
+        seedUser(
                 "admin",
                 "admin@stealthsync.com",
                 "Admin@123",
@@ -108,42 +103,6 @@ public class DataSeeder implements CommandLineRunner {
         userAccountRepository.save(customer);
 
         // Sample operational data is inserted only into empty tables to avoid overwriting user work.
-        if (ticketRepository.count() == 0) {
-            Ticket decryptTicket = new Ticket(
-                    null,
-                    "Cannot decrypt uploaded file",
-                    "User reports that decryption fails after downloading an encrypted cloud backup.",
-                    "open",
-                    customer,
-                    null,
-                    new ArrayList<>()
-            );
-            decryptTicket.getResponses().add(new TicketResponse(
-                    null,
-                    "I cannot decrypt the file I uploaded yesterday. Could someone help check it?",
-                    "customer",
-                    Instant.now().minusSeconds(7200),
-                    decryptTicket
-            ));
-            decryptTicket.getResponses().add(new TicketResponse(
-                    null,
-                    "We are checking the encrypted file metadata and will update you here.",
-                    "admin",
-                    Instant.now().minusSeconds(3600),
-                    decryptTicket
-            ));
-            ticketRepository.save(decryptTicket);
-
-            ticketRepository.save(new Ticket(
-                    null,
-                    "Plan upgrade question",
-                    "Customer wants to confirm whether AES-256-GCM is included in the premium plan.",
-                    "open",
-                    customer,
-                    admin,
-                    new ArrayList<>()
-            ));
-        }
 
         if (cloudStorageLinkRepository.count() == 0) {
             cloudStorageLinkRepository.save(new CloudStorageLink(
@@ -160,6 +119,7 @@ public class DataSeeder implements CommandLineRunner {
         if (encryptedFileRecordRepository.count() == 0) {
             encryptedFileRecordRepository.save(new EncryptedFileRecord(
                     null,
+                    customer.getUserID(),
                     "sample-contract.pdf",
                     245760,
                     "pdf",
@@ -169,6 +129,14 @@ public class DataSeeder implements CommandLineRunner {
                     new byte[0]
             ));
         }
+
+        // Assign records created by older prototypes before owner isolation was introduced.
+        encryptedFileRecordRepository.findAll().stream()
+                .filter(record -> record.getOwnerID() == null)
+                .forEach(record -> {
+                    record.setOwnerID(customer.getUserID());
+                    encryptedFileRecordRepository.save(record);
+                });
 
         if (systemLogRepository.count() == 0) {
             systemLogRepository.save(log("admin", "LOGIN_SUCCESS", "127.0.0.1", false, "Normal admin login."));

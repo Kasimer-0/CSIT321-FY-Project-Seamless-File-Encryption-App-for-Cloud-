@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState } from "react"
 import type { Plan } from "../Type"
 import toast from "react-hot-toast"
@@ -26,7 +27,7 @@ function AdminCreatePlan({ encMethods, onBack, onCreate }: CreatePlanProps) {
         }
 
         try {
-            const response = await fetch("http://localhost:8080/plans", {
+            const response = await apiFetch("http://localhost:8080/plans", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",

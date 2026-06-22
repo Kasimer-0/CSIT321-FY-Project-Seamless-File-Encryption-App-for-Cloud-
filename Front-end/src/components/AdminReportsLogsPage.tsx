@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
 import type { FinancialReport, PerformanceReport, SystemLog } from "../Type"
 import toast from "react-hot-toast"
@@ -21,8 +22,8 @@ function AdminReportsLogsPage() {
         try {
             setLoading(true)
             const [performanceResponse, financialResponse] = await Promise.all([
-                fetch("http://localhost:8080/admin/reports/performance", { credentials: "include" }),
-                fetch("http://localhost:8080/admin/reports/financial", { credentials: "include" }),
+                apiFetch("http://localhost:8080/admin/reports/performance", { credentials: "include" }),
+                apiFetch("http://localhost:8080/admin/reports/financial", { credentials: "include" }),
             ])
             if (!performanceResponse.ok || !financialResponse.ok) {
                 toast.error("Failed to load reports")
@@ -41,7 +42,7 @@ function AdminReportsLogsPage() {
         try {
             setLoading(true)
             const path = flagged ? "/admin/logs/flagged" : "/admin/logs"
-            const response = await fetch(`http://localhost:8080${path}`, { credentials: "include" })
+            const response = await apiFetch(`http://localhost:8080${path}`, { credentials: "include" })
             if (!response.ok) {
                 toast.error("Failed to load system logs")
                 return
@@ -102,7 +103,6 @@ function AdminReportsLogsPage() {
                             {performance && [
                                 ["Total Users", performance.totalUsers],
                                 ["Premium Users", performance.premiumUsers],
-                                ["Open Tickets", performance.openTickets],
                                 ["Encrypted Files", performance.encryptedFiles],
                                 ["Cloud Links", performance.cloudLinks],
                                 ["Active Cloud Links", performance.activeCloudLinks],

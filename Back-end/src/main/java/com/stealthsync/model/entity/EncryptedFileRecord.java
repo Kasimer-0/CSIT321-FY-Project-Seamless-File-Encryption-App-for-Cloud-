@@ -25,6 +25,9 @@ public class EncryptedFileRecord {
     @Column(name = "file_id")
     private Long fileID;
 
+    @Column(name = "owner_id")
+    private Long ownerID;
+
     @Column(nullable = false)
     private String fileName;
 

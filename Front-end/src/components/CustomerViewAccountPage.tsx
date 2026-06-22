@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
 import type { UserAccount, SubscriptionDTO, Plan } from "../Type"
 import toast from "react-hot-toast"
@@ -59,7 +60,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         setSaveError(null)
 
         try {
-            const response = await fetch(`http://localhost:8080/users/${user.userID}`, {
+            const response = await apiFetch("http://localhost:8080/me", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -86,7 +87,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         setSuspending(true)
 
         try {
-            const response = await fetch(`http://localhost:8080/users/${user.userID}/suspend`, {
+            const response = await apiFetch("http://localhost:8080/me/suspend", {
                 method: "POST",
                 credentials: "include"
             })
@@ -111,8 +112,8 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         setCancellingSub(true)
 
         try {
-            const response = await fetch(
-                `http://localhost:8080/subscriptions/${subscription?.subscriptionID}/cancel`,
+            const response = await apiFetch(
+                "http://localhost:8080/me/subscription/cancel",
                 { method: "PATCH", credentials: "include" }
             )
 
@@ -178,7 +179,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
 
         setLoadingSub(true)
 
-        fetch(`http://localhost:8080/subscriptions/${userSubscriptionID}`, { credentials: "include" })
+        apiFetch("http://localhost:8080/me/subscription", { credentials: "include" })
             .then(r => r.json())
             .then((data: SubscriptionDTO) => setSubscription(data))
             .catch(err => console.error("Failed to fetch subscription", err))
@@ -191,7 +192,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         if (availablePlans.length > 0) return
         setLoadingPlans(true)
 
-        fetch("http://localhost:8080/plans", { credentials: "include" })
+        apiFetch("http://localhost:8080/plans", { credentials: "include" })
             .then(r => r.json())
             .then((data: Plan[]) => setAvailablePlans(data.filter(p => p.planStatus === "active")))
             .catch(err => console.error("Failed to fetch plans", err))

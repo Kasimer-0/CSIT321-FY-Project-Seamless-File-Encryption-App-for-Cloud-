@@ -4,6 +4,7 @@ import com.stealthsync.model.dto.PurchasePlanRequest;
 import com.stealthsync.model.dto.UserAccountDTO;
 import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.service.AppDataService;
+import com.stealthsync.security.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ import java.util.List;
 public class SubscriptionController {
 
     private final AppDataService dataStore;
+    private final CurrentUserService currentUserService;
 
     @GetMapping
     public ResponseEntity<List<Subscription>> getSubscriptions(@RequestParam(required = false) String search) {
@@ -36,8 +38,9 @@ public class SubscriptionController {
 
     @PostMapping("/purchase")
     public ResponseEntity<UserAccountDTO> purchasePlan(@RequestBody PurchasePlanRequest request) {
-        log.info("Customer {} purchasing plan {}", request.getUserID(), request.getPlanID());
-        return ResponseEntity.ok(dataStore.purchasePlan(request.getUserID(), request.getPlanID()));
+        Long userID = currentUserService.requireUserID();
+        log.info("Customer {} purchasing plan {}", userID, request.getPlanID());
+        return ResponseEntity.ok(dataStore.purchasePlan(userID, request.getPlanID()));
     }
 
     @PatchMapping("/{id}/cancel")

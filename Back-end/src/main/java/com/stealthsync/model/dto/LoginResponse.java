@@ -6,7 +6,8 @@ import lombok.Data;
 
 @Data
 @AllArgsConstructor
-/** Login result containing the public account view and a user-facing message. */
+/** Login result containing the account and signed Bearer token. */
 public class LoginResponse {
-    private UserAccount user; // Core: Precisely connect to the frontend data.user
+    private UserAccount user;
+    private String token;
 }

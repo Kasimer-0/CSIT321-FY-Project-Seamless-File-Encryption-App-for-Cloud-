@@ -1,13 +1,14 @@
 package com.stealthsync.controller;
 
 import com.stealthsync.model.dto.LoginResponse;
-import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.CloudStorageLinkRepository;
 import com.stealthsync.repository.EncryptionKeyRepository;
 import com.stealthsync.repository.PhysicalTokenRepository;
 import com.stealthsync.repository.SubscriptionRepository;
 import com.stealthsync.repository.UserAccountRepository;
+import com.stealthsync.security.CurrentUserService;
+import com.stealthsync.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,12 +41,14 @@ public class AccountSecurityController {
     private final EncryptionKeyRepository encryptionKeyRepository;
     private final PhysicalTokenRepository physicalTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CurrentUserService currentUserService;
+    private final JwtService jwtService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @PostMapping("/reset-password")
     @Transactional
     public ResponseEntity<UserAccount> resetPassword(@RequestBody Map<String, Object> request) {
-        UserAccount user = findUser(asLong(request.get("userID")));
+        UserAccount user = currentUserService.requireUser();
         String newPassword = asString(request.get("newPassword"), "");
         if (newPassword.length() < 8) {
             throw new IllegalArgumentException("Password must contain at least 8 characters.");
@@ -56,14 +59,13 @@ public class AccountSecurityController {
 
     @PostMapping("/factory-reset")
     @Transactional
-    public ResponseEntity<UserAccount> factoryReset(@RequestBody Map<String, Object> request) {
-        UserAccount user = findUser(asLong(request.get("userID")));
+    public ResponseEntity<UserAccount> factoryReset() {
+        UserAccount user = currentUserService.requireUser();
         if (user.getSubscription() != null) {
-            subscriptionRepository.findById(user.getSubscription())
-                    .ifPresent(subscription -> {
-                        subscription.setSubcriptionStatus("cancelled");
-                        subscriptionRepository.save(subscription);
-                    });
+            subscriptionRepository.findById(user.getSubscription()).ifPresent(subscription -> {
+                subscription.setSubcriptionStatus("cancelled");
+                subscriptionRepository.save(subscription);
+            });
         }
         cloudStorageLinkRepository.deleteByOwnerID(user.getUserID());
         encryptionKeyRepository.deleteByOwnerID(user.getUserID());
@@ -77,8 +79,8 @@ public class AccountSecurityController {
 
     @PostMapping("/recovery-phrase/generate")
     @Transactional
-    public ResponseEntity<Map<String, String>> generateRecoveryPhrase(@RequestBody Map<String, Object> request) {
-        UserAccount user = findUser(asLong(request.get("userID")));
+    public ResponseEntity<Map<String, String>> generateRecoveryPhrase() {
+        UserAccount user = currentUserService.requireUser();
         requirePremium(user);
         String phrase = generatePhrase();
         user.setRecoveryPhraseHash(passwordEncoder.encode(phrase));
@@ -96,12 +98,7 @@ public class AccountSecurityController {
                 .filter(account -> !account.isSuspended())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid recovery phrase."));
         requirePremium(user);
-        return ResponseEntity.ok(new LoginResponse(user));
-    }
-
-    private UserAccount findUser(Long userID) {
-        return userAccountRepository.findById(userID)
-                .orElseThrow(() -> new IllegalArgumentException("User account does not exist."));
+        return ResponseEntity.ok(new LoginResponse(user, jwtService.createToken(user)));
     }
 
     private void requirePremium(UserAccount user) {
@@ -112,23 +109,13 @@ public class AccountSecurityController {
 
     private String generatePhrase() {
         StringBuilder phrase = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            if (i > 0) {
+        for (int index = 0; index < 6; index++) {
+            if (index > 0) {
                 phrase.append('-');
             }
             phrase.append(RECOVERY_WORDS.get(secureRandom.nextInt(RECOVERY_WORDS.size())));
         }
         return phrase.toString();
-    }
-
-    private Long asLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            return Long.parseLong(text);
-        }
-        throw new IllegalArgumentException("userID is required.");
     }
 
     private String asString(Object value, String fallback) {

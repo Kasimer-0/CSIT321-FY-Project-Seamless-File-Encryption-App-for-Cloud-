@@ -1,5 +1,6 @@
+import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
-import type { EncryptionKeyRecord, UserAccount } from "../Type"
+import type { EncryptionKeyRecord } from "../Type"
 import toast from "react-hot-toast"
 
 /**
@@ -7,11 +8,7 @@ import toast from "react-hot-toast"
  * It implements the key CRUD user story and scopes every request to the logged-in customer so one
  * account cannot list or modify another account's key metadata.
  */
-type Props = {
-    user: UserAccount
-}
-
-function CustomerManageEncryptionKeysPage({ user }: Props) {
+function CustomerManageEncryptionKeysPage() {
     const [keys, setKeys] = useState<EncryptionKeyRecord[]>([])
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
@@ -21,9 +18,9 @@ function CustomerManageEncryptionKeysPage({ user }: Props) {
     const fetchKeys = async () => {
         try {
             setLoading(true)
-            const params = new URLSearchParams({ ownerID: String(user.userID) })
+            const params = new URLSearchParams()
             if (search.trim()) params.append("search", search.trim())
-            const response = await fetch(`http://localhost:8080/encryption-keys?${params.toString()}`, { credentials: "include" })
+            const response = await apiFetch(`http://localhost:8080/encryption-keys?${params.toString()}`, { credentials: "include" })
             if (!response.ok) {
                 toast.error("Failed to load encryption keys")
                 return
@@ -44,12 +41,11 @@ function CustomerManageEncryptionKeysPage({ user }: Props) {
 
     const createKey = async () => {
         try {
-            const response = await fetch("http://localhost:8080/encryption-keys", {
+            const response = await apiFetch("http://localhost:8080/encryption-keys", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
                 body: JSON.stringify({
-                    ownerID: user.userID,
                     keyName: keyName.trim() || "New Encryption Key",
                     algorithm
                 })
@@ -68,7 +64,7 @@ function CustomerManageEncryptionKeysPage({ user }: Props) {
 
     const updateKey = async (key: EncryptionKeyRecord, updates: Partial<EncryptionKeyRecord>) => {
         try {
-            const response = await fetch(`http://localhost:8080/encryption-keys/${key.keyID}?ownerID=${user.userID}`, {
+            const response = await apiFetch(`http://localhost:8080/encryption-keys/${key.keyID}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -87,7 +83,7 @@ function CustomerManageEncryptionKeysPage({ user }: Props) {
 
     const deleteKey = async (key: EncryptionKeyRecord) => {
         try {
-            const response = await fetch(`http://localhost:8080/encryption-keys/${key.keyID}?ownerID=${user.userID}`, {
+            const response = await apiFetch(`http://localhost:8080/encryption-keys/${key.keyID}`, {
                 method: "DELETE",
                 credentials: "include"
             })

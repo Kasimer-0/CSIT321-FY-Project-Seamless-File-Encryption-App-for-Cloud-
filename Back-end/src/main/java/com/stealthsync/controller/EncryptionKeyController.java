@@ -2,6 +2,7 @@ package com.stealthsync.controller;
 
 import com.stealthsync.model.entity.EncryptionKeyRecord;
 import com.stealthsync.repository.EncryptionKeyRepository;
+import com.stealthsync.security.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,15 +28,16 @@ import java.util.UUID;
 @RequestMapping("/encryption-keys")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
-/** Provides owner-scoped CRUD for key metadata without exposing raw key material. */
+/** Provides authenticated owner-scoped CRUD without exposing raw key material. */
 public class EncryptionKeyController {
 
     private final EncryptionKeyRepository encryptionKeyRepository;
+    private final CurrentUserService currentUserService;
 
     @GetMapping
     public ResponseEntity<List<EncryptionKeyRecord>> listKeys(
-            @RequestParam Long ownerID,
             @RequestParam(required = false) String search) {
+        Long ownerID = currentUserService.requireUserID();
         String keyword = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
         List<EncryptionKeyRecord> keys = encryptionKeyRepository.findByOwnerIDOrderByCreatedAtDesc(ownerID).stream()
                 .filter(key -> keyword.isBlank()
@@ -47,8 +49,8 @@ public class EncryptionKeyController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<EncryptionKeyRecord> getKey(@PathVariable Long id, @RequestParam Long ownerID) {
-        return encryptionKeyRepository.findByKeyIDAndOwnerID(id, ownerID)
+    public ResponseEntity<EncryptionKeyRecord> getKey(@PathVariable Long id) {
+        return encryptionKeyRepository.findByKeyIDAndOwnerID(id, currentUserService.requireUserID())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -56,19 +58,13 @@ public class EncryptionKeyController {
     @PostMapping
     @Transactional
     public ResponseEntity<EncryptionKeyRecord> createKey(@RequestBody Map<String, Object> request) {
-        Long ownerID = asLong(request.get("ownerID"));
+        Long ownerID = currentUserService.requireUserID();
         String keyName = asString(request.get("keyName"), "New Encryption Key");
         String algorithm = asString(request.get("algorithm"), "AES-256-GCM");
         Instant now = Instant.now();
         EncryptionKeyRecord key = new EncryptionKeyRecord(
-                null,
-                ownerID,
-                keyName,
-                algorithm,
-                "active",
-                UUID.randomUUID().toString().substring(0, 13),
-                now,
-                now
+                null, ownerID, keyName, algorithm, "active",
+                UUID.randomUUID().toString().substring(0, 13), now, now
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(encryptionKeyRepository.save(key));
     }
@@ -77,8 +73,8 @@ public class EncryptionKeyController {
     @Transactional
     public ResponseEntity<EncryptionKeyRecord> updateKey(
             @PathVariable Long id,
-            @RequestParam Long ownerID,
             @RequestBody Map<String, Object> request) {
+        Long ownerID = currentUserService.requireUserID();
         return encryptionKeyRepository.findByKeyIDAndOwnerID(id, ownerID)
                 .map(key -> {
                     if (request.containsKey("keyName")) {
@@ -98,23 +94,13 @@ public class EncryptionKeyController {
 
     @DeleteMapping("/{id}")
     @Transactional
-    public ResponseEntity<Void> deleteKey(@PathVariable Long id, @RequestParam Long ownerID) {
-        return encryptionKeyRepository.findByKeyIDAndOwnerID(id, ownerID)
+    public ResponseEntity<Void> deleteKey(@PathVariable Long id) {
+        return encryptionKeyRepository.findByKeyIDAndOwnerID(id, currentUserService.requireUserID())
                 .map(key -> {
                     encryptionKeyRepository.delete(key);
                     return ResponseEntity.noContent().<Void>build();
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    private Long asLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            return Long.parseLong(text);
-        }
-        throw new IllegalArgumentException("ownerID is required.");
     }
 
     private String asString(Object value, String fallback) {

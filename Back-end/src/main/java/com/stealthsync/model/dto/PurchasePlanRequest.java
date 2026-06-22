@@ -3,8 +3,7 @@ package com.stealthsync.model.dto;
 import lombok.Data;
 
 @Data
-/** Demo purchase request identifying the customer and selected plan. */
+/** Selects a plan for the customer identified by the authenticated JWT. */
 public class PurchasePlanRequest {
-    private Long userID;
     private Long planID;
 }

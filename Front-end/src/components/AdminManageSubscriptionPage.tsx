@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
 import type { SubscriptionDTO, Plan } from "../Type"
 import AdminViewSubscription from "./AdminViewSubscriptionPage"
@@ -18,7 +19,7 @@ function AdminManageSubscription() {
             const params = new URLSearchParams()
             if (search) params.append("search", search)
 
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/subscriptions?${params.toString()}`,
                 { credentials: "include" }
             )
@@ -40,7 +41,7 @@ function AdminManageSubscription() {
 
     const fetchAvailablePlans = async () => {
         try {
-            const response = await fetch("http://localhost:8080/plans", {
+            const response = await apiFetch("http://localhost:8080/plans", {
                 credentials: "include"
             })
 
@@ -79,7 +80,7 @@ function AdminManageSubscription() {
 
     const handleCancel = async (subscriptionID: number) => {
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/subscriptions/${subscriptionID}/cancel`,
                 {
                     method: "PATCH",
@@ -111,7 +112,7 @@ function AdminManageSubscription() {
 
     const handleEdit = async (updated: SubscriptionDTO) => {
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `http://localhost:8080/subscriptions/${updated.subscriptionID}`,
                 {
                     method: "PUT",

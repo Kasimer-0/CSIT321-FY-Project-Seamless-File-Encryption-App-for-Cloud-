@@ -12,6 +12,8 @@ public interface CloudStorageLinkRepository extends JpaRepository<CloudStorageLi
 
     List<CloudStorageLink> findByOwnerID(Long ownerID);
 
+    Optional<CloudStorageLink> findByLinkIDAndOwnerID(Long linkID, Long ownerID);
+
     Optional<CloudStorageLink> findByOwnerIDAndProviderIgnoreCase(Long ownerID, String provider);
 
     void deleteByOwnerID(Long ownerID);

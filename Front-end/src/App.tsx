@@ -1,25 +1,47 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { UserAccount } from "./Type"
 import Auth from "./components/Auth"
 import AdminDashboard from "./components/AdminDashboardPage"
 import CustomerDashboard from "./components/CustomerDashboard"
 import { Toaster } from "react-hot-toast"
+import { apiFetch, clearAuthToken, getAuthToken } from "./lib/api"
 
 function App() {
     const [user, setUser] = useState<UserAccount | null>(null)
+    const [restoringSession, setRestoringSession] = useState(true)
 
-    const handleLogin = (user: UserAccount) => {
-        setUser(user)
+    // Restore the signed-in account from the saved JWT when the desktop window reloads.
+    useEffect(() => {
+        if (!getAuthToken()) {
+            setRestoringSession(false)
+            return
+        }
+
+        apiFetch("http://localhost:8080/me")
+            .then(response => {
+                if (!response.ok) throw new Error("Session expired")
+                return response.json()
+            })
+            .then((currentUser: UserAccount) => setUser(currentUser))
+            .catch(() => clearAuthToken())
+            .finally(() => setRestoringSession(false))
+    }, [])
+
+    const handleLogin = (authenticatedUser: UserAccount) => {
+        setUser(authenticatedUser)
     }
 
     const handleLogout = () => {
+        clearAuthToken()
         setUser(null)
     }
 
-    // Keep the authenticated user object in the app root.
-    // Purchase and security APIs return updated account data, so the dashboard can refresh without another login.
     const handleUserUpdate = (updatedUser: UserAccount) => {
         setUser(updatedUser)
+    }
+
+    if (restoringSession) {
+        return null
     }
 
     return (

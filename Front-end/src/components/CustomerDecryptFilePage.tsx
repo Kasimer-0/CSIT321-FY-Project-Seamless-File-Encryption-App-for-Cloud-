@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
 import type { EncryptedFile, GoogleDriveFile, UserAccount } from "../Type"
 import toast from "react-hot-toast"
@@ -30,10 +31,10 @@ function CustomerDecryptFile({ user }: Props) {
                 // Uploads are stored in Google Drive, while early prototype records remain
                 // in the local database. Load both sources so users can find every file here.
                 const [driveResponse, localResponse] = await Promise.all([
-                    fetch(`http://localhost:8080/cloud-storage/google-drive/files?ownerID=${user.userID}`, {
+                    apiFetch(`http://localhost:8080/cloud-storage/google-drive/files`, {
                         credentials: "include"
                     }),
-                    fetch("http://localhost:8080/files", { credentials: "include" })
+                    apiFetch("http://localhost:8080/files", { credentials: "include" })
                 ])
 
                 if (cancelled) return
@@ -73,8 +74,8 @@ function CustomerDecryptFile({ user }: Props) {
         try {
             // JavaFX WebView cannot reliably save browser Blob downloads. The backend
             // decrypts locally, writes the plaintext to Downloads, and returns its path.
-            const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save?ownerID=${user.userID}`,
+            const response = await apiFetch(
+                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save`,
                 { method: "POST", credentials: "include" }
             )
             if (!response.ok) {
@@ -96,7 +97,7 @@ function CustomerDecryptFile({ user }: Props) {
     const decryptLocalFile = async (file: EncryptedFile) => {
         setDownloadingLocalFile(file.fileID)
         try {
-            const response = await fetch(`http://localhost:8080/files/${file.fileID}/decrypt-save`, {
+            const response = await apiFetch(`http://localhost:8080/files/${file.fileID}/decrypt-save`, {
                 method: "POST",
                 credentials: "include"
             })
@@ -117,7 +118,7 @@ function CustomerDecryptFile({ user }: Props) {
 
     const removeLocalFile = async (file: EncryptedFile) => {
         // Local records use a separate endpoint so this action cannot remove a Drive object.
-        const response = await fetch(`http://localhost:8080/files/${file.fileID}`, {
+        const response = await apiFetch(`http://localhost:8080/files/${file.fileID}`, {
             method: "DELETE",
             credentials: "include"
         })

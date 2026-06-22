@@ -3,7 +3,7 @@ package com.stealthsync.controller;
 import com.stealthsync.model.entity.PhysicalTokenRecord;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.PhysicalTokenRepository;
-import com.stealthsync.repository.UserAccountRepository;
+import com.stealthsync.security.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -27,22 +26,22 @@ import java.util.Map;
 @RequestMapping("/physical-tokens")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
-/** Manages premium-customer physical-token registrations and activation state. */
+/** Manages physical-token registrations for the authenticated premium customer. */
 public class PhysicalTokenController {
 
     private final PhysicalTokenRepository physicalTokenRepository;
-    private final UserAccountRepository userAccountRepository;
+    private final CurrentUserService currentUserService;
 
     @GetMapping
-    public ResponseEntity<List<PhysicalTokenRecord>> listTokens(@RequestParam Long ownerID) {
-        requirePremium(ownerID);
-        return ResponseEntity.ok(physicalTokenRepository.findByOwnerIDOrderByRegisteredAtDesc(ownerID));
+    public ResponseEntity<List<PhysicalTokenRecord>> listTokens() {
+        UserAccount owner = requirePremium();
+        return ResponseEntity.ok(physicalTokenRepository.findByOwnerIDOrderByRegisteredAtDesc(owner.getUserID()));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<PhysicalTokenRecord> getToken(@PathVariable Long id, @RequestParam Long ownerID) {
-        requirePremium(ownerID);
-        return physicalTokenRepository.findByTokenIDAndOwnerID(id, ownerID)
+    public ResponseEntity<PhysicalTokenRecord> getToken(@PathVariable Long id) {
+        UserAccount owner = requirePremium();
+        return physicalTokenRepository.findByTokenIDAndOwnerID(id, owner.getUserID())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -50,41 +49,34 @@ public class PhysicalTokenController {
     @PostMapping
     @Transactional
     public ResponseEntity<PhysicalTokenRecord> registerToken(@RequestBody Map<String, Object> request) {
-        Long ownerID = asLong(request.get("ownerID"));
-        requirePremium(ownerID);
+        UserAccount owner = requirePremium();
         String tokenName = asString(request.get("tokenName"), "Security Token");
         String serialNumber = asString(request.get("serialNumber"), "TOKEN-" + Instant.now().toEpochMilli());
         PhysicalTokenRecord token = new PhysicalTokenRecord(
-                null,
-                ownerID,
-                tokenName,
-                serialNumber,
-                "inactive",
-                Instant.now(),
-                null
+                null, owner.getUserID(), tokenName, serialNumber, "inactive", Instant.now(), null
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(physicalTokenRepository.save(token));
     }
 
     @PatchMapping("/{id}/activate")
     @Transactional
-    public ResponseEntity<PhysicalTokenRecord> activateToken(@PathVariable Long id, @RequestParam Long ownerID) {
-        requirePremium(ownerID);
-        return setTokenStatus(id, ownerID, "active");
+    public ResponseEntity<PhysicalTokenRecord> activateToken(@PathVariable Long id) {
+        UserAccount owner = requirePremium();
+        return setTokenStatus(id, owner.getUserID(), "active");
     }
 
     @PatchMapping("/{id}/deactivate")
     @Transactional
-    public ResponseEntity<PhysicalTokenRecord> deactivateToken(@PathVariable Long id, @RequestParam Long ownerID) {
-        requirePremium(ownerID);
-        return setTokenStatus(id, ownerID, "inactive");
+    public ResponseEntity<PhysicalTokenRecord> deactivateToken(@PathVariable Long id) {
+        UserAccount owner = requirePremium();
+        return setTokenStatus(id, owner.getUserID(), "inactive");
     }
 
     @DeleteMapping("/{id}")
     @Transactional
-    public ResponseEntity<Void> removeToken(@PathVariable Long id, @RequestParam Long ownerID) {
-        requirePremium(ownerID);
-        return physicalTokenRepository.findByTokenIDAndOwnerID(id, ownerID)
+    public ResponseEntity<Void> removeToken(@PathVariable Long id) {
+        UserAccount owner = requirePremium();
+        return physicalTokenRepository.findByTokenIDAndOwnerID(id, owner.getUserID())
                 .map(token -> {
                     physicalTokenRepository.delete(token);
                     return ResponseEntity.noContent().<Void>build();
@@ -102,22 +94,12 @@ public class PhysicalTokenController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    private void requirePremium(Long ownerID) {
-        UserAccount owner = userAccountRepository.findById(ownerID)
-                .orElseThrow(() -> new IllegalArgumentException("Owner account does not exist."));
+    private UserAccount requirePremium() {
+        UserAccount owner = currentUserService.requireUser();
         if (!owner.isSubscribed()) {
             throw new IllegalArgumentException("Premium subscription required.");
         }
-    }
-
-    private Long asLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            return Long.parseLong(text);
-        }
-        throw new IllegalArgumentException("ownerID is required.");
+        return owner;
     }
 
     private String asString(Object value, String fallback) {

@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
 import type { PhysicalTokenRecord, UserAccount } from "../Type"
 import toast from "react-hot-toast"
@@ -29,7 +30,7 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
         }
         try {
             setLoadingTokens(true)
-            const response = await fetch(`http://localhost:8080/physical-tokens?ownerID=${user.userID}`, { credentials: "include" })
+            const response = await apiFetch(`http://localhost:8080/physical-tokens`, { credentials: "include" })
             if (!response.ok) {
                 toast.error("Failed to load physical tokens")
                 return
@@ -48,11 +49,11 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
 
     const resetPassword = async () => {
         try {
-            const response = await fetch("http://localhost:8080/account/reset-password", {
+            const response = await apiFetch("http://localhost:8080/account/reset-password", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ userID: user.userID, newPassword })
+                body: JSON.stringify({ newPassword })
             })
             if (!response.ok) {
                 const data = await response.json().catch(() => null)
@@ -70,11 +71,11 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
     const factoryReset = async () => {
         if (!window.confirm("Factory reset will clear linked cloud accounts, encryption keys, tokens, and subscription state. Continue?")) return
         try {
-            const response = await fetch("http://localhost:8080/account/factory-reset", {
+            const response = await apiFetch("http://localhost:8080/account/factory-reset", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ userID: user.userID })
+                body: JSON.stringify({})
             })
             if (!response.ok) {
                 toast.error("Failed to factory reset account")
@@ -91,11 +92,11 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
     // The phrase is displayed only from the generation response so users can record it immediately.
     const generateRecoveryPhrase = async () => {
         try {
-            const response = await fetch("http://localhost:8080/account/recovery-phrase/generate", {
+            const response = await apiFetch("http://localhost:8080/account/recovery-phrase/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ userID: user.userID })
+                body: JSON.stringify({})
             })
             if (!response.ok) {
                 const data = await response.json().catch(() => null)
@@ -112,12 +113,11 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
 
     const registerToken = async () => {
         try {
-            const response = await fetch("http://localhost:8080/physical-tokens", {
+            const response = await apiFetch("http://localhost:8080/physical-tokens", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
                 body: JSON.stringify({
-                    ownerID: user.userID,
                     tokenName: tokenName.trim() || "Security Token",
                     serialNumber: serialNumber.trim() || undefined
                 })
@@ -139,7 +139,7 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
     const setTokenStatus = async (token: PhysicalTokenRecord, active: boolean) => {
         try {
             const action = active ? "activate" : "deactivate"
-            const response = await fetch(`http://localhost:8080/physical-tokens/${token.tokenID}/${action}?ownerID=${user.userID}`, {
+            const response = await apiFetch(`http://localhost:8080/physical-tokens/${token.tokenID}/${action}`, {
                 method: "PATCH",
                 credentials: "include"
             })
@@ -156,7 +156,7 @@ function CustomerSecurityPage({ user, onUserUpdate }: Props) {
 
     const removeToken = async (token: PhysicalTokenRecord) => {
         try {
-            const response = await fetch(`http://localhost:8080/physical-tokens/${token.tokenID}?ownerID=${user.userID}`, {
+            const response = await apiFetch(`http://localhost:8080/physical-tokens/${token.tokenID}`, {
                 method: "DELETE",
                 credentials: "include"
             })

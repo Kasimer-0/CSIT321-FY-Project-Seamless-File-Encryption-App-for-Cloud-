@@ -2,6 +2,7 @@ package com.stealthsync.controller;
 
 import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.service.AppDataService;
+import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.service.crypto.AesGcmService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,7 @@ public class FileController {
 
     private final AesGcmService aesGcmService;
     private final AppDataService dataStore;
+    private final CurrentUserService currentUserService;
 
     /**
      * Receive files uploaded via drag-and-drop from the frontend and encrypt them silently in the background (FR2.2 / FR1.1)
@@ -89,7 +91,7 @@ public class FileController {
 
     @GetMapping("/files")
     public ResponseEntity<List<EncryptedFileRecord>> getEncryptedFiles() {
-        return ResponseEntity.ok(dataStore.listEncryptedFiles());
+        return ResponseEntity.ok(dataStore.listEncryptedFiles(currentUserService.requireUserID()));
     }
 
     @PostMapping("/files/encrypt-upload")
@@ -98,6 +100,7 @@ public class FileController {
             String filename = safeFilename(file.getOriginalFilename(), "uploaded-file");
             InputStream encryptedStream = aesGcmService.encryptStream(file.getInputStream(), DEFAULT_PASSPHRASE);
             EncryptedFileRecord record = dataStore.storeEncryptedFile(
+                    currentUserService.requireUserID(),
                     filename,
                     file.getSize(),
                     DEFAULT_ENC_METHOD,
@@ -112,7 +115,7 @@ public class FileController {
 
     @GetMapping("/files/{id}/decrypt-download")
     public ResponseEntity<InputStreamResource> decryptAndDownload(@PathVariable Long id) {
-        return dataStore.findEncryptedFile(id)
+        return dataStore.findEncryptedFile(id, currentUserService.requireUserID())
                 .map(this::downloadRecord)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -120,7 +123,7 @@ public class FileController {
     /** Removes a legacy encrypted record stored in StealthSync's local database. */
     @DeleteMapping("/files/{id}")
     public ResponseEntity<Void> deleteEncryptedFile(@PathVariable Long id) {
-        return dataStore.deleteEncryptedFile(id)
+        return dataStore.deleteEncryptedFile(id, currentUserService.requireUserID())
                 ? ResponseEntity.noContent().build()
                 : ResponseEntity.notFound().build();
     }
@@ -132,7 +135,7 @@ public class FileController {
      */
     @PostMapping("/files/{id}/decrypt-save")
     public ResponseEntity<Map<String, Object>> decryptAndSave(@PathVariable Long id) {
-        return dataStore.findEncryptedFile(id)
+        return dataStore.findEncryptedFile(id, currentUserService.requireUserID())
                 .map(this::saveRecordToDownloads)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
