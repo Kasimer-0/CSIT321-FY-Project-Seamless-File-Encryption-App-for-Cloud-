@@ -35,9 +35,13 @@ public class AesGcmService {
      * a small versioned header: STLH + version + salt + IV.
      */
     public InputStream encryptStream(InputStream plaintextStream, String passphrase) throws Exception {
+        return encryptStream(plaintextStream, passphrase, 256);
+    }
+
+    public InputStream encryptStream(InputStream plaintextStream, String passphrase, int keyLengthBits) throws Exception {
         byte[] salt = randomBytes(SALT_LENGTH_BYTE);
         byte[] iv = randomBytes(IV_LENGTH_BYTE);
-        SecretKey secretKey = keyManagementService.deriveAesKey(passphrase, salt);
+        SecretKey secretKey = keyManagementService.deriveAesKey(passphrase, salt, keyLengthBits);
 
         Cipher cipher = Cipher.getInstance(ALGORITHM);
         GCMParameterSpec parameterSpec = new GCMParameterSpec(TAG_LENGTH_BIT, iv);
@@ -53,6 +57,10 @@ public class AesGcmService {
      * Streaming decryption for both the current STLH format and the earlier IV-only format.
      */
     public InputStream decryptStream(InputStream encryptedStream, String passphrase) throws Exception {
+        return decryptStream(encryptedStream, passphrase, 256);
+    }
+
+    public InputStream decryptStream(InputStream encryptedStream, String passphrase, int keyLengthBits) throws Exception {
         byte[] header = new byte[HEADER_LENGTH_BYTE];
         int headerBytesRead = readUpTo(encryptedStream, header);
 
@@ -66,7 +74,7 @@ public class AesGcmService {
 
             byte[] salt = Arrays.copyOfRange(header, MAGIC.length + 1, MAGIC.length + 1 + SALT_LENGTH_BYTE);
             byte[] iv = Arrays.copyOfRange(header, MAGIC.length + 1 + SALT_LENGTH_BYTE, HEADER_LENGTH_BYTE);
-            SecretKey secretKey = keyManagementService.deriveAesKey(passphrase, salt);
+            SecretKey secretKey = keyManagementService.deriveAesKey(passphrase, salt, keyLengthBits);
             return decryptPayload(encryptedStream, secretKey, iv);
         }
 

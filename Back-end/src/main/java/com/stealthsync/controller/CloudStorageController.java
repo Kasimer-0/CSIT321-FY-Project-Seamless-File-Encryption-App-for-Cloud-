@@ -6,6 +6,8 @@ import com.stealthsync.service.AppDataService;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.service.cloud.GoogleDriveService;
 import com.stealthsync.service.crypto.AesGcmService;
+import com.stealthsync.service.crypto.EncryptionPolicyService;
+import com.stealthsync.service.crypto.UserVaultService;
 import com.stealthsync.config.DesktopWindowLauncher;
 import com.stealthsync.config.SystemBrowserLauncher;
 import lombok.RequiredArgsConstructor;
@@ -38,12 +40,12 @@ import java.util.Map;
  */
 public class CloudStorageController {
 
-    private static final String DEFAULT_PASSPHRASE = "stealthsync-demo-passphrase";
-
     private final AppDataService dataStore;
     private final GoogleDriveService googleDriveService;
     private final AesGcmService aesGcmService;
     private final CurrentUserService currentUserService;
+    private final UserVaultService userVaultService;
+    private final EncryptionPolicyService encryptionPolicyService;
 
     @GetMapping("/links")
     public ResponseEntity<List<CloudStorageLink>> getLinks() {
@@ -151,9 +153,14 @@ public class CloudStorageController {
             @RequestParam("file") MultipartFile file) throws Exception {
         Long ownerID = currentUserService.requireUserID();
         String originalName = safeFilename(file.getOriginalFilename(), "uploaded-file");
-        // Encrypt locally before the stream is handed to the Google Drive client.
-        try (InputStream encrypted = aesGcmService.encryptStream(file.getInputStream(), DEFAULT_PASSPHRASE)) {
-            return ResponseEntity.ok(googleDriveService.uploadEncrypted(ownerID, originalName, encrypted));
+        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForUser(ownerID);
+        String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
+        // Encrypt locally with the current user's vault key before the stream is handed to Google Drive.
+        try (InputStream encrypted = aesGcmService.encryptStream(
+                file.getInputStream(),
+                vaultPassphrase,
+                policy.keyLengthBits())) {
+            return ResponseEntity.ok(googleDriveService.uploadEncrypted(ownerID, originalName, policy.algorithm(), encrypted));
         }
     }
 
@@ -163,9 +170,11 @@ public class CloudStorageController {
         Long ownerID = currentUserService.requireUserID();
         // Download encrypted bytes first, then return only locally decrypted content to the customer.
         GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
+        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(driveFile.encMethod());
         InputStream decrypted = aesGcmService.decryptStream(
                 new ByteArrayInputStream(driveFile.encryptedContent()),
-                DEFAULT_PASSPHRASE
+                userVaultService.filePassphraseFor(ownerID),
+                policy.keyLengthBits()
         );
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
@@ -197,9 +206,11 @@ public class CloudStorageController {
         try {
             GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
             byte[] plaintext;
+            EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(driveFile.encMethod());
             try (InputStream decrypted = aesGcmService.decryptStream(
                     new ByteArrayInputStream(driveFile.encryptedContent()),
-                    DEFAULT_PASSPHRASE)) {
+                    userVaultService.filePassphraseFor(ownerID),
+                    policy.keyLengthBits())) {
                 plaintext = decrypted.readAllBytes();
             }
 
@@ -255,11 +266,14 @@ public class CloudStorageController {
         Long ownerID = currentUserService.requireUserID();
         try {
             Path path = resolveLocalUserFile(request.get("fileUri"));
+            EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForUser(ownerID);
+            String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
             try (InputStream input = Files.newInputStream(path);
-                 InputStream encrypted = aesGcmService.encryptStream(input, DEFAULT_PASSPHRASE)) {
+                 InputStream encrypted = aesGcmService.encryptStream(input, vaultPassphrase, policy.keyLengthBits())) {
                 return ResponseEntity.ok(googleDriveService.uploadEncrypted(
                         ownerID,
                         safeFilename(path.getFileName().toString(), "uploaded-file"),
+                        policy.algorithm(),
                         encrypted
                 ));
             }

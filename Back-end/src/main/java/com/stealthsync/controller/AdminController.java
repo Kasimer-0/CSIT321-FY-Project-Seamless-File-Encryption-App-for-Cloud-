@@ -2,9 +2,11 @@ package com.stealthsync.controller;
 
 import com.stealthsync.model.dto.*;
 import com.stealthsync.service.AppDataService;
+import com.stealthsync.service.crypto.EncryptionPolicyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,10 +18,12 @@ import java.util.Map;
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
+@PreAuthorize("hasRole('ADMIN')")
 /** Supplies administrator dashboard statistics and user-account management endpoints. */
 public class AdminController {
 
     private final AppDataService dataStore;
+    private final EncryptionPolicyService encryptionPolicyService;
 
     // ==========================================
     // 1. Dashboard Statistics Dashboard Interface
@@ -70,6 +74,6 @@ public class AdminController {
     @GetMapping("/enc-methods")
     public ResponseEntity<List<String>> getEncMethods() {
         // Drop-down options when creating a plan in the front end
-        return ResponseEntity.ok(List.of("AES-128", "AES-256-GCM", "ChaCha20"));
+        return ResponseEntity.ok(encryptionPolicyService.supportedPlanMethods());
     }
 }

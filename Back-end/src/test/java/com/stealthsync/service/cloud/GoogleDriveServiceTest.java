@@ -1,8 +1,11 @@
 package com.stealthsync.service.cloud;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stealthsync.repository.GoogleDriveCredentialRepository;
 import com.stealthsync.service.AppDataService;
+import com.stealthsync.service.crypto.AesGcmService;
+import com.stealthsync.service.crypto.UserVaultService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -45,10 +48,51 @@ class GoogleDriveServiceTest {
         assertTrue(error.getMessage().contains("GOOGLE_DRIVE_CLIENT_ID"));
     }
 
+    @Test
+    void detectsLegacyPlaintextDriveMetadata() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode legacyFile = objectMapper.readTree("""
+                {
+                  "id": "drive-file-1",
+                  "name": "contract.pdf.stealthsync.enc",
+                  "appProperties": {
+                    "stealthsync": "encrypted",
+                    "originalName": "contract.pdf"
+                  }
+                }
+                """);
+
+        Boolean legacy = ReflectionTestUtils.invokeMethod(service(), "hasLegacyPlaintextMetadata", legacyFile);
+
+        assertTrue(Boolean.TRUE.equals(legacy));
+    }
+
+    @Test
+    void ignoresAlreadyEncryptedDriveMetadata() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode migratedFile = objectMapper.readTree("""
+                {
+                  "id": "drive-file-2",
+                  "name": "stlh-random.stealthsync.enc",
+                  "description": "stealthsync-metadata:abc123",
+                  "appProperties": {
+                    "stealthsync": "encrypted",
+                    "metadataVersion": "1",
+                    "encMethod": "AES-256-GCM"
+                  }
+                }
+                """);
+
+        Boolean legacy = ReflectionTestUtils.invokeMethod(service(), "hasLegacyPlaintextMetadata", migratedFile);
+
+        assertTrue(Boolean.FALSE.equals(legacy));
+    }
     private GoogleDriveService service() {
         return new GoogleDriveService(
                 mock(GoogleDriveCredentialRepository.class),
                 mock(AppDataService.class),
+                mock(UserVaultService.class),
+                mock(AesGcmService.class),
                 new ObjectMapper()
         );
     }

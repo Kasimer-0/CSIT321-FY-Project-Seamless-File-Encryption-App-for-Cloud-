@@ -4,6 +4,8 @@ import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.service.AppDataService;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.service.crypto.AesGcmService;
+import com.stealthsync.service.crypto.EncryptionPolicyService;
+import com.stealthsync.service.crypto.UserVaultService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
@@ -29,12 +31,11 @@ import java.util.Map;
 /** Provides local encryption/decryption downloads and the demo encrypted-file storage workflow. */
 public class FileController {
 
-    private static final String DEFAULT_PASSPHRASE = "stealthsync-demo-passphrase";
-    private static final String DEFAULT_ENC_METHOD = "AES-256-GCM";
-
     private final AesGcmService aesGcmService;
     private final AppDataService dataStore;
     private final CurrentUserService currentUserService;
+    private final UserVaultService userVaultService;
+    private final EncryptionPolicyService encryptionPolicyService;
 
     /**
      * Receive files uploaded via drag-and-drop from the frontend and encrypt them silently in the background (FR2.2 / FR1.1)
@@ -45,7 +46,7 @@ public class FileController {
             @RequestParam("passphrase") String passphrase) {
         try {
             log.info("Receiving file for encryption: {}, size: {} bytes", file.getOriginalFilename(), file.getSize());
-            
+
             // Streaming processing is used to directly acquire the input stream, never reading it all into memory at once,
             //  thus preventing OutOfMemoryError (OOM).
             InputStream encryptedStream = aesGcmService.encryptStream(file.getInputStream(), passphrase);
@@ -70,7 +71,7 @@ public class FileController {
             @RequestParam("passphrase") String passphrase) {
         try {
             log.info("Receiving file for decryption: {}", file.getOriginalFilename());
-            
+
             InputStream decryptedStream = aesGcmService.decryptStream(file.getInputStream(), passphrase);
 
             String originalName = file.getOriginalFilename();
@@ -96,17 +97,24 @@ public class FileController {
 
     @PostMapping("/files/encrypt-upload")
     public ResponseEntity<EncryptedFileRecord> encryptAndUpload(@RequestParam("file") MultipartFile file) {
+        Long ownerID = currentUserService.requireUserID();
         try {
             String filename = safeFilename(file.getOriginalFilename(), "uploaded-file");
-            InputStream encryptedStream = aesGcmService.encryptStream(file.getInputStream(), DEFAULT_PASSPHRASE);
-            EncryptedFileRecord record = dataStore.storeEncryptedFile(
-                    currentUserService.requireUserID(),
-                    filename,
-                    file.getSize(),
-                    DEFAULT_ENC_METHOD,
-                    encryptedStream.readAllBytes()
-            );
-            return ResponseEntity.ok(record);
+            EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForUser(ownerID);
+            String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
+            try (InputStream encryptedStream = aesGcmService.encryptStream(
+                    file.getInputStream(),
+                    vaultPassphrase,
+                    policy.keyLengthBits())) {
+                EncryptedFileRecord record = dataStore.storeEncryptedFile(
+                        ownerID,
+                        filename,
+                        file.getSize(),
+                        policy.algorithm(),
+                        encryptedStream.readAllBytes()
+                );
+                return ResponseEntity.ok(record);
+            }
         } catch (Exception e) {
             log.error("Encrypt-upload API failed", e);
             return ResponseEntity.internalServerError().build();
@@ -182,9 +190,13 @@ public class FileController {
         if (record.getEncryptedContent() == null || record.getEncryptedContent().length == 0) {
             return ("Demo decrypted content for " + record.getFileName()).getBytes(StandardCharsets.UTF_8);
         }
+        Long ownerID = record.getOwnerID() == null ? currentUserService.requireUserID() : record.getOwnerID();
+        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(record.getEncMethod());
+        String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
         try (InputStream decryptedStream = aesGcmService.decryptStream(
                 new ByteArrayInputStream(record.getEncryptedContent()),
-                DEFAULT_PASSPHRASE)) {
+                vaultPassphrase,
+                policy.keyLengthBits())) {
             return decryptedStream.readAllBytes();
         }
     }

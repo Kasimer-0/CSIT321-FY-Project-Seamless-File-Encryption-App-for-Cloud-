@@ -19,11 +19,18 @@ public class KeyManagementService {
     private static final int PBKDF2_ITERATIONS = 210_000;
 
     public SecretKey deriveAesKey(String passphrase, byte[] salt) throws GeneralSecurityException {
+        return deriveAesKey(passphrase, salt, 256);
+    }
+
+    public SecretKey deriveAesKey(String passphrase, byte[] salt, int keyLengthBits) throws GeneralSecurityException {
         if (passphrase == null || passphrase.isBlank()) {
             throw new IllegalArgumentException("Passphrase is required.");
         }
         if (salt == null || salt.length == 0) {
             throw new IllegalArgumentException("A salt is required to derive an AES key.");
+        }
+        if (keyLengthBits != 128 && keyLengthBits != 256) {
+            throw new IllegalArgumentException("AES key length must be 128 or 256 bits.");
         }
 
         byte[] keyBytes = null;
@@ -31,7 +38,7 @@ public class KeyManagementService {
                 passphrase.toCharArray(),
                 salt,
                 PBKDF2_ITERATIONS,
-                AES_KEY_LENGTH_BITS
+                keyLengthBits
         );
         try {
             SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");

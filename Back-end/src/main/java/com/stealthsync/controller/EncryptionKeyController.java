@@ -3,6 +3,7 @@ package com.stealthsync.controller;
 import com.stealthsync.model.entity.EncryptionKeyRecord;
 import com.stealthsync.repository.EncryptionKeyRepository;
 import com.stealthsync.security.CurrentUserService;
+import com.stealthsync.service.crypto.EncryptionPolicyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +34,7 @@ public class EncryptionKeyController {
 
     private final EncryptionKeyRepository encryptionKeyRepository;
     private final CurrentUserService currentUserService;
+    private final EncryptionPolicyService encryptionPolicyService;
 
     @GetMapping
     public ResponseEntity<List<EncryptionKeyRecord>> listKeys(
@@ -60,7 +62,7 @@ public class EncryptionKeyController {
     public ResponseEntity<EncryptionKeyRecord> createKey(@RequestBody Map<String, Object> request) {
         Long ownerID = currentUserService.requireUserID();
         String keyName = asString(request.get("keyName"), "New Encryption Key");
-        String algorithm = asString(request.get("algorithm"), "AES-256-GCM");
+        String algorithm = encryptionPolicyService.policyForAlgorithm(asString(request.get("algorithm"), "AES-256-GCM")).algorithm();
         Instant now = Instant.now();
         EncryptionKeyRecord key = new EncryptionKeyRecord(
                 null, ownerID, keyName, algorithm, "active",
@@ -81,7 +83,7 @@ public class EncryptionKeyController {
                         key.setKeyName(asString(request.get("keyName"), key.getKeyName()));
                     }
                     if (request.containsKey("algorithm")) {
-                        key.setAlgorithm(asString(request.get("algorithm"), key.getAlgorithm()));
+                        key.setAlgorithm(encryptionPolicyService.policyForAlgorithm(asString(request.get("algorithm"), key.getAlgorithm())).algorithm());
                     }
                     if (request.containsKey("status")) {
                         key.setStatus(asString(request.get("status"), key.getStatus()));

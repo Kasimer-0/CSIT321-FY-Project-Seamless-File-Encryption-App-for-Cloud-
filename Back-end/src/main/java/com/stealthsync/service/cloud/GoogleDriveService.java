@@ -2,18 +2,23 @@ package com.stealthsync.service.cloud;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stealthsync.model.dto.GoogleDriveFileDTO;
 import com.stealthsync.model.entity.CloudStorageLink;
 import com.stealthsync.model.entity.GoogleDriveCredential;
 import com.stealthsync.repository.GoogleDriveCredentialRepository;
+import com.stealthsync.service.crypto.AesGcmService;
+import com.stealthsync.service.crypto.UserVaultService;
 import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.encrypt.Encryptors;
 import org.springframework.security.crypto.keygen.KeyGenerators;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 /**
  * Implements Google OAuth, encrypted credential persistence, token refresh, and Drive file transfer.
  * Access and refresh tokens are encrypted with an installation secret before JPA persistence.
@@ -51,9 +57,13 @@ public class GoogleDriveService {
     private static final Duration STATE_LIFETIME = Duration.ofMinutes(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final String METADATA_DESCRIPTION_PREFIX = "stealthsync-metadata:";
+    private static final String DEFAULT_LEGACY_ENC_METHOD = "AES-256-GCM";
 
     private final GoogleDriveCredentialRepository credentialRepository;
     private final AppDataService dataStore;
+    private final UserVaultService userVaultService;
+    private final AesGcmService aesGcmService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
@@ -177,27 +187,29 @@ public class GoogleDriveService {
                 + "?q=" + encode(query)
                 + "&orderBy=modifiedTime%20desc"
                 + "&pageSize=100"
-                + "&fields=" + encode("files(id,name,size,createdTime,modifiedTime,appProperties)"));
+                + "&fields=" + encode("files(id,name,size,createdTime,modifiedTime,description,appProperties)"));
         JsonNode response = sendJson(ownerID, HttpRequest.newBuilder(uri).GET());
 
         return response.path("files").findValuesAsText("id").stream()
                 .map(id -> findFileNode(response.path("files"), id))
-                .map(this::toFileDTO)
+                .map(file -> toFileDTO(ownerID, file))
                 .toList();
     }
 
-    public GoogleDriveFileDTO uploadEncrypted(Long ownerID, String originalName, InputStream encryptedContent)
+    public GoogleDriveFileDTO uploadEncrypted(Long ownerID, String originalName, String encMethod, InputStream encryptedContent)
             throws IOException, InterruptedException {
         byte[] encryptedBytes = encryptedContent.readAllBytes();
-        String driveName = originalName + ".stealthsync.enc";
+        String driveName = "stlh-" + newState() + ".stealthsync.enc";
         String boundary = "stealthsync-" + newState();
 
         var metadata = objectMapper.createObjectNode()
                 .put("name", driveName)
-                .put("mimeType", "application/octet-stream");
+                .put("mimeType", "application/octet-stream")
+                .put("description", encryptedMetadataDescription(ownerID, originalName, encMethod));
         metadata.set("appProperties", objectMapper.createObjectNode()
                 .put("stealthsync", "encrypted")
-                .put("originalName", originalName));
+                .put("metadataVersion", "1")
+                .put("encMethod", encMethod));
         if (!isBlank(folderId)) {
             // Set the parent in metadata so ciphertext never lands in Drive root.
             metadata.putArray("parents").add(folderId);
@@ -214,11 +226,11 @@ public class GoogleDriveService {
 
         URI uri = URI.create(DRIVE_UPLOAD_ENDPOINT
                 + "?uploadType=multipart&fields="
-                + encode("id,name,size,createdTime,modifiedTime,appProperties"));
+                + encode("id,name,size,createdTime,modifiedTime,description,appProperties"));
         HttpRequest.Builder request = HttpRequest.newBuilder(uri)
                 .header("Content-Type", "multipart/related; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()));
-        return toFileDTO(sendJson(ownerID, request));
+        return toFileDTO(ownerID, sendJson(ownerID, request));
     }
 
     /** Deletes only the Drive file ID selected by the authenticated owner. */
@@ -234,12 +246,11 @@ public class GoogleDriveService {
 
     public DownloadedDriveFile downloadEncrypted(Long ownerID, String fileId)
             throws IOException, InterruptedException {
-        JsonNode metadata = fileMetadata(ownerID, fileId);
-        String originalName = metadata.path("appProperties").path("originalName")
-                .asText(stripEncryptedSuffix(metadata.path("name").asText("decrypted-file")));
+        JsonNode metadata = migrateLegacyMetadataIfNeeded(ownerID, fileMetadata(ownerID, fileId));
+        DriveFileMetadata fileInfo = readDriveMetadata(ownerID, metadata);
         URI uri = URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId) + "?alt=media");
         HttpResponse<byte[]> response = send(ownerID, HttpRequest.newBuilder(uri).GET(), HttpResponse.BodyHandlers.ofByteArray());
-        return new DownloadedDriveFile(originalName, response.body());
+        return new DownloadedDriveFile(fileInfo.originalName(), fileInfo.encMethod(), response.body());
     }
 
     @Transactional
@@ -251,7 +262,7 @@ public class GoogleDriveService {
 
     private JsonNode fileMetadata(Long ownerID, String fileId) throws IOException, InterruptedException {
         URI uri = URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId)
-                + "?fields=" + encode("id,name,size,createdTime,modifiedTime,appProperties"));
+                + "?fields=" + encode("id,name,size,createdTime,modifiedTime,description,appProperties"));
         return sendJson(ownerID, HttpRequest.newBuilder(uri).GET());
     }
 
@@ -348,15 +359,111 @@ public class GoogleDriveService {
         }
     }
 
-    private GoogleDriveFileDTO toFileDTO(JsonNode file) {
-        String name = file.path("name").asText("encrypted-file.stealthsync.enc");
+    private GoogleDriveFileDTO toFileDTO(Long ownerID, JsonNode file) {
+        JsonNode safeFile = migrateLegacyMetadataIfNeeded(ownerID, file);
+        String name = safeFile.path("name").asText("encrypted-file.stealthsync.enc");
+        DriveFileMetadata fileInfo = readDriveMetadata(ownerID, safeFile);
         return new GoogleDriveFileDTO(
-                file.path("id").asText(),
+                safeFile.path("id").asText(),
                 name,
+                fileInfo.originalName(),
+                safeFile.path("size").asLong(0),
+                parseInstant(safeFile.path("createdTime").asText(null)),
+                parseInstant(safeFile.path("modifiedTime").asText(null))
+        );
+    }
+
+    private JsonNode migrateLegacyMetadataIfNeeded(Long ownerID, JsonNode file) {
+        if (!hasLegacyPlaintextMetadata(file)) {
+            return file;
+        }
+        String fileId = file.path("id").asText("");
+        try {
+            DriveFileMetadata legacyMetadata = legacyFileMetadata(file);
+            return patchEncryptedMetadata(ownerID, fileId, legacyMetadata);
+        } catch (Exception e) {
+            log.warn("Unable to migrate legacy Google Drive metadata for file {}", fileId, e);
+            return file;
+        }
+    }
+
+    private JsonNode patchEncryptedMetadata(Long ownerID, String fileId, DriveFileMetadata metadata)
+            throws IOException, InterruptedException {
+        if (isBlank(fileId)) {
+            throw new IllegalArgumentException("A Drive file ID is required for metadata migration.");
+        }
+
+        ObjectNode appProperties = objectMapper.createObjectNode()
+                .put("stealthsync", "encrypted")
+                .put("metadataVersion", "1")
+                .put("encMethod", metadata.encMethod());
+        // Google Drive treats null appProperties values as delete requests for those keys.
+        appProperties.putNull("originalName");
+
+        ObjectNode requestBody = objectMapper.createObjectNode()
+                .put("name", "stlh-" + newState() + ".stealthsync.enc")
+                .put("description", encryptedMetadataDescription(ownerID, metadata.originalName(), metadata.encMethod()));
+        requestBody.set("appProperties", appProperties);
+
+        URI uri = URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId)
+                + "?fields=" + encode("id,name,size,createdTime,modifiedTime,description,appProperties"));
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri)
+                .header("Content-Type", "application/json; charset=UTF-8")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)));
+        return sendJson(ownerID, request);
+    }
+
+    private boolean hasLegacyPlaintextMetadata(JsonNode file) {
+        String name = file.path("name").asText("");
+        String originalName = file.path("appProperties").path("originalName").asText("");
+        boolean hasEncryptedDescription = file.path("description").asText("").startsWith(METADATA_DESCRIPTION_PREFIX);
+        boolean oldNameShape = name.endsWith(".stealthsync.enc") && !name.startsWith("stlh-");
+        return !originalName.isBlank() || (!hasEncryptedDescription && oldNameShape);
+    }
+
+    private String encryptedMetadataDescription(Long ownerID, String originalName, String encMethod) throws IOException {
+        var metadata = objectMapper.createObjectNode()
+                .put("originalName", originalName)
+                .put("encMethod", encMethod)
+                .put("metadataVersion", 1);
+        byte[] metadataBytes = objectMapper.writeValueAsBytes(metadata);
+        try (InputStream encrypted = aesGcmService.encryptStream(
+                new ByteArrayInputStream(metadataBytes),
+                userVaultService.metadataPassphraseFor(ownerID),
+                256)) {
+            return METADATA_DESCRIPTION_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(encrypted.readAllBytes());
+        } catch (Exception e) {
+            throw new IOException("Unable to encrypt Google Drive metadata.", e);
+        }
+    }
+
+    private DriveFileMetadata readDriveMetadata(Long ownerID, JsonNode file) {
+        String description = file.path("description").asText("");
+        if (description.startsWith(METADATA_DESCRIPTION_PREFIX)) {
+            try {
+                byte[] encryptedMetadata = Base64.getUrlDecoder().decode(description.substring(METADATA_DESCRIPTION_PREFIX.length()));
+                try (InputStream decrypted = aesGcmService.decryptStream(
+                        new ByteArrayInputStream(encryptedMetadata),
+                        userVaultService.metadataPassphraseFor(ownerID),
+                        256)) {
+                    JsonNode metadata = objectMapper.readTree(decrypted.readAllBytes());
+                    return new DriveFileMetadata(
+                            metadata.path("originalName").asText("decrypted-drive-file"),
+                            metadata.path("encMethod").asText(DEFAULT_LEGACY_ENC_METHOD)
+                    );
+                }
+            } catch (Exception ignored) {
+                // Fall back to legacy metadata so one unreadable entry does not break the file list.
+            }
+        }
+        return legacyFileMetadata(file);
+    }
+
+    private DriveFileMetadata legacyFileMetadata(JsonNode file) {
+        String name = file.path("name").asText("encrypted-file.stealthsync.enc");
+        return new DriveFileMetadata(
                 file.path("appProperties").path("originalName").asText(stripEncryptedSuffix(name)),
-                file.path("size").asLong(0),
-                parseInstant(file.path("createdTime").asText(null)),
-                parseInstant(file.path("modifiedTime").asText(null))
+                file.path("appProperties").path("encMethod").asText(DEFAULT_LEGACY_ENC_METHOD)
         );
     }
 
@@ -430,6 +537,9 @@ public class GoogleDriveService {
     private record PendingAuthorization(Long ownerID, Instant expiresAt) {
     }
 
-    public record DownloadedDriveFile(String originalName, byte[] encryptedContent) {
+    private record DriveFileMetadata(String originalName, String encMethod) {
+    }
+
+    public record DownloadedDriveFile(String originalName, String encMethod, byte[] encryptedContent) {
     }
 }

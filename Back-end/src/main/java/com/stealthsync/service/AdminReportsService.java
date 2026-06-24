@@ -45,6 +45,7 @@ public class AdminReportsService {
         report.put("generatedAt", Instant.now().toString());
         report.put("totalUsers", totalUsers);
         report.put("premiumUsers", premiumUsers);
+        report.put("openTickets", 0);
         report.put("encryptedFiles", encryptedFiles);
         report.put("cloudLinks", cloudLinks);
         report.put("activeCloudLinks", activeCloudLinks);

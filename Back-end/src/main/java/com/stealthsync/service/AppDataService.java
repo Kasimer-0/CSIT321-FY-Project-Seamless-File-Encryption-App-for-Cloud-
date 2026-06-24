@@ -11,7 +11,9 @@ import com.stealthsync.repository.CloudStorageLinkRepository;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
 import com.stealthsync.repository.PlanRepository;
 import com.stealthsync.repository.SubscriptionRepository;
+import com.stealthsync.repository.SystemLogRepository;
 import com.stealthsync.repository.UserAccountRepository;
+import com.stealthsync.service.ai.AnomalyDetectorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,12 +21,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +50,8 @@ public class AppDataService {
     private final SubscriptionRepository subscriptionRepository;
     private final CloudStorageLinkRepository cloudStorageLinkRepository;
     private final EncryptedFileRecordRepository encryptedFileRecordRepository;
+    private final SystemLogRepository systemLogRepository;
+    private final AnomalyDetectorService anomalyDetectorService;
     private final PasswordEncoder passwordEncoder;
 
     public Optional<UserAccount> authenticate(String usernameOrEmail, String password) {
@@ -76,10 +83,17 @@ public class AppDataService {
 
     public DashboardStatsResponse dashboardStats() {
         List<UserAccount> users = userAccountRepository.findAll();
+        List<Subscription> activeSubscriptions = activeSubscriptions();
+        int flaggedLogsCount = (int) systemLogRepository.findAll().stream()
+                .filter(anomalyDetectorService::isSuspicious)
+                .count();
+
         return DashboardStatsResponse.builder()
                 .totalUsers(users.size())
                 .premiumUsers((int) users.stream().filter(UserAccount::isSubscribed).count())
                 .inactiveUsers((int) users.stream().filter(UserAccount::isSuspended).count())
+                .flaggedLogsCount(flaggedLogsCount)
+                .revenueStream(revenueStreamForCurrentYear(activeSubscriptions))
                 .build();
     }
 
@@ -422,6 +436,41 @@ public class AppDataService {
                 .orElse(false);
     }
 
+    private List<Subscription> activeSubscriptions() {
+        return subscriptionRepository.findAll().stream()
+                .filter(this::isActiveSubscription)
+                .toList();
+    }
+
+    private List<DashboardStatsResponse.MonthlyRevenue> revenueStreamForCurrentYear(List<Subscription> activeSubscriptions) {
+        int year = LocalDate.now().getYear();
+        DateTimeFormatter monthLabel = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH);
+        return IntStream.rangeClosed(1, 12)
+                .mapToObj(month -> {
+                    YearMonth current = YearMonth.of(year, month);
+                    double revenue = activeSubscriptions.stream()
+                            .filter(subscription -> overlapsMonth(subscription, current))
+                            .mapToDouble(subscription -> subscription.getPlan().getPlanPrice())
+                            .sum();
+                    return new DashboardStatsResponse.MonthlyRevenue(current.format(monthLabel), revenue);
+                })
+                .toList();
+    }
+
+    private boolean overlapsMonth(Subscription subscription, YearMonth month) {
+        LocalDate monthStart = month.atDay(1);
+        LocalDate monthEnd = month.atEndOfMonth();
+        LocalDate subscriptionStart = subscription.getSubcriptionStartDate();
+        LocalDate subscriptionEnd = subscription.getSubscriptionEndDate();
+        if (subscriptionStart == null || subscriptionEnd == null) {
+            return month.equals(YearMonth.now());
+        }
+        return !subscriptionStart.isAfter(monthEnd) && !subscriptionEnd.isBefore(monthStart);
+    }
+
+    private boolean isActiveSubscription(Subscription subscription) {
+        return subscription != null && "active".equalsIgnoreCase(subscription.getSubcriptionStatus());
+    }
     private Optional<UserAccount> defaultCustomer() {
         return userAccountRepository.findByEmailIgnoreCase(DEFAULT_CUSTOMER_EMAIL)
                 .or(() -> userAccountRepository.findAll().stream()
