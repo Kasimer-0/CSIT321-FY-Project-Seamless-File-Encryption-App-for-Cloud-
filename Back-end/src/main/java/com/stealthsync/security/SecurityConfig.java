@@ -24,6 +24,10 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
+                // Stateless JWT logout is handled by AuthController so the
+                // frontend receives JSON instead of Spring Security's default
+                // redirect to a GET /login page.
+                .logout(logout -> logout.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

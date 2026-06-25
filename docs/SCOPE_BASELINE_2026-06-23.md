@@ -31,6 +31,7 @@ StealthSync is frozen around the Windows desktop demo, Google Drive integration,
 The current codebase has removed Ticket frontend/backend code. Keep it fully removed for this sprint unless the team formally decides to restore it as Future Work. Do not leave a half-removed Ticket feature in frontend imports, backend controllers, UML, or test documents.
 
 ## Notes For Report Accuracy
-- The current vault is a server-managed per-user vault baseline. Do not claim full zero-knowledge storage until user-held wrapping or recovery-key unwrapping is implemented.
+- The current file-encryption path uses a server-managed per-user vault baseline. Do not claim full zero-knowledge storage until the tested local `VaultService` unlock flow is connected to file and Google Drive encryption.
 - Existing files uploaded before the vault migration may need to be re-uploaded because they were encrypted with the old prototype passphrase.
-- Drive metadata protection applies to new uploads after this baseline; legacy Drive objects may still contain the old plaintext `appProperties.originalName` until re-uploaded.
+- Drive metadata protection applies to new uploads. Legacy Drive objects are lazily migrated on list/download by randomizing the Drive object name, moving the original filename into encrypted metadata, and deleting the old plaintext `appProperties.originalName` key when Google accepts the patch.
+- See `docs/vault-derived-key-design.md` for the target master-password-derived vault design.
