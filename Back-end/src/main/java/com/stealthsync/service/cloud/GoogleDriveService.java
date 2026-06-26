@@ -196,7 +196,7 @@ public class GoogleDriveService {
                 .toList();
     }
 
-    public GoogleDriveFileDTO uploadEncrypted(Long ownerID, String originalName, String encMethod, InputStream encryptedContent)
+    public GoogleDriveFileDTO uploadEncrypted(Long ownerID, String originalName, String encMethod, Long keyID, String keyName, String keyFingerprint, InputStream encryptedContent)
             throws IOException, InterruptedException {
         byte[] encryptedBytes = encryptedContent.readAllBytes();
         String driveName = "stlh-" + newState() + ".stealthsync.enc";
@@ -205,7 +205,7 @@ public class GoogleDriveService {
         var metadata = objectMapper.createObjectNode()
                 .put("name", driveName)
                 .put("mimeType", "application/octet-stream")
-                .put("description", encryptedMetadataDescription(ownerID, originalName, encMethod));
+                .put("description", encryptedMetadataDescription(ownerID, originalName, encMethod, keyID, keyName, keyFingerprint));
         metadata.set("appProperties", objectMapper.createObjectNode()
                 .put("stealthsync", "encrypted")
                 .put("metadataVersion", "1")
@@ -250,7 +250,7 @@ public class GoogleDriveService {
         DriveFileMetadata fileInfo = readDriveMetadata(ownerID, metadata);
         URI uri = URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId) + "?alt=media");
         HttpResponse<byte[]> response = send(ownerID, HttpRequest.newBuilder(uri).GET(), HttpResponse.BodyHandlers.ofByteArray());
-        return new DownloadedDriveFile(fileInfo.originalName(), fileInfo.encMethod(), response.body());
+        return new DownloadedDriveFile(fileInfo.originalName(), fileInfo.encMethod(), fileInfo.keyID(), fileInfo.keyName(), fileInfo.keyFingerprint(), response.body());
     }
 
     @Transactional
@@ -369,7 +369,11 @@ public class GoogleDriveService {
                 fileInfo.originalName(),
                 safeFile.path("size").asLong(0),
                 parseInstant(safeFile.path("createdTime").asText(null)),
-                parseInstant(safeFile.path("modifiedTime").asText(null))
+                parseInstant(safeFile.path("modifiedTime").asText(null)),
+                fileInfo.encMethod(),
+                fileInfo.keyID(),
+                fileInfo.keyName(),
+                fileInfo.keyFingerprint()
         );
     }
 
@@ -402,7 +406,7 @@ public class GoogleDriveService {
 
         ObjectNode requestBody = objectMapper.createObjectNode()
                 .put("name", "stlh-" + newState() + ".stealthsync.enc")
-                .put("description", encryptedMetadataDescription(ownerID, metadata.originalName(), metadata.encMethod()));
+                .put("description", encryptedMetadataDescription(ownerID, metadata.originalName(), metadata.encMethod(), metadata.keyID(), metadata.keyName(), metadata.keyFingerprint()));
         requestBody.set("appProperties", appProperties);
 
         URI uri = URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId)
@@ -421,11 +425,20 @@ public class GoogleDriveService {
         return !originalName.isBlank() || (!hasEncryptedDescription && oldNameShape);
     }
 
-    private String encryptedMetadataDescription(Long ownerID, String originalName, String encMethod) throws IOException {
+    private String encryptedMetadataDescription(Long ownerID, String originalName, String encMethod, Long keyID, String keyName, String keyFingerprint) throws IOException {
         var metadata = objectMapper.createObjectNode()
                 .put("originalName", originalName)
                 .put("encMethod", encMethod)
                 .put("metadataVersion", 1);
+        if (keyID != null) {
+            metadata.put("keyID", keyID);
+        }
+        if (!isBlank(keyName)) {
+            metadata.put("keyName", keyName);
+        }
+        if (!isBlank(keyFingerprint)) {
+            metadata.put("keyFingerprint", keyFingerprint);
+        }
         byte[] metadataBytes = objectMapper.writeValueAsBytes(metadata);
         try (InputStream encrypted = aesGcmService.encryptStream(
                 new ByteArrayInputStream(metadataBytes),
@@ -449,7 +462,10 @@ public class GoogleDriveService {
                     JsonNode metadata = objectMapper.readTree(decrypted.readAllBytes());
                     return new DriveFileMetadata(
                             metadata.path("originalName").asText("decrypted-drive-file"),
-                            metadata.path("encMethod").asText(DEFAULT_LEGACY_ENC_METHOD)
+                            metadata.path("encMethod").asText(DEFAULT_LEGACY_ENC_METHOD),
+                            metadata.hasNonNull("keyID") ? metadata.path("keyID").asLong() : null,
+                            textOrNull(metadata, "keyName"),
+                            textOrNull(metadata, "keyFingerprint")
                     );
                 }
             } catch (Exception ignored) {
@@ -463,7 +479,10 @@ public class GoogleDriveService {
         String name = file.path("name").asText("encrypted-file.stealthsync.enc");
         return new DriveFileMetadata(
                 file.path("appProperties").path("originalName").asText(stripEncryptedSuffix(name)),
-                file.path("appProperties").path("encMethod").asText(DEFAULT_LEGACY_ENC_METHOD)
+                file.path("appProperties").path("encMethod").asText(DEFAULT_LEGACY_ENC_METHOD),
+                null,
+                null,
+                null
         );
     }
 
@@ -537,9 +556,9 @@ public class GoogleDriveService {
     private record PendingAuthorization(Long ownerID, Instant expiresAt) {
     }
 
-    private record DriveFileMetadata(String originalName, String encMethod) {
+    private record DriveFileMetadata(String originalName, String encMethod, Long keyID, String keyName, String keyFingerprint) {
     }
 
-    public record DownloadedDriveFile(String originalName, String encMethod, byte[] encryptedContent) {
+    public record DownloadedDriveFile(String originalName, String encMethod, Long keyID, String keyName, String keyFingerprint, byte[] encryptedContent) {
     }
 }

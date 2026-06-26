@@ -1,5 +1,6 @@
 package com.stealthsync.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -17,7 +18,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Entity
 @Table(name = "encryption_keys")
-/** Customer-owned key metadata; it intentionally stores a fingerprint rather than exposed raw key bytes. */
+/** Customer-owned password-protected key metadata; plaintext passwords and derived key bytes are never serialized. */
 public class EncryptionKeyRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,6 +39,17 @@ public class EncryptionKeyRecord {
 
     @Column(nullable = false)
     private String fingerprint;
+
+    @JsonIgnore
+    @Column
+    private String salt;
+
+    @JsonIgnore
+    @Column
+    private String passwordVerifier;
+
+    @Column
+    private String keyScheme;
 
     @Column(nullable = false)
     private Instant createdAt;

@@ -45,6 +45,7 @@ export type EncryptionKeyRecord = {
     algorithm: string
     status: "active" | "inactive" | "retired"
     fingerprint: string
+    keyScheme: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -140,4 +141,8 @@ export type GoogleDriveFile = {
     fileSize: number
     createdAt: string | null
     modifiedAt: string | null
+    encMethod: string
+    keyID: number | null
+    keyName: string | null
+    keyFingerprint: string | null
 }

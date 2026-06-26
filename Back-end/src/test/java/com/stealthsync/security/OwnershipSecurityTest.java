@@ -137,6 +137,9 @@ class OwnershipSecurityTest {
                 "AES-256-GCM",
                 "active",
                 "OTHER-FINGERPRINT",
+                "test-salt",
+                "test-verifier",
+                "password-derived-v1",
                 now,
                 now
         ));
@@ -181,6 +184,39 @@ class OwnershipSecurityTest {
                 .andExpect(status().isForbidden());
     }
 
+
+    @Test
+    void createEncryptionKeyRequiresPassword() throws Exception {
+        mockMvc.perform(post("/encryption-keys")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"keyName":"No password key","algorithm":"AES-256-GCM"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Key password is required."));
+    }
+
+    @Test
+    void createEncryptionKeyDoesNotReturnSensitiveMaterialAndCanBeListed() throws Exception {
+        mockMvc.perform(post("/encryption-keys")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"keyName":"Demo key","algorithm":"AES-256-GCM","keyPassword":"Master@12345"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.keyName").value("Demo key"))
+                .andExpect(jsonPath("$.salt").doesNotExist())
+                .andExpect(jsonPath("$.passwordVerifier").doesNotExist());
+
+        mockMvc.perform(get("/encryption-keys")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].keyName").value("Demo key"))
+                .andExpect(jsonPath("$[0].salt").doesNotExist())
+                .andExpect(jsonPath("$[0].passwordVerifier").doesNotExist());
+    }
     private String bearer(String token) {
         return "Bearer " + token;
     }

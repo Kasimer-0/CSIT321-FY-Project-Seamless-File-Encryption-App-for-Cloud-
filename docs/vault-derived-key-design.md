@@ -41,3 +41,16 @@ The safest implementation path is:
 ## 2026-06-25 Minimum Decision
 
 For the current sprint, keep the existing server-managed per-user vault as a safer baseline than the old shared demo passphrase, and document it honestly. The next P0 implementation step is to connect the already-tested `VaultService` unlock state to the file and Google Drive encryption controllers, then add the matching frontend unlock prompt.
+
+## 2026-06-26 Password-Protected Key Flow
+
+The teammate proposal is accepted for the demo file-encryption path with a small scope:
+
+1. Creating an encryption key requires a key name, algorithm, and key password.
+2. The backend stores a random salt, a password verifier, a key fingerprint, and the key scheme. It must not store the plaintext key password.
+3. Encrypting a local file or Google Drive upload requires the selected `keyID` and the key password. The selected key's derived passphrase is used for AES-GCM.
+4. Decrypting a file uses the file record or encrypted Drive metadata to identify the key, then requires the matching key password.
+5. Existing local records that were created before password-protected keys can still fall back to the owner-scoped `UserVaultService` path when their key record no longer exists.
+6. New Google Drive objects keep randomized object names, and original file metadata is stored in encrypted Drive description metadata rather than plaintext `appProperties`.
+
+Physical token binding remains prototype/future work. The current project must not claim real USB, FIDO2, WebAuthn, or automatic hardware unlock until actual hardware verification and secure key-release logic are implemented. A future prototype may add a `boundKeyID` on token records, but password entry remains required in the current sprint baseline.

@@ -4,6 +4,7 @@ import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.service.AppDataService;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.service.crypto.AesGcmService;
+import com.stealthsync.service.crypto.EncryptionKeyService;
 import com.stealthsync.service.crypto.EncryptionPolicyService;
 import com.stealthsync.service.crypto.UserVaultService;
 import lombok.RequiredArgsConstructor;
@@ -34,8 +35,9 @@ public class FileController {
     private final AesGcmService aesGcmService;
     private final AppDataService dataStore;
     private final CurrentUserService currentUserService;
-    private final UserVaultService userVaultService;
+    private final EncryptionKeyService encryptionKeyService;
     private final EncryptionPolicyService encryptionPolicyService;
+    private final UserVaultService userVaultService;
 
     /**
      * Receive files uploaded via drag-and-drop from the frontend and encrypt them silently in the background (FR2.2 / FR1.1)
@@ -96,35 +98,43 @@ public class FileController {
     }
 
     @PostMapping("/files/encrypt-upload")
-    public ResponseEntity<EncryptedFileRecord> encryptAndUpload(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> encryptAndUpload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("keyID") Long keyID,
+            @RequestParam("keyPassword") String keyPassword) {
         Long ownerID = currentUserService.requireUserID();
         try {
             String filename = safeFilename(file.getOriginalFilename(), "uploaded-file");
-            EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForUser(ownerID);
-            String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
+            EncryptionKeyService.DerivedKeyMaterial keyMaterial =
+                    encryptionKeyService.requireActiveKeyMaterial(ownerID, keyID, keyPassword);
+            EncryptionPolicyService.EncryptionPolicy policy =
+                    encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
             try (InputStream encryptedStream = aesGcmService.encryptStream(
                     file.getInputStream(),
-                    vaultPassphrase,
+                    keyMaterial.passphrase(),
                     policy.keyLengthBits())) {
                 EncryptedFileRecord record = dataStore.storeEncryptedFile(
                         ownerID,
                         filename,
                         file.getSize(),
                         policy.algorithm(),
+                        keyMaterial.key().getKeyID(),
                         encryptedStream.readAllBytes()
                 );
                 return ResponseEntity.ok(record);
             }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             log.error("Encrypt-upload API failed", e);
-            return ResponseEntity.internalServerError().build();
+            return ResponseEntity.internalServerError().body(Map.of("message", "Unable to encrypt and store the file."));
         }
     }
 
     @GetMapping("/files/{id}/decrypt-download")
     public ResponseEntity<InputStreamResource> decryptAndDownload(@PathVariable Long id) {
         return dataStore.findEncryptedFile(id, currentUserService.requireUserID())
-                .map(this::downloadRecord)
+                .map(record -> downloadRecord(record, null))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -142,15 +152,17 @@ public class FileController {
      * can see exactly where the file was written.
      */
     @PostMapping("/files/{id}/decrypt-save")
-    public ResponseEntity<Map<String, Object>> decryptAndSave(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> decryptAndSave(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> request) {
         return dataStore.findEncryptedFile(id, currentUserService.requireUserID())
-                .map(this::saveRecordToDownloads)
+                .map(record -> saveRecordToDownloads(record, keyPassword(request)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    private ResponseEntity<InputStreamResource> downloadRecord(EncryptedFileRecord record) {
+    private ResponseEntity<InputStreamResource> downloadRecord(EncryptedFileRecord record, String keyPassword) {
         try {
-            byte[] plaintext = decryptRecord(record);
+            byte[] plaintext = decryptRecord(record, keyPassword);
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, attachmentHeader(record.getFileName()))
@@ -163,9 +175,9 @@ public class FileController {
     }
 
     /** Saves plaintext to Downloads and returns the actual collision-safe path. */
-    private ResponseEntity<Map<String, Object>> saveRecordToDownloads(EncryptedFileRecord record) {
+    private ResponseEntity<Map<String, Object>> saveRecordToDownloads(EncryptedFileRecord record, String keyPassword) {
         try {
-            byte[] plaintext = decryptRecord(record);
+            byte[] plaintext = decryptRecord(record, keyPassword);
             Path downloads = Path.of(System.getProperty("user.home"), "Downloads");
             Files.createDirectories(downloads);
             Path destination = availableDestination(downloads, safeFilename(record.getFileName(), "decrypted-file"));
@@ -176,6 +188,8 @@ public class FileController {
                     "savedPath", destination.toAbsolutePath().toString(),
                     "size", plaintext.length
             ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             log.error("Decrypt-save API failed", e);
             return ResponseEntity.internalServerError().body(Map.of(
@@ -184,7 +198,7 @@ public class FileController {
         }
     }
 
-    private byte[] decryptRecord(EncryptedFileRecord record) throws Exception {
+    private byte[] decryptRecord(EncryptedFileRecord record, String keyPassword) throws Exception {
         // Early prototype seed records have no ciphertext. Preserve their demo
         // behavior while real records continue through AES-GCM decryption.
         if (record.getEncryptedContent() == null || record.getEncryptedContent().length == 0) {
@@ -192,13 +206,31 @@ public class FileController {
         }
         Long ownerID = record.getOwnerID() == null ? currentUserService.requireUserID() : record.getOwnerID();
         EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(record.getEncMethod());
-        String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
-        try (InputStream decryptedStream = aesGcmService.decryptStream(
-                new ByteArrayInputStream(record.getEncryptedContent()),
-                vaultPassphrase,
-                policy.keyLengthBits())) {
-            return decryptedStream.readAllBytes();
+        try {
+            EncryptionKeyService.DerivedKeyMaterial keyMaterial =
+                    encryptionKeyService.requireActiveKeyMaterial(ownerID, record.getKeyID(), keyPassword);
+            try (InputStream decryptedStream = aesGcmService.decryptStream(
+                    new ByteArrayInputStream(record.getEncryptedContent()),
+                    keyMaterial.passphrase(),
+                    policy.keyLengthBits())) {
+                return decryptedStream.readAllBytes();
+            }
+        } catch (IllegalArgumentException exception) {
+            if (!"Encryption key was not found.".equals(exception.getMessage())) {
+                throw exception;
+            }
+            // Records created before password-protected keys used the per-user vault passphrase.
+            // Keep this owner-scoped fallback only for those legacy local records.
+            try (InputStream decryptedStream = aesGcmService.decryptStream(
+                    new ByteArrayInputStream(record.getEncryptedContent()),
+                    userVaultService.filePassphraseFor(ownerID),
+                    policy.keyLengthBits())) {
+                return decryptedStream.readAllBytes();
+            }
         }
+    }
+    private String keyPassword(Map<String, String> request) {
+        return request == null ? null : request.get("keyPassword");
     }
 
     /** Keeps existing downloads intact by selecting the first unused filename. */

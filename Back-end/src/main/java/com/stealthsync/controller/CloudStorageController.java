@@ -6,6 +6,7 @@ import com.stealthsync.service.AppDataService;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.service.cloud.GoogleDriveService;
 import com.stealthsync.service.crypto.AesGcmService;
+import com.stealthsync.service.crypto.EncryptionKeyService;
 import com.stealthsync.service.crypto.EncryptionPolicyService;
 import com.stealthsync.service.crypto.UserVaultService;
 import com.stealthsync.config.DesktopWindowLauncher;
@@ -46,6 +47,7 @@ public class CloudStorageController {
     private final CurrentUserService currentUserService;
     private final UserVaultService userVaultService;
     private final EncryptionPolicyService encryptionPolicyService;
+    private final EncryptionKeyService encryptionKeyService;
 
     @GetMapping("/links")
     public ResponseEntity<List<CloudStorageLink>> getLinks() {
@@ -150,32 +152,39 @@ public class CloudStorageController {
 
     @PostMapping(value = "/google-drive/files/encrypt-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<GoogleDriveFileDTO> encryptAndUploadToGoogleDrive(
-            @RequestParam("file") MultipartFile file) throws Exception {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("keyID") Long keyID,
+            @RequestParam("keyPassword") String keyPassword) throws Exception {
         Long ownerID = currentUserService.requireUserID();
         String originalName = safeFilename(file.getOriginalFilename(), "uploaded-file");
-        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForUser(ownerID);
-        String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
-        // Encrypt locally with the current user's vault key before the stream is handed to Google Drive.
+        EncryptionKeyService.DerivedKeyMaterial keyMaterial =
+                encryptionKeyService.requireActiveKeyMaterial(ownerID, keyID, keyPassword);
+        EncryptionPolicyService.EncryptionPolicy policy =
+                encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
+        // Encrypt locally with the selected password-protected key before the stream is handed to Google Drive.
         try (InputStream encrypted = aesGcmService.encryptStream(
                 file.getInputStream(),
-                vaultPassphrase,
+                keyMaterial.passphrase(),
                 policy.keyLengthBits())) {
-            return ResponseEntity.ok(googleDriveService.uploadEncrypted(ownerID, originalName, policy.algorithm(), encrypted));
+            return ResponseEntity.ok(googleDriveService.uploadEncrypted(
+                    ownerID,
+                    originalName,
+                    policy.algorithm(),
+                    keyMaterial.key().getKeyID(),
+                    keyMaterial.key().getKeyName(),
+                    keyMaterial.key().getFingerprint(),
+                    encrypted));
         }
     }
 
     @GetMapping("/google-drive/files/{fileId}/decrypt-download")
     public ResponseEntity<InputStreamResource> decryptGoogleDriveFile(
-            @PathVariable String fileId) throws Exception {
+            @PathVariable String fileId,
+            @RequestHeader(value = "X-Key-Password", required = false) String keyPassword) throws Exception {
         Long ownerID = currentUserService.requireUserID();
         // Download encrypted bytes first, then return only locally decrypted content to the customer.
         GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
-        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(driveFile.encMethod());
-        InputStream decrypted = aesGcmService.decryptStream(
-                new ByteArrayInputStream(driveFile.encryptedContent()),
-                userVaultService.filePassphraseFor(ownerID),
-                policy.keyLengthBits()
-        );
+        InputStream decrypted = decryptDriveContent(ownerID, driveFile, keyPassword);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(driveFile.originalName(), StandardCharsets.UTF_8)
@@ -201,16 +210,13 @@ public class CloudStorageController {
      */
     @PostMapping("/google-drive/files/{fileId}/decrypt-save")
     public ResponseEntity<Map<String, Object>> decryptAndSaveGoogleDriveFile(
-            @PathVariable String fileId) {
+            @PathVariable String fileId,
+            @RequestBody(required = false) Map<String, String> request) {
         Long ownerID = currentUserService.requireUserID();
         try {
             GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
             byte[] plaintext;
-            EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(driveFile.encMethod());
-            try (InputStream decrypted = aesGcmService.decryptStream(
-                    new ByteArrayInputStream(driveFile.encryptedContent()),
-                    userVaultService.filePassphraseFor(ownerID),
-                    policy.keyLengthBits())) {
+            try (InputStream decrypted = decryptDriveContent(ownerID, driveFile, keyPassword(request))) {
                 plaintext = decrypted.readAllBytes();
             }
 
@@ -227,6 +233,8 @@ public class CloudStorageController {
                     "savedPath", destination.toAbsolutePath().toString(),
                     "size", plaintext.length
             ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             log.error("Google Drive decrypt-save failed", e);
             return ResponseEntity.internalServerError().body(Map.of(
@@ -243,7 +251,7 @@ public class CloudStorageController {
     @PostMapping(value = "/google-drive/local-file-info", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> localFileInfo(@RequestBody Map<String, String> request) {
         try {
-            Path path = resolveLocalUserFile(request.get("fileUri"));
+            Path path = resolveLocalUserFile(asString(request.get("fileUri")));
             return ResponseEntity.ok(Map.of(
                     "fileName", path.getFileName().toString(),
                     "fileSize", Files.size(path),
@@ -262,21 +270,31 @@ public class CloudStorageController {
      */
     @PostMapping(value = "/google-drive/files/encrypt-upload-path", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> encryptAndUploadLocalPath(
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, Object> request) {
         Long ownerID = currentUserService.requireUserID();
         try {
-            Path path = resolveLocalUserFile(request.get("fileUri"));
-            EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForUser(ownerID);
-            String vaultPassphrase = userVaultService.filePassphraseFor(ownerID);
+            Path path = resolveLocalUserFile(asString(request.get("fileUri")));
+            EncryptionKeyService.DerivedKeyMaterial keyMaterial = encryptionKeyService.requireActiveKeyMaterial(
+                    ownerID,
+                    asLong(request.get("keyID")),
+                    asString(request.get("keyPassword"))
+            );
+            EncryptionPolicyService.EncryptionPolicy policy =
+                    encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
             try (InputStream input = Files.newInputStream(path);
-                 InputStream encrypted = aesGcmService.encryptStream(input, vaultPassphrase, policy.keyLengthBits())) {
+                 InputStream encrypted = aesGcmService.encryptStream(input, keyMaterial.passphrase(), policy.keyLengthBits())) {
                 return ResponseEntity.ok(googleDriveService.uploadEncrypted(
                         ownerID,
                         safeFilename(path.getFileName().toString(), "uploaded-file"),
                         policy.algorithm(),
+                        keyMaterial.key().getKeyID(),
+                        keyMaterial.key().getKeyName(),
+                        keyMaterial.key().getFingerprint(),
                         encrypted
                 ));
             }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             log.error("Encrypt-upload from local drag path failed", e);
             return ResponseEntity.badRequest().body(Map.of(
@@ -285,6 +303,42 @@ public class CloudStorageController {
         }
     }
 
+    private InputStream decryptDriveContent(Long ownerID, GoogleDriveService.DownloadedDriveFile driveFile, String keyPassword) throws Exception {
+        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(driveFile.encMethod());
+        if (driveFile.keyID() == null) {
+            // Legacy Drive files created before password-protected keys are still decrypted with the user vault.
+            return aesGcmService.decryptStream(
+                    new ByteArrayInputStream(driveFile.encryptedContent()),
+                    userVaultService.filePassphraseFor(ownerID),
+                    policy.keyLengthBits()
+            );
+        }
+        EncryptionKeyService.DerivedKeyMaterial keyMaterial =
+                encryptionKeyService.requireActiveKeyMaterial(ownerID, driveFile.keyID(), keyPassword);
+        return aesGcmService.decryptStream(
+                new ByteArrayInputStream(driveFile.encryptedContent()),
+                keyMaterial.passphrase(),
+                policy.keyLengthBits()
+        );
+    }
+
+    private String keyPassword(Map<String, String> request) {
+        return request == null ? null : request.get("keyPassword");
+    }
+
+    private Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Long.parseLong(text.trim());
+        }
+        return null;
+    }
+
+    private String asString(Object value) {
+        return value instanceof String text ? text : null;
+    }
     private ResponseEntity<String> htmlResponse(String title, String message) {
         String html = """
                 <!doctype html>

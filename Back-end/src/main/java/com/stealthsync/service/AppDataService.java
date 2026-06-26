@@ -402,8 +402,7 @@ public class AppDataService {
 
     @Transactional
     public EncryptedFileRecord storeEncryptedFile(Long ownerID, String filename, long originalSize,
-                                                   String encMethod, byte[] encryptedContent) {
-        long nextKeyID = 1001L + encryptedFileRecordRepository.count();
+                                                   String encMethod, Long keyID, byte[] encryptedContent) {
         EncryptedFileRecord record = new EncryptedFileRecord(
                 null,
                 ownerID,
@@ -412,7 +411,7 @@ public class AppDataService {
                 fileType(filename),
                 Instant.now(),
                 encMethod,
-                nextKeyID,
+                keyID,
                 encryptedContent
         );
         return encryptedFileRecordRepository.save(record);

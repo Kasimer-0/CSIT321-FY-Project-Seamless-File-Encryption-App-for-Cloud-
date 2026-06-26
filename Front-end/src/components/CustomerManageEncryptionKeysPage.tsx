@@ -14,6 +14,7 @@ function CustomerManageEncryptionKeysPage() {
     const [loading, setLoading] = useState(true)
     const [keyName, setKeyName] = useState("")
     const [algorithm, setAlgorithm] = useState("AES-256-GCM")
+    const [keyPassword, setKeyPassword] = useState("")
 
     const fetchKeys = async () => {
         try {
@@ -40,6 +41,11 @@ function CustomerManageEncryptionKeysPage() {
     }, [search])
 
     const createKey = async () => {
+        if (!keyPassword.trim()) {
+            toast.error("Key password is required")
+            return
+        }
+
         try {
             const response = await apiFetch("http://localhost:8080/encryption-keys", {
                 method: "POST",
@@ -47,7 +53,8 @@ function CustomerManageEncryptionKeysPage() {
                 credentials: "include",
                 body: JSON.stringify({
                     keyName: keyName.trim() || "New Encryption Key",
-                    algorithm
+                    algorithm,
+                    keyPassword
                 })
             })
             if (!response.ok) {
@@ -55,6 +62,7 @@ function CustomerManageEncryptionKeysPage() {
                 return
             }
             setKeyName("")
+            setKeyPassword("")
             await fetchKeys()
             toast.success("Encryption key created")
         } catch {
@@ -112,19 +120,22 @@ function CustomerManageEncryptionKeysPage() {
 
             <div className="card p-3 mb-3">
                 <div className="row g-2 align-items-end">
-                    <div className="col-12 col-md-5">
+                    <div className="col-12 col-md-4">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Name</label>
                         <input className="form-control" value={keyName} onChange={e => setKeyName(e.target.value)} placeholder="Project backup key" />
                     </div>
-                    <div className="col-12 col-md-4">
+                    <div className="col-12 col-md-3">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>Algorithm</label>
                         <select className="form-select" value={algorithm} onChange={e => setAlgorithm(e.target.value)}>
                             <option>AES-256-GCM</option>
                             <option>AES-128</option>
-                            <option>ChaCha20</option>
                         </select>
                     </div>
                     <div className="col-12 col-md-3">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Password</label>
+                        <input className="form-control" type="password" value={keyPassword} onChange={e => setKeyPassword(e.target.value)} placeholder="Master password" />
+                    </div>
+                    <div className="col-12 col-md-2">
                         <button className="btn btn-primary w-100" onClick={createKey}>Create Key</button>
                     </div>
                 </div>

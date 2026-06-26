@@ -1,5 +1,6 @@
 import { apiFetch } from "../lib/api"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import type { EncryptionKeyRecord } from "../Type"
 import toast from "react-hot-toast"
 
 function CustomerEncryptFile() {
@@ -11,6 +12,35 @@ function CustomerEncryptFile() {
     const [uploading, setUploading] = useState(false)
     const [privacyWarnings, setPrivacyWarnings] = useState<string[]>([])
     const [showPrivacyConfirm, setShowPrivacyConfirm] = useState(false)
+    const [keys, setKeys] = useState<EncryptionKeyRecord[]>([])
+    const [selectedKeyID, setSelectedKeyID] = useState<number | null>(null)
+    const [keyPassword, setKeyPassword] = useState("")
+    const [keyLoading, setKeyLoading] = useState(true)
+
+    useEffect(() => {
+        let cancelled = false
+
+        const fetchKeys = async () => {
+            try {
+                const response = await apiFetch("http://localhost:8080/encryption-keys", { credentials: "include" })
+                if (!response.ok) throw new Error("Unable to load keys")
+                const records = await response.json() as EncryptionKeyRecord[]
+                const activeKeys = records.filter(key => key.status === "active")
+                if (cancelled) return
+                setKeys(activeKeys)
+                if (activeKeys.length > 0) setSelectedKeyID(activeKeys[0].keyID)
+            } catch {
+                if (!cancelled) toast.error("Encryption keys could not be loaded")
+            } finally {
+                if (!cancelled) setKeyLoading(false)
+            }
+        }
+
+        void fetchKeys()
+        return () => {
+            cancelled = true
+        }
+    }, [])
 
     const clearSelection = () => {
         setSelectedFile(null)
@@ -81,6 +111,14 @@ function CustomerEncryptFile() {
 
     const handleUpload = async (skipPrivacyScan = false) => {
         if (!selectedFile) return
+        if (!selectedKeyID) {
+            toast.error("Create and select an active encryption key first")
+            return
+        }
+        if (!keyPassword.trim()) {
+            toast.error("Enter the selected key password")
+            return
+        }
 
         setUploading(true)
 
@@ -97,18 +135,21 @@ function CustomerEncryptFile() {
 
             // Browse uploads real bytes as multipart data. JavaFX drag and drop
             // supplies only a file URI, so that path uses the native bridge.
-            const uploadName = droppedFileName || selectedFile.name.replace(/^.*[\\/]/, "")
+            const uploadName = droppedFileName || selectedFile.name.replace(/^.*[\/]/, "")
+            const passwordForRequest = keyPassword.trim()
             let response: Response
             if (droppedFileUri) {
                 response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload-path`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify({ fileUri: droppedFileUri })
+                    body: JSON.stringify({ fileUri: droppedFileUri, keyID: selectedKeyID, keyPassword: passwordForRequest })
                 })
             } else {
                 const formData = new FormData()
                 formData.append("file", selectedFile, uploadName)
+                formData.append("keyID", String(selectedKeyID))
+                formData.append("keyPassword", passwordForRequest)
                 response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload`, {
                     method: "POST",
                     credentials: "include",
@@ -117,15 +158,17 @@ function CustomerEncryptFile() {
             }
 
             if (!response.ok) {
-                toast.error("Failed to encrypt and upload file")
+                const error = await response.json().catch(() => null)
+                toast.error(error?.message ?? "Failed to encrypt and upload file")
                 return
             }
 
             toast.success(`${uploadName}.stealthsync.enc uploaded to the configured Google Drive folder`)
             clearSelection()
+            setKeyPassword("")
             setPrivacyWarnings([])
 
-        } catch (err) {
+        } catch {
             toast.error("Server connection failed")
         } finally {
             setUploading(false)
@@ -145,6 +188,47 @@ function CustomerEncryptFile() {
                 Drop a file below to encrypt and upload it to your cloud storage that is set as active link.
             </p>
 
+            <div className="card p-3 mb-4">
+                <div className="row g-2 align-items-end">
+                    <div className="col-12 col-md-5">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Encryption Key</label>
+                        <select
+                            className="form-select"
+                            value={selectedKeyID ?? ""}
+                            onChange={e => setSelectedKeyID(e.target.value ? Number(e.target.value) : null)}
+                            disabled={keyLoading || keys.length === 0}
+                        >
+                            <option value="">{keyLoading ? "Loading keys..." : "Select key"}</option>
+                            {keys.map(key => (
+                                <option key={key.keyID} value={key.keyID}>{key.keyName} ({key.fingerprint})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="col-12 col-md-5">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Password</label>
+                        <input
+                            className="form-control"
+                            type="password"
+                            value={keyPassword}
+                            onChange={e => setKeyPassword(e.target.value)}
+                            placeholder="Password for selected key"
+                        />
+                    </div>
+                    <div className="col-12 col-md-2">
+                        <button
+                            className="btn btn-primary w-100"
+                            onClick={() => handleUpload()}
+                            disabled={!selectedFile || uploading || !selectedKeyID || !keyPassword.trim()}
+                        >
+                            {uploading ? "Uploading..." : "Encrypt"}
+                        </button>
+                    </div>
+                </div>
+                {!keyLoading && keys.length === 0 && (
+                    <small className="text-muted mt-2 d-block">Create an active encryption key before uploading.</small>
+                )}
+            </div>
+
             {/* Drop Zone */}
             <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -154,7 +238,7 @@ function CustomerEncryptFile() {
                 style={{ borderStyle: "dashed", borderWidth: 2, cursor: "pointer", transition: "all 0.2s" }}
                 onClick={() => document.getElementById("fileInput")?.click()}
             >
-                <div style={{ fontSize: 40 }} className="mb-2">📂</div>
+                <div style={{ fontSize: 40 }} className="mb-2">File</div>
                 <div className="fw-medium mb-1">Drop your file here</div>
                 <small className="text-muted">or click to browse</small>
                 <input
@@ -176,18 +260,10 @@ function CustomerEncryptFile() {
                         className="btn btn-outline-secondary btn-sm"
                         onClick={clearSelection}
                     >
-                        ✕
+                        Clear
                     </button>
                 </div>
             )}
-
-            <button
-                className="btn btn-primary"
-                onClick={() => handleUpload()}
-                disabled={!selectedFile || uploading}
-            >
-                {uploading ? "Encrypting and Uploading..." : "Encrypt and Upload"}
-            </button>
 
             {showPrivacyConfirm && selectedFile && (
                 <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }} onClick={() => setShowPrivacyConfirm(false)}>
