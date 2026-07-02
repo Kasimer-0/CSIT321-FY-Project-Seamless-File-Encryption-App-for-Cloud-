@@ -43,6 +43,29 @@ From `Front-end/`:
 npm run build
 ```
 
+## Local PostgreSQL Setup
+
+Backend development uses PostgreSQL by default:
+
+```properties
+jdbc:postgresql://localhost:5432/stealthsync
+```
+
+Spring JPA `ddl-auto=update` creates and updates tables after the application
+connects, but PostgreSQL must already have the `stealthsync` database. Create it
+once before starting the backend:
+
+```powershell
+psql -U postgres -d postgres -f scripts/create_stealthsync_database.sql
+```
+
+The app seeds demo accounts automatically on startup. To reset the core test
+accounts manually, run:
+
+```powershell
+psql -U postgres -d stealthsync -f scripts/init_data.sql
+```
+
 ## Desktop App Packaging
 
 `dist-desktop/` is a generated Windows desktop app image, so it is intentionally not committed to GitHub. It is large, platform-specific, and can be rebuilt from source.

@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
 import type { UserAccount, EncryptionKeyRecord } from "../Type"
 
@@ -31,7 +32,7 @@ function CustomerEncryptFile({ user }: Props) {
             try {
                 setLoadingKeys(true)
                 const params = new URLSearchParams({ ownerID: String(user.userID) })
-                const res = await fetch(`http://localhost:8080/encryption-keys?${params.toString()}`, {
+                const res = await apiFetch(`http://localhost:8080/encryption-keys?${params.toString()}`, {
                     credentials: "include"
                 })
                 if (res.ok) {
@@ -65,7 +66,7 @@ function CustomerEncryptFile({ user }: Props) {
 
         if (file.size === 0 && file.name.startsWith("file:")) {
             try {
-                const response = await fetch("http://localhost:8080/cloud-storage/google-drive/local-file-info", {
+                const response = await apiFetch("http://localhost:8080/cloud-storage/google-drive/local-file-info", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
@@ -90,7 +91,7 @@ function CustomerEncryptFile({ user }: Props) {
     const scanForSensitiveData = async (file: File) => {
         let sample = ""
         try { sample = (await file.text()).slice(0, 20000) } catch { sample = "" }
-        const response = await fetch("http://localhost:8080/privacy/scan", {
+        const response = await apiFetch("http://localhost:8080/privacy/scan", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
@@ -124,7 +125,7 @@ function CustomerEncryptFile({ user }: Props) {
             let response: Response
             
             if (droppedFileUri) {
-                response = await fetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload-path?ownerID=${user.userID}&keyID=${selectedKeyId}`, {
+                response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload-path?ownerID=${user.userID}&keyID=${selectedKeyId}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
@@ -133,7 +134,7 @@ function CustomerEncryptFile({ user }: Props) {
             } else {
                 const formData = new FormData()
                 formData.append("file", selectedFile, uploadName)
-                response = await fetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload?ownerID=${user.userID}&keyID=${selectedKeyId}`, {
+                response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload?ownerID=${user.userID}&keyID=${selectedKeyId}`, {
                     method: "POST",
                     credentials: "include",
                     body: formData

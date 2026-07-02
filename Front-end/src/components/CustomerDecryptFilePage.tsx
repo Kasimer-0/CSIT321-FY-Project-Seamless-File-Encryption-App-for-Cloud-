@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
 import type { EncryptedFile, GoogleDriveFile, UserAccount } from "../Type"
 
@@ -49,11 +50,11 @@ function CustomerDecryptFile({ user }: Props) {
             try {
                 // Fetch drive files, local files, and user's encryption keys simultaneously
                 const [driveResponse, localResponse, keysResponse] = await Promise.all([
-                    fetch(`http://localhost:8080/cloud-storage/google-drive/files?ownerID=${user.userID}`, {
+                    apiFetch("http://localhost:8080/cloud-storage/google-drive/files", {
                         credentials: "include"
                     }),
-                    fetch("http://localhost:8080/files", { credentials: "include" }),
-                    fetch(`http://localhost:8080/keys?ownerID=${user.userID}`, { credentials: "include" })
+                    apiFetch("http://localhost:8080/files", { credentials: "include" }),
+                    apiFetch("http://localhost:8080/encryption-keys", { credentials: "include" })
                 ])
 
                 if (cancelled) return
@@ -125,8 +126,8 @@ function CustomerDecryptFile({ user }: Props) {
         setDownloadingDriveFile(targetFile.fileId)
         
         try {
-            const response = await fetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(targetFile.fileId)}/decrypt-save?ownerID=${user.userID}`,
+            const response = await apiFetch(
+                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(targetFile.fileId)}/decrypt-save`,
                 { 
                     method: "POST", 
                     credentials: "include",
@@ -163,7 +164,7 @@ function CustomerDecryptFile({ user }: Props) {
         setDownloadingLocalFile(targetFile.fileID)
         
         try {
-            const response = await fetch(`http://localhost:8080/files/${targetFile.fileID}/decrypt-save`, {
+            const response = await apiFetch(`http://localhost:8080/files/${targetFile.fileID}/decrypt-save`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
@@ -187,7 +188,7 @@ function CustomerDecryptFile({ user }: Props) {
     const executeDeleteFile = async () => {
         if (!fileToDelete) return
         try {
-            const response = await fetch(`http://localhost:8080/files/${fileToDelete.fileID}`, {
+            const response = await apiFetch(`http://localhost:8080/files/${fileToDelete.fileID}`, {
                 method: "DELETE",
                 credentials: "include"
             })

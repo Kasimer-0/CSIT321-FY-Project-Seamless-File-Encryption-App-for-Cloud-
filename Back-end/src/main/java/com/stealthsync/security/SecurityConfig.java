@@ -11,6 +11,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import jakarta.servlet.http.HttpServletResponse;
+
 @Configuration
 @EnableMethodSecurity
 @RequiredArgsConstructor
@@ -24,13 +26,17 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
+                .logout(logout -> logout.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, exception) ->
+                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/", "/index.html", "/assets/**", "/static/**", "/favicon.svg", "/icons.svg",
                                 "/login", "/signup", "/account/recovery-phrase/login",
-                                "/cloud-storage/oauth/google/callback", "/error"
+                                "/cloud-storage/oauth/**", "/cloud-storage/*/callback", "/error"
                         ).permitAll()
                         .requestMatchers("/admin/**", "/users/**", "/enc-methods").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/plans/**").hasRole("ADMIN")

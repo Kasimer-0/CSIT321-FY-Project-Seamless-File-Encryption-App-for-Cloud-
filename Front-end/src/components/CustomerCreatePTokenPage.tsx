@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
 import type { EncryptionKeyRecord, UserAccount } from "../Type"
 
@@ -37,7 +38,7 @@ function CustomerCreatePToken({ user, onBack, onCreateSuccess }: Props) {
         const fetchActiveKeys = async () => {
             try {
                 setLoadingKeys(true)
-                const res = await fetch(`http://localhost:8080/encryption-keys?ownerID=${user.userID}`, { 
+                const res = await apiFetch(`http://localhost:8080/encryption-keys?ownerID=${user.userID}`, {
                     credentials: "include" 
                 })
                 if (res.ok) {
@@ -88,7 +89,7 @@ function CustomerCreatePToken({ user, onBack, onCreateSuccess }: Props) {
 
         try {
             setIsSubmitting(true)
-            const res = await fetch(`http://localhost:8080/physical-tokens`, {
+            const res = await apiFetch(`http://localhost:8080/physical-tokens`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -162,7 +163,9 @@ function CustomerCreatePToken({ user, onBack, onCreateSuccess }: Props) {
                     <div className="mb-4">
                         <label className="form-label small fw-semibold text-uppercase tracking-wider mb-2" style={{ color: "#a1a1aa", fontSize: "12px" }}>Target Master Encryption Key Binding</label>
                         <select className="form-select text-white font-monospace" style={{ backgroundColor: "#0b0c10", borderColor: "#27272a", padding: "12px" }} value={selectedKeyID} onChange={e => setSelectedKeyID(e.target.value)}>
-                            <option value="">-- SELECT AN AVAILABLE ENCRYPTION KEY --</option>
+                            <option value="">
+                                {loadingKeys ? "LOADING ENCRYPTION KEYS..." : "-- SELECT AN AVAILABLE ENCRYPTION KEY --"}
+                            </option>
                             {availableKeys.map(key => (
                                 <option key={key.keyID} value={key.keyID}>{key.keyName} — {key.fingerprint || "No Fingerprint"}</option>
                             ))}

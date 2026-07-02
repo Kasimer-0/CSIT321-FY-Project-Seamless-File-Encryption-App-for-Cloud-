@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { UserAccount } from "./Type"
 import Auth from "./components/Auth"
 import AdminDashboard from "./components/AdminDashboard"
@@ -11,10 +11,28 @@ import CustomerManageRecPhrase from "./components/CustomerManageRecPhrasePage"
 import CustomerFAQPage from "./components/CustomerFAQPage"
 import CustomerViewAccount from "./components/CustomerViewAccountPage"
 import CustomerManagePTokens from "./components/CustomerManagePTokensPage"
+import { apiFetch, clearAuthToken, getAuthToken } from "./lib/api"
 
 function App() {
     const [user, setUser] = useState<UserAccount | null>(null)
     const [activeTab, setActiveTab] = useState<string>("encrypt-file")
+    const [restoringSession, setRestoringSession] = useState(true)
+
+    useEffect(() => {
+        if (!getAuthToken()) {
+            setRestoringSession(false)
+            return
+        }
+
+        apiFetch("http://localhost:8080/me")
+            .then(response => {
+                if (!response.ok) throw new Error("Session expired")
+                return response.json()
+            })
+            .then((currentUser: UserAccount) => setUser(currentUser))
+            .catch(() => clearAuthToken())
+            .finally(() => setRestoringSession(false))
+    }, [])
 
     const handleLogin = (loggedInUser: UserAccount) => {
         setUser(loggedInUser)
@@ -22,6 +40,7 @@ function App() {
     }
 
     const handleLogout = () => {
+        clearAuthToken()
         setUser(null)
     }
 
@@ -61,6 +80,10 @@ function App() {
             default:
                 return <CustomerDecryptFile user={user} />
         }
+    }
+
+    if (restoringSession) {
+        return null
     }
 
     return (

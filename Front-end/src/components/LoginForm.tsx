@@ -1,3 +1,4 @@
+import { apiFetch, setAuthToken } from "../lib/api"
 import { useState, useRef } from "react"
 import type { UserAccount } from "../Type"
 
@@ -43,7 +44,7 @@ function LoginForm({ onLogin }: LoginFormProps) {
         setLoading(true)
 
         try {
-            const response = await fetch("http://localhost:8080/login", {
+            const response = await apiFetch("http://localhost:8080/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -62,6 +63,7 @@ function LoginForm({ onLogin }: LoginFormProps) {
                 return
             }
 
+            setAuthToken(data.token)
             onLogin(data.user)
         } catch (err) {
             setError("Server connection failed")
@@ -84,7 +86,7 @@ function LoginForm({ onLogin }: LoginFormProps) {
         const fullRecoveryPhrase = recoveryWords.join(" ")
 
         try {
-            const response = await fetch("http://localhost:8080/account/recovery-phrase/login", {
+            const response = await apiFetch("http://localhost:8080/account/recovery-phrase/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -98,6 +100,7 @@ function LoginForm({ onLogin }: LoginFormProps) {
                 return
             }
 
+            setAuthToken(data.token)
             onLogin(data.user)
         } catch (err) {
             setError("Server connection failed")
