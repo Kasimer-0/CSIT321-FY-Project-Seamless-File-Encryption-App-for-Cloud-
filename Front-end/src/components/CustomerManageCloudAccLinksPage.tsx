@@ -52,7 +52,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         void fetchLinksAndUsage()
     }, [user.userID])
 
-    const handleAction = async (linkID: number, action: "set_active" | "deactivate" | "remove" | "reconnect") => {
+    const handleAction = async (linkID: number, action: "activate" | "deactivate" | "remove" | "reconnect") => {
         try {
             const res = await fetch(`http://localhost:8080/cloud-storage/links/${linkID}/action`, {
                 method: "POST",
@@ -197,7 +197,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                             <button 
                                                 className="btn btn-sm text-dark fw-bold px-3" 
                                                 style={{ fontSize: "0.8rem", backgroundColor: "#00bcd4", border: "none", borderRadius: "4px" }}
-                                                onClick={() => void handleAction(link.linkID, "set_active")}
+                                                onClick={() => void handleAction(link.linkID, "activate")}
                                             >
                                                 Set Active
                                             </button>
