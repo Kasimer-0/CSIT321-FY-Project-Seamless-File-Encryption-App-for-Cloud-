@@ -8,40 +8,38 @@ type AuthProps = {
 }
 
 function Auth({ onLogin }: AuthProps) {
-    const [tab, setTab] = useState("login")
+    const [isLoginView, setIsLoginView] = useState(true)
 
     return (
-        <main className="auth-viewport-wrapper">
-            <section className="auth-stage">
-                <div className="auth-branding-header">
-                    <div className="auth-brand-kicker">Encrypted cloud access</div>
-                    <h1 className="auth-brand-title">STEALTHSYNC</h1>
-                    <p className="auth-brand-subtitle mb-0">Root level console for protected file exchange.</p>
-                </div>
+        <div className="auth-viewport-wrapper">
+            <div className="auth-branding-header">
+                <h1 className="auth-brand-name">STEALTH<span>SYNC</span></h1>
+            </div>
 
-                <div className="auth-card-expanded">
-                    <div className="auth-tab-group" role="tablist" aria-label="Authentication mode">
-                        <button
-                            className={`auth-tab-button ${tab === "login" ? "active" : ""}`}
-                            type="button"
-                            onClick={() => setTab("login")}
-                        >
-                            Login
-                        </button>
-                        <button
-                            className={`auth-tab-button ${tab === "signup" ? "active" : ""}`}
-                            type="button"
-                            onClick={() => setTab("signup")}
-                        >
-                            Sign Up
-                        </button>
-                    </div>
-                    <div className="auth-card-inner">
-                        {tab === "login" ? <LoginForm onLogin={onLogin} /> : <SignUpForm />}
-                    </div>
-                </div>
-            </section>
-        </main>
+            <div className="auth-card-expanded">
+                {isLoginView ? (
+                    <>
+                        <LoginForm onLogin={onLogin} />
+                        <div className="auth-view-footer">
+                            <span>New to StealthSync?</span>
+                            <button type="button" onClick={() => setIsLoginView(false)}>
+                                Create a new Account
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <SignUpForm />
+                        <div className="auth-view-footer">
+                            <span>Have an account?</span>
+                            <button type="button" onClick={() => setIsLoginView(true)}>
+                                Log In
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
     )
 }
 

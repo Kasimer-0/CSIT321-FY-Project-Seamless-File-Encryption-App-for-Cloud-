@@ -7,7 +7,6 @@ function SignUpForm() {
     const [password, setPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
     const [dob, setDob] = useState("")
-
     const [message, setMessage] = useState("")
     const [messageType, setMessageType] = useState("")
 
@@ -15,14 +14,12 @@ function SignUpForm() {
         setMessage("")
         setMessageType("")
 
-        //Check empty fields
         if (!username || !email || !password || !confirmPassword || !dob) {
             setMessage("Please fill in all fields")
             setMessageType("error")
             return
         }
 
-        //check valid Email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
         if (!emailRegex.test(email)) {
             setMessage("Invalid email format")
@@ -30,17 +27,13 @@ function SignUpForm() {
             return
         }
 
-        //Ensure password strength
         const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
         if (!strongPassword.test(password)) {
-            setMessage(
-                "Password must contain uppercase, lowercase, number, and at least 8 characters"
-            )
+            setMessage("Password must contain uppercase, lowercase, number, and at least 8 characters")
             setMessageType("error")
             return
         }
 
-        //Confirm password
         if (password !== confirmPassword) {
             setMessage("Passwords do not match")
             setMessageType("error")
@@ -50,15 +43,8 @@ function SignUpForm() {
         try {
             const response = await apiFetch("http://localhost:8080/signup", {
                 method: "POST",
-                headers: {
-                "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                username,
-                email,
-                password,
-                dob
-                })
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, email, password, dob })
             })
 
             const data = await response.json()
@@ -71,78 +57,92 @@ function SignUpForm() {
 
             setMessage("Account created successfully")
             setMessageType("success")
-
             setUsername("")
             setEmail("")
             setPassword("")
             setConfirmPassword("")
             setDob("")
-
-        } catch (error) {
-        setMessage("Server connection failed")
-        setMessageType("error")
+        } catch {
+            setMessage("Server connection failed")
+            setMessageType("error")
         }
     }
 
     return (
         <>
-        <h2 className="mb-3 text-center">Sign Up</h2>
+            <h2 className="form-title">Create Account</h2>
+            <p className="form-subtitle">Join StealthSync to use protected cloud encryption.</p>
 
+            <div className="status-message-container">
+                {message && (
+                    <div className={`status-banner ${messageType === "error" ? "status-error" : "status-success"}`}>
+                        <span className="status-indicator-dot"></span>
+                        <span className="status-text">{message}</span>
+                    </div>
+                )}
+            </div>
 
-        <div style={{ minHeight: "60px" }}>
-            {message && (
-            <div
-                className={`alert py-2 ${
-                messageType === "error" ? "alert-danger" : "alert-success"}`}>
-                {message}
-          </div>
-            )}
-        </div>
+            <div className="form-group-custom">
+                <label className="input-label" htmlFor="signupUsername">Username</label>
+                <input
+                    id="signupUsername"
+                    className="form-control"
+                    placeholder="Enter unique username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                />
+            </div>
 
-        <input
-            className="form-control mb-3"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-        />
+            <div className="form-group-custom">
+                <label className="input-label" htmlFor="signupEmail">Email Address</label>
+                <input
+                    id="signupEmail"
+                    className="form-control"
+                    type="email"
+                    placeholder="name@company.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                />
+            </div>
 
-        <input
-            className="form-control mb-3"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-        />
+            <div className="form-group-custom">
+                <label className="input-label" htmlFor="signupPassword">Password</label>
+                <input
+                    id="signupPassword"
+                    className="form-control"
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                />
+            </div>
 
-        <input
-            className="form-control mb-3"
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-        />
+            <div className="form-group-custom">
+                <label className="input-label" htmlFor="signupConfirmPassword">Confirm Password</label>
+                <input
+                    id="signupConfirmPassword"
+                    className="form-control"
+                    type="password"
+                    placeholder="Confirm password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+            </div>
 
-        <input
-            className="form-control mb-3"
-            type="password"
-            placeholder="Confirm Password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-        />
+            <div className="form-group-custom mb-4">
+                <label className="input-label" htmlFor="signupDob">Date of Birth</label>
+                <input
+                    id="signupDob"
+                    className="form-control"
+                    type="date"
+                    value={dob}
+                    onChange={(event) => setDob(event.target.value)}
+                />
+            </div>
 
-        <input
-            className="form-control mb-3"
-            type="date"
-            placeholder="DOB"
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-        />
-
-        <button
-            className="btn btn-primary w-100"
-            onClick={handleSignup}
-        >
-            Sign Up
-        </button>
+            <button className="btn-premium-action" type="button" onClick={handleSignup}>
+                Register Credentials
+            </button>
         </>
     )
 }

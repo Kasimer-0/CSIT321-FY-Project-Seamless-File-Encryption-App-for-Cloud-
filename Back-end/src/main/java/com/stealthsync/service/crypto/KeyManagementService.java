@@ -18,8 +18,10 @@ public class KeyManagementService {
     private static final int AES_KEY_LENGTH_BITS = 256;
     private static final int PBKDF2_ITERATIONS = 210_000;
 
+    // Default derivation stays tied to the named AES key-length constant so future
+    // policy changes do not leave a hidden literal in the password-based key path.
     public SecretKey deriveAesKey(String passphrase, byte[] salt) throws GeneralSecurityException {
-        return deriveAesKey(passphrase, salt, 256);
+        return deriveAesKey(passphrase, salt, AES_KEY_LENGTH_BITS);
     }
 
     public SecretKey deriveAesKey(String passphrase, byte[] salt, int keyLengthBits) throws GeneralSecurityException {

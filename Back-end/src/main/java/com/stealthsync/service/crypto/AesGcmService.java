@@ -38,6 +38,7 @@ public class AesGcmService {
         return encryptStream(plaintextStream, passphrase, 256);
     }
 
+    @SuppressWarnings("resource")
     public InputStream encryptStream(InputStream plaintextStream, String passphrase, int keyLengthBits) throws Exception {
         byte[] salt = randomBytes(SALT_LENGTH_BYTE);
         byte[] iv = randomBytes(IV_LENGTH_BYTE);
@@ -48,9 +49,10 @@ public class AesGcmService {
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec);
 
         ByteArrayInputStream headerStream = new ByteArrayInputStream(buildHeader(salt, iv));
-        CipherInputStream cipherStream = new CipherInputStream(plaintextStream, cipher);
 
-        return new SequenceInputStream(headerStream, cipherStream);
+        // The returned SequenceInputStream owns both the header stream and the cipher
+        // stream, so callers can consume one continuous encrypted stream.
+        return new SequenceInputStream(headerStream, new CipherInputStream(plaintextStream, cipher));
     }
 
     /**

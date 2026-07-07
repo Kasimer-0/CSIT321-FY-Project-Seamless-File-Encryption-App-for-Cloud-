@@ -40,7 +40,8 @@ import java.util.stream.IntStream;
  */
 public class AppDataService {
 
-    private static final String DEFAULT_CUSTOMER_EMAIL = "user@stealthsync.com";
+    // Keep provider limits and supported providers centralized so controllers and
+    // frontend pages do not hard-code different rules for free vs. premium users.
     private static final Set<String> SUPPORTED_CLOUD_PROVIDERS = Set.of("google_drive", "dropbox", "onedrive");
     private static final int FREE_TIER_CLOUD_PROVIDER_LIMIT = 1;
     private static final int PREMIUM_CLOUD_PROVIDER_LIMIT = 5;
@@ -484,13 +485,9 @@ public class AppDataService {
     private boolean isActiveSubscription(Subscription subscription) {
         return subscription != null && "active".equalsIgnoreCase(subscription.getSubcriptionStatus());
     }
-    private Optional<UserAccount> defaultCustomer() {
-        return userAccountRepository.findByEmailIgnoreCase(DEFAULT_CUSTOMER_EMAIL)
-                .or(() -> userAccountRepository.findAll().stream()
-                        .filter(user -> "customer".equalsIgnoreCase(user.getRole()))
-                        .findFirst());
-    }
 
+    // Resolve the user's real latest subscription instead of falling back to a demo
+    // customer, which would mix subscription state across accounts in local testing.
     private Optional<Subscription> findCurrentSubscription(UserAccount customer) {
         if (customer == null || customer.getUserID() == null) {
             return Optional.empty();

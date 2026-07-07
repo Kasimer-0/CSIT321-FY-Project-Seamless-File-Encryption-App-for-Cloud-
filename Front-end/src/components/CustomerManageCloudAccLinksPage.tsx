@@ -14,7 +14,10 @@ const providerLabels: Record<string, { label: string; icon: string }> = {
 }
 
 const availableProviders = ["google_drive", "dropbox", "onedrive"]
+// The UI stores provider keys in the database format, while the backend route uses
+// google-drive for readability; the helper keeps that translation in one place.
 const providerPath = (provider: string) => provider === "google_drive" ? "google-drive" : provider
+const providerLabel = (provider?: string) => provider ? providerLabels[provider]?.label ?? provider : "Cloud provider"
 
 /**
  * This page provides persisted cloud links,
@@ -33,12 +36,9 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const [usage, setUsage] = useState<CloudStorageUsage | null>(null)
     const [providerLimit, setProviderLimit] = useState(user.isSubscribed ? 5 : 1)
     const [providerConfigured, setProviderConfigured] = useState<Record<string, boolean>>({})
-    const [driveConfigured, setDriveConfigured] = useState(false)
-    const [driveConnected, setDriveConnected] = useState(false)
     const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
     const [driveLoading, setDriveLoading] = useState(false)
-    const [driveUploading, setDriveUploading] = useState(false)
-    const [lastDriveSavedPath, setLastDriveSavedPath] = useState("")
+    const [lastSavedPath, setLastSavedPath] = useState("")
 
     const fetchLinks = async () => {
         try {
@@ -92,41 +92,26 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    // Check OAuth configuration and connection independently to distinguish setup errors from an unlinked account.
-    const fetchDriveStatus = async () => {
-        try {
-            const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/google-drive/status`,
-                { credentials: "include" }
-            )
-            if (response.ok) {
-                const data = await response.json()
-                const connected = Boolean(data.connected)
-                setDriveConfigured(Boolean(data.configured))
-                setDriveConnected(connected)
-                return connected
-            }
-        } catch (err) {
-            console.error("Failed to fetch Google Drive status")
+    // Only StealthSync-tagged encrypted objects are returned by the active provider integration.
+    // The same endpoint shape is used for Google Drive, Dropbox, and OneDrive.
+    const fetchActiveProviderFiles = async (provider = activeCloudLink?.provider) => {
+        if (!provider) {
+            setDriveFiles([])
+            return
         }
-        return false
-    }
-
-    // Only StealthSync-tagged encrypted objects are returned by the backend Drive integration.
-    const fetchDriveFiles = async () => {
         try {
             setDriveLoading(true)
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/google-drive/files`,
+                `http://localhost:8080/cloud-storage/${providerPath(provider)}/files`,
                 { credentials: "include" }
             )
             if (!response.ok) {
                 const data = await response.json().catch(() => null)
-                throw new Error(data?.message ?? "Failed to load Google Drive files")
+                throw new Error(data?.message ?? `Failed to load ${providerLabel(provider)} files`)
             }
             setDriveFiles(await response.json())
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to load Google Drive files")
+            toast.error(err instanceof Error ? err.message : `Failed to load ${providerLabel(provider)} files`)
         } finally {
             setDriveLoading(false)
         }
@@ -136,9 +121,6 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         fetchLinks()
         fetchUsage()
         fetchProviderInfo()
-        fetchDriveStatus().then(connected => {
-            if (connected) void fetchDriveFiles()
-        })
     }, [user.userID, user.isSubscribed])
 
     const handleSetActive = async (linkID: number) => {
@@ -158,9 +140,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             }
 
             await fetchLinks()
-            if (selectedLink?.provider === "google_drive") {
-                await fetchDriveStatus()
-                await fetchDriveFiles()
+            if (selectedLink?.provider) {
+                await fetchActiveProviderFiles(selectedLink.provider)
             }
             toast.success("Cloud account set as active successfully")
 
@@ -186,8 +167,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             }
 
             await fetchLinks()
-            if (removedLink?.provider === "google_drive") {
-                setDriveConnected(false)
+            if (removedLink?.provider === activeCloudLink?.provider) {
                 setDriveFiles([])
             }
             setShowRemoveConfirm(null)
@@ -199,7 +179,6 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     }
 
     const handleDeactivate = async (linkID: number) => {
-        const selectedLink = links.find(link => link.linkID === linkID)
         try {
             const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}/deactivate`,
@@ -215,9 +194,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             }
 
             await fetchLinks()
-            if (selectedLink?.provider === "google_drive") {
-                await fetchDriveStatus()
-            }
+            setDriveFiles([])
             toast.success("Cloud account deactivated")
 
         } catch (err) {
@@ -241,10 +218,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             const status = await fetchProviderStatus(provider)
             if (status.connected) {
                 await fetchLinks()
-                if (provider === "google_drive") {
-                    await fetchDriveStatus()
-                    await fetchDriveFiles()
-                }
+                await fetchActiveProviderFiles(provider)
                 toast.success(`${providerLabels[provider]?.label ?? provider} connected successfully`)
                 return
             }
@@ -292,68 +266,69 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    // Send plaintext only to the local backend; encryption occurs before the resulting bytes leave for Drive.
-    const handleDriveUpload = async (file: File) => {
-        const formData = new FormData()
-        formData.append("file", file)
-        try {
-            setDriveUploading(true)
-            const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload`,
-                { method: "POST", credentials: "include", body: formData }
-            )
-            if (!response.ok) {
-                const data = await response.json().catch(() => null)
-                throw new Error(data?.message ?? "Google Drive upload failed")
-            }
-            await fetchDriveFiles()
-            toast.success(`${file.name} encrypted and uploaded to Google Drive`)
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Google Drive upload failed")
-        } finally {
-            setDriveUploading(false)
-        }
-    }
-
     // JavaFX WebView cannot persist Blob downloads, so the backend saves the
     // locally decrypted plaintext and returns its absolute Downloads path.
-    const handleDriveDownload = async (file: GoogleDriveFile) => {
+    // Provider selection is resolved from the active link to avoid old ownerID/query-param flows.
+    const handleProviderDownload = async (file: GoogleDriveFile) => {
+        const provider = file.provider ?? activeCloudLink?.provider
+        if (!provider) {
+            toast.error("Activate a cloud provider before downloading files")
+            return
+        }
         try {
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save`,
+                `http://localhost:8080/cloud-storage/${providerPath(provider)}/files/${encodeURIComponent(file.fileId)}/decrypt-save`,
                 { method: "POST", credentials: "include" }
             )
             if (!response.ok) {
                 const data = await response.json().catch(() => null)
-                throw new Error(data?.message ?? "Google Drive download failed")
+                throw new Error(data?.message ?? `${providerLabel(provider)} download failed`)
             }
             const result = await response.json() as { savedPath: string }
-            setLastDriveSavedPath(result.savedPath)
+            setLastSavedPath(result.savedPath)
             toast.success(`${file.originalName} saved to ${result.savedPath}`)
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Google Drive download failed")
+            toast.error(err instanceof Error ? err.message : "Cloud file download failed")
         }
     }
 
-    const handleDriveDelete = async (file: GoogleDriveFile) => {
+    const handleProviderDelete = async (file: GoogleDriveFile) => {
+        const provider = file.provider ?? activeCloudLink?.provider
+        if (!provider) {
+            toast.error("Activate a cloud provider before deleting files")
+            return
+        }
         try {
-            // Hide the row only after Drive confirms deletion, so a failed API
+            // Hide the row only after the provider confirms deletion, so a failed API
             // request never makes a still-existing remote file disappear locally.
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}`,
+                `http://localhost:8080/cloud-storage/${providerPath(provider)}/files/${encodeURIComponent(file.fileId)}`,
                 { method: "DELETE", credentials: "include" }
             )
-            if (!response.ok) throw new Error("Google Drive delete failed")
+            if (!response.ok) throw new Error(`${providerLabel(provider)} delete failed`)
             setDriveFiles(current => current.filter(item => item.fileId !== file.fileId))
-            toast.success(`${file.originalName} deleted from Google Drive`)
+            toast.success(`${file.originalName} deleted from ${providerLabel(provider)}`)
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Google Drive delete failed")
+            toast.error(err instanceof Error ? err.message : "Cloud file delete failed")
         }
     }
 
     const linkedProviders = links.map(l => l.provider)
     const unlinkableProviders = availableProviders.filter(p => !linkedProviders.includes(p))
     const providerLimitReached = linkedProviders.length >= providerLimit
+    const activeCloudLink = links.find(link => link.isActive && link.status === "connected") ?? null
+    const activeProviderName = providerLabel(activeCloudLink?.provider)
+
+    // Refresh the file panel whenever the active provider changes, so the page
+    // no longer shows Google Drive-only results after Dropbox or OneDrive is activated.
+    useEffect(() => {
+        if (activeCloudLink) {
+            void fetchActiveProviderFiles(activeCloudLink.provider)
+        } else {
+            setDriveFiles([])
+            setLastSavedPath("")
+        }
+    }, [activeCloudLink?.linkID, activeCloudLink?.provider])
 
     const formatBytes = (bytes: number) => {
         if (bytes < 1024) return `${bytes} B`
@@ -455,7 +430,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                         Activate
                                     </button>
                                 )}
-                                {link.isActive && !(link.provider === "google_drive" && !driveConnected) && (
+                                {link.isActive && link.status === "connected" && (
                                     <button
                                         className="btn btn-outline-secondary btn-sm"
                                         onClick={() => handleDeactivate(link.linkID)}
@@ -463,7 +438,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                         Deactivate
                                     </button>
                                 )}
-                                {(link.status === "expired" || (link.provider === "google_drive" && !driveConnected)) && (
+                                {link.status === "expired" && (
                                     <button
                                         className="btn btn-outline-warning btn-sm"
                                         onClick={() => handleReconnect(link.linkID)}
@@ -485,55 +460,38 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             <div className="border-top mt-4 pt-4">
                 <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
                     <div>
-                        <h6 className="mb-1">Google Drive encrypted files</h6>
+                        <h6 className="mb-1">{activeProviderName} encrypted files</h6>
                         <small className="text-muted">
-                            Files are encrypted locally before upload and decrypted locally after download.
+                            Files are encrypted locally before upload and decrypted locally after download. Use Encrypt and Upload File for new uploads.
                         </small>
                     </div>
                     <div className="d-flex gap-2 flex-shrink-0">
                         <button
                             className="btn btn-outline-secondary btn-sm"
-                            onClick={fetchDriveFiles}
-                            disabled={!driveConnected || driveLoading}
+                            onClick={() => void fetchActiveProviderFiles()}
+                            disabled={!activeCloudLink || driveLoading}
                         >
                             Refresh
                         </button>
-                        <label className={`btn btn-primary btn-sm mb-0 ${!driveConnected || driveUploading ? "disabled" : ""}`}>
-                            {driveUploading ? "Encrypting..." : "Encrypt & upload"}
-                            <input
-                                type="file"
-                                className="d-none"
-                                disabled={!driveConnected || driveUploading}
-                                onChange={event => {
-                                    const file = event.target.files?.[0]
-                                    if (file) void handleDriveUpload(file)
-                                    event.currentTarget.value = ""
-                                }}
-                            />
-                        </label>
                     </div>
                 </div>
 
-                {lastDriveSavedPath && (
+                {lastSavedPath && (
                     <div className="alert alert-success py-2" role="status">
-                        <div className="fw-semibold">Decrypted Google Drive file saved successfully</div>
-                        <code style={{ overflowWrap: "anywhere" }}>{lastDriveSavedPath}</code>
+                        <div className="fw-semibold">Decrypted {activeProviderName} file saved successfully</div>
+                        <code style={{ overflowWrap: "anywhere" }}>{lastSavedPath}</code>
                     </div>
                 )}
 
-                {!driveConfigured ? (
-                    <div className="alert alert-warning py-2 mb-0" style={{ fontSize: 13 }}>
-                        Google Drive OAuth is not configured on this installation. Add the Google client ID and secret described in README.
-                    </div>
-                ) : !driveConnected ? (
+                {!activeCloudLink ? (
                     <div className="alert alert-secondary py-2 mb-0" style={{ fontSize: 13 }}>
-                        Link Google Drive above to upload and decrypt Drive files.
+                        Activate a linked cloud provider above to view its encrypted files.
                     </div>
                 ) : driveLoading ? (
-                    <p className="text-muted mb-0">Loading Google Drive files...</p>
+                    <p className="text-muted mb-0">Loading {activeProviderName} files...</p>
                 ) : driveFiles.length === 0 ? (
                     <div className="border rounded p-3 text-muted" style={{ fontSize: 13 }}>
-                        No StealthSync encrypted files are stored in this Google Drive account yet.
+                        No StealthSync encrypted files are stored in this {activeProviderName} account yet.
                     </div>
                 ) : (
                     <div className="list-group">
@@ -546,10 +504,10 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                     </small>
                                 </div>
                                 <div className="d-flex gap-2 flex-shrink-0">
-                                    <button className="btn btn-outline-primary btn-sm" onClick={() => handleDriveDownload(file)}>
+                                    <button className="btn btn-outline-primary btn-sm" onClick={() => handleProviderDownload(file)}>
                                         Decrypt & download
                                     </button>
-                                    <button className="btn btn-outline-danger btn-sm" onClick={() => handleDriveDelete(file)}>
+                                    <button className="btn btn-outline-danger btn-sm" onClick={() => handleProviderDelete(file)}>
                                         Delete
                                     </button>
                                 </div>

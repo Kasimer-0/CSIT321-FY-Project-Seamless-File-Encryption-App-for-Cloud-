@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import type { Plan, PurchasePlanRequest, UserAccount } from "../Type"
 import CustomerEncryptFile from "./CustomerEncryptFilePage"
 import CustomerDecryptFile from "./CustomerDecryptFilePage"
@@ -15,35 +15,92 @@ type CustomerDashboardProps = {
     onUserUpdate: (updatedUser: UserAccount) => void
 }
 
-type TopSection = "files" | "keys" | "cloud" | "security" | "faq" | "account"
-type FileSub = "encrypt" | "decrypt"
+type CustomerTab = "encrypt-file" | "decrypt-file" | "encryption-keys" | "cloud-storage" | "security" | "faq" | "view-account"
 
-const topSections: { key: TopSection; label: string; icon: string }[] = [
-    { key: "files", label: "File Management", icon: "FILE" },
-    { key: "keys", label: "Encryption Keys", icon: "KEY" },
-    { key: "cloud", label: "Cloud Storage Link", icon: "DRV" },
-    { key: "security", label: "Security", icon: "SEC" },
-    { key: "faq", label: "FAQ", icon: "FAQ" },
-]
+const pageTitles: Record<CustomerTab, string> = {
+    "encrypt-file": "Encrypt File",
+    "decrypt-file": "Decrypt File",
+    "encryption-keys": "Manage Encryption Keys",
+    "cloud-storage": "Cloud Storage Links",
+    "security": "Security Center",
+    "faq": "Frequently Asked Questions",
+    "view-account": "Manage Account"
+}
 
-const fileSidebarItems: { key: FileSub; label: string; icon: string }[] = [
-    { key: "encrypt", label: "Encrypt and Upload File", icon: "UP" },
-    { key: "decrypt", label: "Decrypt and Download File", icon: "DL" },
-]
+const tabIcons: Record<CustomerTab | "file-ops", (active: boolean) => ReactNode> = {
+    "file-ops": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
+            <polyline points="12 16 16 12 12 8"></polyline>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+        </svg>
+    ),
+    "encrypt-file": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 15v2"></path>
+            <rect x="4" y="11" width="16" height="10" rx="2"></rect>
+            <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+        </svg>
+    ),
+    "decrypt-file": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 15v2"></path>
+            <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 9.5-2.18"></path>
+        </svg>
+    ),
+    "encryption-keys": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777z"></path>
+            <path d="M13 11l7-7"></path>
+            <path d="M17 7l3 3"></path>
+        </svg>
+    ),
+    "cloud-storage": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17.5 19H7a5 5 0 1 1 1.1-9.88A7 7 0 0 1 21 12.5a3.5 3.5 0 0 1-3.5 6.5z"></path>
+        </svg>
+    ),
+    "security": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+    ),
+    "faq": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+    ),
+    "view-account": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+    )
+}
 
 function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardProps) {
-    const [activeSection, setActiveSection] = useState<TopSection>("files")
-    const [fileSub, setFileSub] = useState<FileSub>("encrypt")
+    const [activeTab, setActiveTab] = useState<CustomerTab>("encrypt-file")
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-
+    const [fileOpsExpanded, setFileOpsExpanded] = useState(true)
     const initials = user.username.slice(0, 2).toUpperCase()
 
-    // The authenticated backend resolves the customer from the JWT; the request only selects a plan.
+    useEffect(() => {
+        if (activeTab !== "encrypt-file" && activeTab !== "decrypt-file") {
+            setFileOpsExpanded(false)
+        }
+    }, [activeTab])
+
+    // Purchase still calls the JWT-protected backend endpoint; the redesigned
+    // account view only changes how the action is presented.
     const handlePurchasePlan = async (plan: Plan) => {
         const request: PurchasePlanRequest = { planID: plan.planID }
         const response = await apiFetch("http://localhost:8080/subscriptions/purchase", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify(request)
         })
 
@@ -57,141 +114,196 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
         return updatedUser
     }
 
-    const getPageTitle = () => {
-        if (activeSection === "files") return fileSidebarItems.find(i => i.key === fileSub)?.label ?? "Files"
-        if (activeSection === "cloud") return "Cloud Storage Link"
-        if (activeSection === "keys") return "Encryption Keys"
-        if (activeSection === "security") return "Security"
-        if (activeSection === "faq") return "Frequently Asked Questions"
-        if (activeSection === "account") return "My Account"
-        return ""
-    }
+    const isFileOpsActive = activeTab === "encrypt-file" || activeTab === "decrypt-file"
 
-    const subscriptionLabel = user.isSubscribed ? "Premium access" : "Free plan"
+    const renderWorkspace = () => {
+        switch (activeTab) {
+            case "encrypt-file":
+                return <CustomerEncryptFile />
+            case "decrypt-file":
+                return <CustomerDecryptFile user={user} />
+            case "encryption-keys":
+                return <CustomerManageEncryptionKeysPage />
+            case "cloud-storage":
+                return <CustomerManageCloudAccLinks user={user} />
+            case "security":
+                return <CustomerSecurityPage user={user} onUserUpdate={onUserUpdate} />
+            case "faq":
+                return <CustomerFAQPage />
+            case "view-account":
+                return (
+                    <CustomerViewAccount
+                        user={user}
+                        onSubscribe={handlePurchasePlan}
+                        onUpdateAccount={(updated) => onUserUpdate({ ...user, ...updated })}
+                        onSuspendAccount={() => onUserUpdate({ ...user, isSuspended: true })}
+                        onCancelSubscription={() => onUserUpdate({ ...user, isSubscribed: false, subscription: null })}
+                    />
+                )
+        }
+    }
 
     return (
         <div className="dashboard-root">
-            <aside className="dashboard-sidebar">
-                <div className="sidebar-brand-area">
-                    <div className="d-flex align-items-center gap-3">
-                        <span className="brand-dot-indicator" aria-hidden="true" />
+            <aside className="dashboard-sidebar d-flex flex-column justify-content-between">
+                <div>
+                    <div className="sidebar-brand-area">
+                        <div className="brand-dot-indicator"></div>
                         <div>
-                            <div className="brand-text-main">STEALTHSYNC</div>
-                            <div className="brand-text-sub">Root level console</div>
+                            <div className="brand-text-main">STEALTH<span>SYNC</span></div>
+                            <div className="brand-text-sub">Encrypted cloud console</div>
                         </div>
                     </div>
+
+                    <nav className="sidebar-nav-container">
+                        <button
+                            className={`sidebar-nav-item d-flex align-items-center justify-content-between ${isFileOpsActive ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setFileOpsExpanded(value => !value)}
+                        >
+                            <span className="d-flex align-items-center gap-2">
+                                <span className="sidebar-nav-icon">{tabIcons["file-ops"](isFileOpsActive)}</span>
+                                File Operations
+                            </span>
+                            <span className="sidebar-chevron" style={{ transform: fileOpsExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                                &gt;
+                            </span>
+                        </button>
+
+                        {fileOpsExpanded && (
+                            <div className="ps-3 d-flex flex-column gap-1 my-1 border-start border-secondary ms-3">
+                                <button
+                                    className={`sidebar-nav-item py-1 ${activeTab === "encrypt-file" ? "active text-cyan" : ""}`}
+                                    type="button"
+                                    onClick={() => setActiveTab("encrypt-file")}
+                                >
+                                    <span className="sidebar-nav-icon">{tabIcons["encrypt-file"](activeTab === "encrypt-file")}</span>
+                                    Encrypt File
+                                </button>
+                                <button
+                                    className={`sidebar-nav-item py-1 ${activeTab === "decrypt-file" ? "active text-cyan" : ""}`}
+                                    type="button"
+                                    onClick={() => setActiveTab("decrypt-file")}
+                                >
+                                    <span className="sidebar-nav-icon">{tabIcons["decrypt-file"](activeTab === "decrypt-file")}</span>
+                                    Decrypt File
+                                </button>
+                            </div>
+                        )}
+
+                        <button
+                            className={`sidebar-nav-item ${activeTab === "encryption-keys" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setActiveTab("encryption-keys")}
+                        >
+                            <span className="sidebar-nav-icon">{tabIcons["encryption-keys"](activeTab === "encryption-keys")}</span>
+                            Encryption Keys
+                        </button>
+
+                        <button
+                            className={`sidebar-nav-item ${activeTab === "cloud-storage" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setActiveTab("cloud-storage")}
+                        >
+                            <span className="sidebar-nav-icon">{tabIcons["cloud-storage"](activeTab === "cloud-storage")}</span>
+                            Cloud Storage Links
+                        </button>
+
+                        <button
+                            className={`sidebar-nav-item ${activeTab === "security" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setActiveTab("security")}
+                        >
+                            <span className="sidebar-nav-icon">{tabIcons.security(activeTab === "security")}</span>
+                            Security Center
+                        </button>
+                    </nav>
                 </div>
 
-                <nav className="sidebar-nav-container" aria-label="Customer workspace navigation">
-                    <div className="sidebar-nav-group">
-                        <div className="sidebar-section-tag px-2">Main modules</div>
-                        {topSections.map(section => (
-                            <div key={section.key}>
-                                <button
-                                    className={`sidebar-nav-item ${activeSection === section.key ? "active" : ""}`}
-                                    type="button"
-                                    onClick={() => setActiveSection(section.key)}
-                                >
-                                    <span className="sidebar-nav-icon">{section.icon}</span>
-                                    <span>{section.label}</span>
-                                </button>
+                <div>
+                    <nav className="sidebar-nav-container px-0 mb-2">
+                        <button
+                            className={`sidebar-nav-item w-100 ${activeTab === "faq" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setActiveTab("faq")}
+                        >
+                            <span className="sidebar-nav-icon">{tabIcons.faq(activeTab === "faq")}</span>
+                            FAQ Support
+                        </button>
+                        <button
+                            className={`sidebar-nav-item w-100 ${activeTab === "view-account" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setActiveTab("view-account")}
+                        >
+                            <span className="sidebar-nav-icon">{tabIcons["view-account"](activeTab === "view-account")}</span>
+                            View Account
+                        </button>
+                    </nav>
 
-                                {activeSection === "files" && section.key === "files" && (
-                                    <div className="ps-3">
-                                        {fileSidebarItems.map(item => (
-                                            <button
-                                                key={item.key}
-                                                className={`sidebar-nav-item ${fileSub === item.key ? "active" : ""}`}
-                                                type="button"
-                                                onClick={() => setFileSub(item.key)}
-                                            >
-                                                <span className="sidebar-nav-icon">{item.icon}</span>
-                                                <span>{item.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
+                    <div className="sidebar-footer-profile">
+                        <div className="d-flex align-items-center gap-3">
+                            <div className="profile-avatar-pill">{initials}</div>
+                            <div className="overflow-hidden flex-grow-1">
+                                <div className="profile-name-string">{user.username}</div>
+                                <div className="profile-name-string">ID: {user.userID}</div>
                             </div>
-                        ))}
+                        </div>
                     </div>
-                </nav>
-
-                <div className="sidebar-footer-profile">
-                    <button
-                        className={`sidebar-nav-item m-0 ${activeSection === "account" ? "active" : ""}`}
-                        type="button"
-                        onClick={() => setActiveSection("account")}
-                    >
-                        <span className="profile-avatar-pill">{initials}</span>
-                        <span className="min-w-0">
-                            <span className="d-block fw-bold text-truncate">{user.username}</span>
-                            <small className={user.isSubscribed ? "text-success" : "console-muted"}>{subscriptionLabel}</small>
-                        </span>
-                    </button>
                 </div>
             </aside>
 
             <main className="dashboard-main-viewport">
                 <header className="dashboard-top-navbar">
-                    <div>
-                        <div className="console-kicker">Customer workspace</div>
-                        <h2 className="navbar-active-title">{getPageTitle()}</h2>
-                    </div>
-                    <button className="btn-navbar-logout" type="button" onClick={() => setShowLogoutConfirm(true)}>
-                        Logout
+                    <h1 className="navbar-active-title">{pageTitles[activeTab]}</h1>
+                    <button className="btn-navbar-logout d-flex align-items-center gap-2" type="button" onClick={() => setShowLogoutConfirm(true)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        Log Out
                     </button>
                 </header>
 
-                <div className="dashboard-content-scroll">
-                    {activeSection === "files" && (
-                        <section className="workspace-card-wrapper p-4">
-                            {fileSub === "encrypt" && <CustomerEncryptFile />}
-                            {fileSub === "decrypt" && <CustomerDecryptFile user={user} />}
-                        </section>
-                    )}
-
-                    {activeSection === "cloud" && (
-                        <section className="workspace-card-wrapper p-4"><CustomerManageCloudAccLinks user={user} /></section>
-                    )}
-
-                    {activeSection === "keys" && (
-                        <section className="workspace-card-wrapper p-4"><CustomerManageEncryptionKeysPage /></section>
-                    )}
-
-                    {activeSection === "security" && (
-                        <CustomerSecurityPage user={user} onUserUpdate={onUserUpdate} />
-                    )}
-
-                    {activeSection === "faq" && (
-                        <section className="workspace-card-wrapper p-4"><CustomerFAQPage /></section>
-                    )}
-
-                    {activeSection === "account" && (
-                        <CustomerViewAccount
-                            user={user}
-                            onSubscribe={handlePurchasePlan}
-                            onUpdateAccount={(updated) => onUserUpdate({ ...user, ...updated })}
-                            onSuspendAccount={() => onUserUpdate({ ...user, isSuspended: true })}
-                            onCancelSubscription={() => onUserUpdate({ ...user, isSubscribed: false, subscription: null })}
-                        />
-                    )}
+                <div className="dashboard-content-scroll container-fluid py-4 px-4">
+                    <section className="workspace-card-wrapper p-4">
+                        {renderWorkspace()}
+                    </section>
                 </div>
             </main>
 
             {showLogoutConfirm && (
-                <div className="premium-modal-backdrop" onClick={() => setShowLogoutConfirm(false)}>
-                    <div className="premium-modal-surface" onClick={(event) => event.stopPropagation()}>
-                        <div className="modal-accent-strip-alert" />
-                        <div className="premium-modal-content">
-                            <div className="modal-title-main">End console session?</div>
-                            <p className="modal-description-text">You will be returned to the authentication screen.</p>
-                            <div className="d-flex gap-2 justify-content-end">
-                                <button className="btn-modal-dismiss" type="button" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
-                                <button className="btn-modal-destructive" type="button" onClick={onLogout}>Logout</button>
-                            </div>
+                <dialog
+                    open
+                    className="premium-modal-backdrop"
+                    onClick={() => setShowLogoutConfirm(false)}
+                    onKeyDown={(event) => {
+                        if (event.key === "Escape") setShowLogoutConfirm(false)
+                    }}
+                >
+                    <div className="premium-modal-surface" onClick={(event) => event.stopPropagation()} role="presentation">
+                        <div className="modal-accent-strip-alert"></div>
+                        <h4 id="logout-modal-heading" className="modal-title-main">Confirm Logout?</h4>
+                        <p className="modal-description-text">
+                            Opening StealthSync next time will require you to log in again.
+                        </p>
+                        <div className="d-flex gap-3 justify-content-end">
+                            <button className="btn-modal-dismiss" type="button" onClick={() => setShowLogoutConfirm(false)}>
+                                Cancel
+                            </button>
+                            <button
+                                className="btn-modal-destructive"
+                                type="button"
+                                onClick={() => {
+                                    onLogout()
+                                    setShowLogoutConfirm(false)
+                                }}
+                            >
+                                Log Out
+                            </button>
                         </div>
                     </div>
-                </div>
+                </dialog>
             )}
         </div>
     )

@@ -1,5 +1,5 @@
 import { apiFetch, setAuthToken } from "../lib/api"
-import { useState } from "react"
+import { useRef, useState, type KeyboardEvent } from "react"
 import type { UserAccount } from "../Type"
 
 type LoginFormProps = {
@@ -9,13 +9,30 @@ type LoginFormProps = {
 function LoginForm({ onLogin }: LoginFormProps) {
     const [usernameOrEmail, setUsernameOrEmail] = useState("")
     const [password, setPassword] = useState("")
-    // Recovery login is an alternate credential flow from the security user story.
-    // It stays inside the existing login form to preserve the page structure.
-    const [recoveryPhrase, setRecoveryPhrase] = useState("")
+    const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(6).fill(""))
     const [useRecovery, setUseRecovery] = useState(false)
     const [error, setError] = useState("")
     const [loading, setLoading] = useState(false)
+    const inputRefs = useRef<HTMLInputElement[]>([])
 
+    const handleWordChange = (index: number, value: string) => {
+        const updatedWords = [...recoveryWords]
+        updatedWords[index] = value.trim().toLowerCase()
+        setRecoveryWords(updatedWords)
+    }
+
+    const handleKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+        if ((event.key === " " || event.key === "Enter") && recoveryWords[index] && index < 5) {
+            event.preventDefault()
+            inputRefs.current[index + 1]?.focus()
+        }
+        if (event.key === "Backspace" && !recoveryWords[index] && index > 0) {
+            inputRefs.current[index - 1]?.focus()
+        }
+    }
+
+    // Standard login returns a JWT; storing it here lets apiFetch attach the
+    // Authorization header to protected customer/admin requests after login.
     const handleLogin = async () => {
         setError("")
         setLoading(true)
@@ -42,25 +59,27 @@ function LoginForm({ onLogin }: LoginFormProps) {
 
             setAuthToken(data.token)
             onLogin(data.user)
-
-        } catch (err) {
+        } catch {
             setError("Server connection failed")
         } finally {
             setLoading(false)
         }
     }
 
-    // Recovery phrases are sent to their dedicated endpoint and never mixed with password login.
     const handleRecoveryLogin = async () => {
         setError("")
-        setLoading(true)
+        if (recoveryWords.some(word => !word)) {
+            setError("Please fill out all 6 recovery words.")
+            return
+        }
 
+        setLoading(true)
         try {
             const response = await apiFetch("http://localhost:8080/account/recovery-phrase/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ usernameOrEmail, recoveryPhrase })
+                body: JSON.stringify({ usernameOrEmail, recoveryPhrase: recoveryWords.join(" ") })
             })
 
             const data = await response.json()
@@ -72,7 +91,7 @@ function LoginForm({ onLogin }: LoginFormProps) {
 
             setAuthToken(data.token)
             onLogin(data.user)
-        } catch (err) {
+        } catch {
             setError("Server connection failed")
         } finally {
             setLoading(false)
@@ -81,55 +100,63 @@ function LoginForm({ onLogin }: LoginFormProps) {
 
     return (
         <>
-            <div className="mb-4">
-                <div className="console-kicker">Identity check</div>
-                <h2 className="form-title">Console Login</h2>
-                <p className="form-subtitle mb-0">Authenticate before opening encrypted file operations.</p>
-            </div>
+            <h2 className="form-title">Welcome Back</h2>
+            <p className="form-subtitle">Login to access StealthSync services.</p>
 
-            <div style={{ minHeight: "52px" }}>
+            <div className="status-message-container">
                 {error && (
-                    <div className="status-banner error" role="alert">
-                        {error}
+                    <div className="status-banner status-error" role="alert">
+                        <span className="status-indicator-dot"></span>
+                        <span className="status-text">{error}</span>
                     </div>
                 )}
             </div>
 
             <div className="form-group-custom">
-                <label className="input-label" htmlFor="usernameOrEmail">Username or email</label>
+                <label className="input-label" htmlFor="usernameOrEmail">Username or Email</label>
                 <input
                     id="usernameOrEmail"
-                    className="form-control form-control-lg"
+                    className="form-control"
                     type="text"
-                    placeholder="testuser or testuser@stealthsync.com"
+                    placeholder="Username or email address"
                     value={usernameOrEmail}
-                    onChange={(e) => setUsernameOrEmail(e.target.value)}
+                    onChange={(event) => setUsernameOrEmail(event.target.value)}
                 />
             </div>
 
-            {useRecovery ? (
-                <div className="form-group-custom">
-                    <label className="input-label" htmlFor="recoveryPhrase">Recovery phrase</label>
-                    <input
-                        id="recoveryPhrase"
-                        className="form-control form-control-lg"
-                        type="text"
-                        placeholder="Enter recovery phrase"
-                        value={recoveryPhrase}
-                        onChange={(e) => setRecoveryPhrase(e.target.value)}
-                    />
-                </div>
-            ) : (
-                <div className="form-group-custom">
+            {!useRecovery ? (
+                <div className="form-group-custom mb-4">
                     <label className="input-label" htmlFor="password">Password</label>
                     <input
                         id="password"
-                        className="form-control form-control-lg"
+                        className="form-control"
                         type="password"
-                        placeholder="Enter password"
+                        placeholder="Password"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(event) => setPassword(event.target.value)}
                     />
+                </div>
+            ) : (
+                <div className="form-group-custom mb-4">
+                    <label className="input-label">6-Word Security Recovery Phrase</label>
+                    <div className="row g-2">
+                        {recoveryWords.map((word, index) => (
+                            <div className="col-4" key={index}>
+                                <div className="position-relative d-flex align-items-center">
+                                    <span className="recovery-word-index">{index + 1}</span>
+                                    <input
+                                        ref={(element) => { if (element) inputRefs.current[index] = element }}
+                                        className="form-control text-start recovery-word-input"
+                                        type="text"
+                                        placeholder="word"
+                                        value={word}
+                                        onChange={(event) => handleWordChange(index, event.target.value)}
+                                        onKeyDown={(event) => handleKeyDown(index, event)}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -139,19 +166,20 @@ function LoginForm({ onLogin }: LoginFormProps) {
                 onClick={useRecovery ? handleRecoveryLogin : handleLogin}
                 disabled={loading}
             >
-                {loading ? "Authenticating..." : useRecovery ? "Login with Recovery Phrase" : "Login"}
+                {loading ? "Authenticating..." : useRecovery ? "Log In via Recovery Phrase" : "Log In"}
             </button>
 
-            <div className="auth-view-footer">
+            <div className="text-center mt-3">
                 <button
-                    className="btn btn-link"
+                    className="btn-premium-toggle"
                     type="button"
                     onClick={() => {
-                        setUseRecovery(v => !v)
+                        setUseRecovery(value => !value)
                         setError("")
+                        setRecoveryWords(Array(6).fill(""))
                     }}
                 >
-                    {useRecovery ? "Use password login" : "Use recovery phrase"}
+                    {useRecovery ? "Log In via Password" : "Log In via Recovery Phrase"}
                 </button>
             </div>
         </>
