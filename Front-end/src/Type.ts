@@ -135,6 +135,7 @@ export type CloudStorageLink = {
 }
 
 export type GoogleDriveFile = {
+    provider?: string
     fileId: string
     fileName: string
     originalName: string

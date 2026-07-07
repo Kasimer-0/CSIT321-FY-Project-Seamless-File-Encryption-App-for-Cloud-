@@ -1,6 +1,6 @@
 import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
-import type { EncryptionKeyRecord } from "../Type"
+import type { CloudStorageLink, EncryptionKeyRecord } from "../Type"
 import toast from "react-hot-toast"
 
 function CustomerEncryptFile() {
@@ -16,19 +16,38 @@ function CustomerEncryptFile() {
     const [selectedKeyID, setSelectedKeyID] = useState<number | null>(null)
     const [keyPassword, setKeyPassword] = useState("")
     const [keyLoading, setKeyLoading] = useState(true)
+    const [activeCloudLink, setActiveCloudLink] = useState<CloudStorageLink | null>(null)
+
+    const providerPath = (provider?: string) => provider === "google_drive" ? "google-drive" : provider ?? "google-drive"
+    const providerLabel = (provider?: string) => {
+        if (provider === "google_drive") return "Google Drive"
+        if (provider === "dropbox") return "Dropbox"
+        if (provider === "onedrive") return "OneDrive"
+        return "the active cloud provider"
+    }
+    const activeProviderPath = providerPath(activeCloudLink?.provider)
+    const activeProviderLabel = providerLabel(activeCloudLink?.provider)
 
     useEffect(() => {
         let cancelled = false
 
         const fetchKeys = async () => {
             try {
-                const response = await apiFetch("http://localhost:8080/encryption-keys", { credentials: "include" })
-                if (!response.ok) throw new Error("Unable to load keys")
-                const records = await response.json() as EncryptionKeyRecord[]
+                const [keyResponse, linkResponse] = await Promise.all([
+                    apiFetch("http://localhost:8080/encryption-keys", { credentials: "include" }),
+                    apiFetch("http://localhost:8080/cloud-storage/links", { credentials: "include" })
+                ])
+                if (!keyResponse.ok) throw new Error("Unable to load keys")
+                const records = await keyResponse.json() as EncryptionKeyRecord[]
                 const activeKeys = records.filter(key => key.status === "active")
                 if (cancelled) return
                 setKeys(activeKeys)
                 if (activeKeys.length > 0) setSelectedKeyID(activeKeys[0].keyID)
+                if (linkResponse.ok) {
+                    const links = await linkResponse.json() as CloudStorageLink[]
+                    const connectedLinks = links.filter(link => link.status === "connected")
+                    setActiveCloudLink(connectedLinks.find(link => link.isActive) ?? null)
+                }
             } catch {
                 if (!cancelled) toast.error("Encryption keys could not be loaded")
             } finally {
@@ -57,8 +76,13 @@ function CustomerEncryptFile() {
 
         // JavaFX WebView exposes dragged files as zero-byte file:// placeholders.
         if (file.size === 0 && file.name.startsWith("file:")) {
+            if (!activeCloudLink) {
+                clearSelection()
+                toast.error("Activate a cloud provider before uploading")
+                return
+            }
             try {
-                const response = await apiFetch("http://localhost:8080/cloud-storage/google-drive/local-file-info", {
+                const response = await apiFetch(`http://localhost:8080/cloud-storage/${activeProviderPath}/local-file-info`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
@@ -119,6 +143,10 @@ function CustomerEncryptFile() {
             toast.error("Enter the selected key password")
             return
         }
+        if (!activeCloudLink) {
+            toast.error("Link and activate a cloud provider before uploading")
+            return
+        }
 
         setUploading(true)
 
@@ -139,7 +167,7 @@ function CustomerEncryptFile() {
             const passwordForRequest = keyPassword.trim()
             let response: Response
             if (droppedFileUri) {
-                response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload-path`, {
+                response = await apiFetch(`http://localhost:8080/cloud-storage/${activeProviderPath}/files/encrypt-upload-path`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
@@ -150,7 +178,7 @@ function CustomerEncryptFile() {
                 formData.append("file", selectedFile, uploadName)
                 formData.append("keyID", String(selectedKeyID))
                 formData.append("keyPassword", passwordForRequest)
-                response = await apiFetch(`http://localhost:8080/cloud-storage/google-drive/files/encrypt-upload`, {
+                response = await apiFetch(`http://localhost:8080/cloud-storage/${activeProviderPath}/files/encrypt-upload`, {
                     method: "POST",
                     credentials: "include",
                     body: formData
@@ -163,7 +191,7 @@ function CustomerEncryptFile() {
                 return
             }
 
-            toast.success(`${uploadName}.stealthsync.enc uploaded to the configured Google Drive folder`)
+            toast.success(`${uploadName}.stealthsync.enc uploaded to ${activeProviderLabel}`)
             clearSelection()
             setKeyPassword("")
             setPrivacyWarnings([])
@@ -187,6 +215,15 @@ function CustomerEncryptFile() {
             <p className="text-muted mb-4" style={{ fontSize: 13 }}>
                 Drop a file below to encrypt and upload it to your cloud storage that is set as active link.
             </p>
+            <p className="text-muted mb-3" style={{ fontSize: 13 }}>
+                Current upload destination: {activeCloudLink ? `${activeProviderLabel} (${activeCloudLink.accountEmail})` : "No active cloud provider"}
+            </p>
+
+            {!activeCloudLink && (
+                <div className="alert alert-warning py-2" style={{ fontSize: 13 }}>
+                    Activate one cloud account in Cloud Storage Link before uploading encrypted files.
+                </div>
+            )}
 
             <div className="card p-3 mb-4">
                 <div className="row g-2 align-items-end">
@@ -218,7 +255,7 @@ function CustomerEncryptFile() {
                         <button
                             className="btn btn-primary w-100"
                             onClick={() => handleUpload()}
-                            disabled={!selectedFile || uploading || !selectedKeyID || !keyPassword.trim()}
+                            disabled={!selectedFile || uploading || !selectedKeyID || !keyPassword.trim() || !activeCloudLink}
                         >
                             {uploading ? "Uploading..." : "Encrypt"}
                         </button>

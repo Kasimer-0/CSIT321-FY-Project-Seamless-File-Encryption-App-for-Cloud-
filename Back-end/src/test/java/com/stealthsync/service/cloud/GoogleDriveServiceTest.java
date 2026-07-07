@@ -2,9 +2,11 @@ package com.stealthsync.service.cloud;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stealthsync.repository.GoogleDriveCredentialRepository;
 import com.stealthsync.service.AppDataService;
 import com.stealthsync.service.crypto.AesGcmService;
+import com.stealthsync.service.crypto.KeyManagementService;
 import com.stealthsync.service.crypto.UserVaultService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -12,9 +14,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class GoogleDriveServiceTest {
 
@@ -87,13 +92,97 @@ class GoogleDriveServiceTest {
 
         assertTrue(Boolean.FALSE.equals(legacy));
     }
+
+    @Test
+    void encryptedDriveMetadataHidesOriginalNameAndRestoresKeyDetails() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        UserVaultService userVaultService = mock(UserVaultService.class);
+        when(userVaultService.metadataPassphraseFor(7L)).thenReturn("metadata-passphrase");
+        GoogleDriveService service = service(userVaultService, new AesGcmService(new KeyManagementService()), objectMapper);
+
+        String description = ReflectionTestUtils.invokeMethod(
+                service,
+                "encryptedMetadataDescription",
+                7L,
+                "contract.pdf",
+                "AES-256-GCM",
+                44L,
+                "Drive Key",
+                "ABCD1234"
+        );
+
+        assertTrue(description.startsWith("stealthsync-metadata:"));
+        assertFalse(description.contains("contract.pdf"));
+        assertFalse(description.contains("Drive Key"));
+
+        ObjectNode file = objectMapper.createObjectNode()
+                .put("id", "drive-file-3")
+                .put("name", "stlh-random.stealthsync.enc")
+                .put("description", description);
+        file.set("appProperties", objectMapper.createObjectNode()
+                .put("stealthsync", "encrypted")
+                .put("metadataVersion", "1")
+                .put("encMethod", "AES-256-GCM"));
+
+        Object metadata = ReflectionTestUtils.invokeMethod(service, "readDriveMetadata", 7L, file);
+
+        assertEquals("contract.pdf", ReflectionTestUtils.invokeMethod(metadata, "originalName"));
+        assertEquals("AES-256-GCM", ReflectionTestUtils.invokeMethod(metadata, "encMethod"));
+        assertEquals(Long.valueOf(44L), ReflectionTestUtils.invokeMethod(metadata, "keyID"));
+        assertEquals("Drive Key", ReflectionTestUtils.invokeMethod(metadata, "keyName"));
+        assertEquals("ABCD1234", ReflectionTestUtils.invokeMethod(metadata, "keyFingerprint"));
+    }
+
+    @Test
+    void unreadableEncryptedMetadataStillReturnsPortableKeyHints() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode file = objectMapper.createObjectNode()
+                .put("id", "drive-file-4")
+                .put("name", "stlh-random.stealthsync.enc")
+                .put("description", "stealthsync-metadata:not-readable-on-this-device");
+        file.set("appProperties", objectMapper.createObjectNode()
+                .put("stealthsync", "encrypted")
+                .put("metadataVersion", "1")
+                .put("encMethod", "AES-256-GCM")
+                .put("keyID", 44L)
+                .put("keyFingerprint", "ABCD1234"));
+
+        Object metadata = ReflectionTestUtils.invokeMethod(service(), "readDriveMetadata", 7L, file);
+
+        assertEquals(Long.valueOf(44L), ReflectionTestUtils.invokeMethod(metadata, "keyID"));
+        assertEquals("ABCD1234", ReflectionTestUtils.invokeMethod(metadata, "keyFingerprint"));
+    }
+
+    @Test
+    void unreadableEncryptedMetadataWithoutKeyHintsFallsBackToLegacyMetadata() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode file = objectMapper.createObjectNode()
+                .put("id", "drive-file-5")
+                .put("name", "legacy-upload.stealthsync.enc")
+                .put("description", "stealthsync-metadata:not-readable-on-this-device");
+        file.set("appProperties", objectMapper.createObjectNode()
+                .put("stealthsync", "encrypted")
+                .put("metadataVersion", "1")
+                .put("encMethod", "AES-256-GCM"));
+
+        Object metadata = ReflectionTestUtils.invokeMethod(service(), "readDriveMetadata", 7L, file);
+
+        assertEquals("legacy-upload", ReflectionTestUtils.invokeMethod(metadata, "originalName"));
+        assertEquals("AES-256-GCM", ReflectionTestUtils.invokeMethod(metadata, "encMethod"));
+        assertNull(ReflectionTestUtils.invokeMethod(metadata, "keyID"));
+    }
+
     private GoogleDriveService service() {
+        return service(mock(UserVaultService.class), mock(AesGcmService.class), new ObjectMapper());
+    }
+
+    private GoogleDriveService service(UserVaultService userVaultService, AesGcmService aesGcmService, ObjectMapper objectMapper) {
         return new GoogleDriveService(
                 mock(GoogleDriveCredentialRepository.class),
                 mock(AppDataService.class),
-                mock(UserVaultService.class),
-                mock(AesGcmService.class),
-                new ObjectMapper()
+                userVaultService,
+                aesGcmService,
+                objectMapper
         );
     }
 }

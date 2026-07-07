@@ -81,60 +81,79 @@ function LoginForm({ onLogin }: LoginFormProps) {
 
     return (
         <>
-            <h2 className="mb-3 text-center">Login</h2>
+            <div className="mb-4">
+                <div className="console-kicker">Identity check</div>
+                <h2 className="form-title">Console Login</h2>
+                <p className="form-subtitle mb-0">Authenticate before opening encrypted file operations.</p>
+            </div>
 
-            <div className="mb-3" style={{ minHeight: "30px" }}>
+            <div style={{ minHeight: "52px" }}>
                 {error && (
-                    <div className="alert alert-danger mb-0 py-2">
+                    <div className="status-banner error" role="alert">
                         {error}
                     </div>
                 )}
             </div>
 
-            <input
-                className="form-control mb-3"
-                type="text"
-                placeholder="Username/Email address"
-                value={usernameOrEmail}
-                onChange={(e) => setUsernameOrEmail(e.target.value)}
-            />
+            <div className="form-group-custom">
+                <label className="input-label" htmlFor="usernameOrEmail">Username or email</label>
+                <input
+                    id="usernameOrEmail"
+                    className="form-control form-control-lg"
+                    type="text"
+                    placeholder="testuser or testuser@stealthsync.com"
+                    value={usernameOrEmail}
+                    onChange={(e) => setUsernameOrEmail(e.target.value)}
+                />
+            </div>
 
             {useRecovery ? (
-                <input
-                    className="form-control mb-3"
-                    type="text"
-                    placeholder="Recovery phrase"
-                    value={recoveryPhrase}
-                    onChange={(e) => setRecoveryPhrase(e.target.value)}
-                />
+                <div className="form-group-custom">
+                    <label className="input-label" htmlFor="recoveryPhrase">Recovery phrase</label>
+                    <input
+                        id="recoveryPhrase"
+                        className="form-control form-control-lg"
+                        type="text"
+                        placeholder="Enter recovery phrase"
+                        value={recoveryPhrase}
+                        onChange={(e) => setRecoveryPhrase(e.target.value)}
+                    />
+                </div>
             ) : (
-                <input
-                    className="form-control mb-3"
-                    type="password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="form-group-custom">
+                    <label className="input-label" htmlFor="password">Password</label>
+                    <input
+                        id="password"
+                        className="form-control form-control-lg"
+                        type="password"
+                        placeholder="Enter password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                    />
+                </div>
             )}
 
             <button
-                className="btn btn-primary w-100"
+                className="btn-premium-action"
+                type="button"
                 onClick={useRecovery ? handleRecoveryLogin : handleLogin}
                 disabled={loading}
             >
-                {loading ? "Logging in..." : useRecovery ? "Login with Recovery Phrase" : "Login"}
+                {loading ? "Authenticating..." : useRecovery ? "Login with Recovery Phrase" : "Login"}
             </button>
 
-            <button
-                className="btn btn-link w-100 mt-2"
-                type="button"
-                onClick={() => {
-                    setUseRecovery(v => !v)
-                    setError("")
-                }}
-            >
-                {useRecovery ? "Use password login" : "Use recovery phrase"}
-            </button>
+            <div className="auth-view-footer">
+                <button
+                    className="btn btn-link"
+                    type="button"
+                    onClick={() => {
+                        setUseRecovery(v => !v)
+                        setError("")
+                    }}
+                >
+                    {useRecovery ? "Use password login" : "Use recovery phrase"}
+                </button>
+            </div>
         </>
     )
 }

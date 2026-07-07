@@ -1,6 +1,6 @@
 import { apiFetch } from "../lib/api"
 import { useEffect, useMemo, useState } from "react"
-import type { EncryptedFile, EncryptionKeyRecord, GoogleDriveFile, UserAccount } from "../Type"
+import type { CloudStorageLink, EncryptedFile, EncryptionKeyRecord, GoogleDriveFile, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 
 type Props = {
@@ -11,8 +11,13 @@ type SavedFileResult = {
     savedPath: string
 }
 
+type CloudProviderFile = GoogleDriveFile & {
+    provider: string
+    providerLabel: string
+}
+
 function CustomerDecryptFile({ user }: Props) {
-    const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
+    const [driveFiles, setDriveFiles] = useState<CloudProviderFile[]>([])
     const [localFiles, setLocalFiles] = useState<EncryptedFile[]>([])
     const [keys, setKeys] = useState<EncryptionKeyRecord[]>([])
     const [keyPasswords, setKeyPasswords] = useState<Record<string, string>>({})
@@ -23,6 +28,13 @@ function CustomerDecryptFile({ user }: Props) {
     const [lastSavedPath, setLastSavedPath] = useState("")
 
     const keyByID = useMemo(() => new Map(keys.map(key => [key.keyID, key])), [keys])
+    const providerPath = (provider: string) => provider === "google_drive" ? "google-drive" : provider
+    const providerLabel = (provider: string) => {
+        if (provider === "google_drive") return "Google Drive"
+        if (provider === "dropbox") return "Dropbox"
+        if (provider === "onedrive") return "OneDrive"
+        return provider
+    }
 
     useEffect(() => {
         let cancelled = false
@@ -32,24 +44,58 @@ function CustomerDecryptFile({ user }: Props) {
             setDriveError("")
 
             try {
-                // Uploads are stored in Google Drive, while early prototype records remain
-                // in the local database. Load both sources so users can find every file here.
-                const [driveResponse, localResponse, keyResponse] = await Promise.all([
-                    apiFetch(`http://localhost:8080/cloud-storage/google-drive/files`, {
-                        credentials: "include"
-                    }),
+                // Cloud uploads can now live in Google Drive, Dropbox, or OneDrive.
+                // Local database records are still loaded for old prototype files.
+                const [linksResponse, localResponse, keyResponse] = await Promise.all([
+                    apiFetch("http://localhost:8080/cloud-storage/links", { credentials: "include" }),
                     apiFetch("http://localhost:8080/files", { credentials: "include" }),
                     apiFetch("http://localhost:8080/encryption-keys", { credentials: "include" })
                 ])
 
                 if (cancelled) return
 
-                if (driveResponse.ok) {
-                    setDriveFiles(await driveResponse.json())
+                if (linksResponse.ok) {
+                    const links = await linksResponse.json() as CloudStorageLink[]
+                    const connectedProviders = Array.from(new Set(
+                        links
+                            .filter(link => link.status === "connected")
+                            .map(link => link.provider)
+                    ))
+                    const providerResults = await Promise.all(connectedProviders.map(async provider => {
+                        try {
+                            const response = await apiFetch(`http://localhost:8080/cloud-storage/${providerPath(provider)}/files`, {
+                                credentials: "include"
+                            })
+                            if (!response.ok) {
+                                const error = await response.json().catch(() => null)
+                                throw new Error(error?.message ?? `${providerLabel(provider)} files could not be loaded.`)
+                            }
+                            const files = await response.json() as GoogleDriveFile[]
+                            return {
+                                files: files.map(file => ({
+                                    ...file,
+                                    provider,
+                                    providerLabel: providerLabel(provider)
+                                })),
+                                error: ""
+                            }
+                        } catch (error) {
+                            return {
+                                files: [] as CloudProviderFile[],
+                                error: error instanceof Error ? error.message : `${providerLabel(provider)} files could not be loaded.`
+                            }
+                        }
+                    }))
+                    const loadedFiles = providerResults.flatMap(result => result.files)
+                    const loadErrors = providerResults.map(result => result.error).filter(Boolean)
+                    setDriveFiles(loadedFiles)
+                    if (loadedFiles.length === 0 && loadErrors.length > 0) {
+                        setDriveError(loadErrors.join(" "))
+                    }
                 } else {
-                    const error = await driveResponse.json().catch(() => null)
+                    const error = await linksResponse.json().catch(() => null)
                     setDriveFiles([])
-                    setDriveError(error?.message ?? "Google Drive files could not be loaded.")
+                    setDriveError(error?.message ?? "Cloud files could not be loaded.")
                 }
 
                 if (localResponse.ok) {
@@ -87,7 +133,7 @@ function CustomerDecryptFile({ user }: Props) {
         setKeyPasswords(current => ({ ...current, [fieldKey]: value }))
     }
 
-    const driveRequiresPassword = (file: GoogleDriveFile) => Boolean(file.keyID)
+    const driveRequiresPassword = (file: CloudProviderFile) => Boolean(file.keyID)
 
     const localRequiresPassword = (file: EncryptedFile) => file.keyID != null && keyByID.has(file.keyID)
 
@@ -99,8 +145,8 @@ function CustomerDecryptFile({ user }: Props) {
         })
     }
 
-    const decryptDriveFile = async (file: GoogleDriveFile) => {
-        const fieldKey = `drive:${file.fileId}`
+    const decryptDriveFile = async (file: CloudProviderFile) => {
+        const fieldKey = `${file.provider}:${file.fileId}`
         const keyPassword = passwordFor(fieldKey).trim()
         if (driveRequiresPassword(file) && !keyPassword) {
             toast.error("Enter the password for this file's encryption key")
@@ -112,7 +158,7 @@ function CustomerDecryptFile({ user }: Props) {
             // JavaFX WebView cannot reliably save browser Blob downloads. The backend
             // decrypts locally, writes the plaintext to Downloads, and returns its path.
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/google-drive/files/${encodeURIComponent(file.fileId)}/decrypt-save`,
+                `http://localhost:8080/cloud-storage/${providerPath(file.provider)}/files/${encodeURIComponent(file.fileId)}/decrypt-save`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -122,7 +168,7 @@ function CustomerDecryptFile({ user }: Props) {
             )
             if (!response.ok) {
                 const error = await response.json().catch(() => null)
-                toast.error(error?.message ?? "Failed to decrypt and save the Google Drive file")
+                toast.error(error?.message ?? `Failed to decrypt and save the ${file.providerLabel} file`)
                 return
             }
 
@@ -171,7 +217,7 @@ function CustomerDecryptFile({ user }: Props) {
     }
 
     const removeLocalFile = async (file: EncryptedFile) => {
-        // Local records use a separate endpoint so this action cannot remove a Drive object.
+        // Local records use a separate endpoint so this action cannot remove a remote cloud object.
         const response = await apiFetch(`http://localhost:8080/files/${file.fileID}`, {
             method: "DELETE",
             credentials: "include"
@@ -190,7 +236,7 @@ function CustomerDecryptFile({ user }: Props) {
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     }
 
-    const driveKeyLabel = (file: GoogleDriveFile) => {
+    const driveKeyLabel = (file: CloudProviderFile) => {
         if (file.keyName) return `${file.keyName}${file.keyFingerprint ? ` (${file.keyFingerprint})` : ""}`
         if (file.keyID) return `Key #${file.keyID}`
         return "Legacy vault key"
@@ -206,7 +252,7 @@ function CustomerDecryptFile({ user }: Props) {
         <>
             <h5 className="mb-1">Decrypt and Download</h5>
             <p className="text-muted mb-3" style={{ fontSize: 13 }}>
-                Encrypted files from your linked Google Drive account.
+                Encrypted files from your linked Google Drive, Dropbox, and OneDrive accounts.
             </p>
 
             {lastSavedPath && (
@@ -216,22 +262,22 @@ function CustomerDecryptFile({ user }: Props) {
                 </div>
             )}
 
-            <h6 className="mb-2">Google Drive files</h6>
+            <h6 className="mb-2">Cloud provider files</h6>
             {loading ? (
                 <p className="text-muted" style={{ fontSize: 13 }}>Loading files...</p>
             ) : driveError ? (
                 <div className="alert alert-warning py-2" style={{ fontSize: 13 }}>{driveError}</div>
             ) : driveFiles.length === 0 ? (
-                <p className="text-muted" style={{ fontSize: 13 }}>No encrypted Google Drive files found.</p>
+                <p className="text-muted" style={{ fontSize: 13 }}>No encrypted cloud files found.</p>
             ) : (
                 <ul className="list-group mb-4" style={{ maxHeight: 420, overflowY: "auto" }}>
                     {driveFiles.map(file => {
-                        const fieldKey = `drive:${file.fileId}`
+                        const fieldKey = `${file.provider}:${file.fileId}`
                         return (
-                            <li key={file.fileId} className="list-group-item">
+                            <li key={`${file.provider}:${file.fileId}`} className="list-group-item">
                                 <div className="d-flex align-items-start justify-content-between gap-3">
                                     <div className="d-flex align-items-center gap-3 min-w-0">
-                                        <span className="badge bg-primary" style={{ fontSize: 10, minWidth: 48 }}>DRIVE</span>
+                                        <span className="badge bg-primary" style={{ fontSize: 10, minWidth: 72 }}>{file.providerLabel}</span>
                                         <div style={{ minWidth: 0 }}>
                                             <div className="fw-medium text-break" style={{ fontSize: 14 }}>{file.originalName}</div>
                                             <small className="text-muted">

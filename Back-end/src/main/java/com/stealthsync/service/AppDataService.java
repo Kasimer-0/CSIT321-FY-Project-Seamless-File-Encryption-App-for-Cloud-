@@ -295,22 +295,32 @@ public class AppDataService {
         return cloudStorageLinkRepository.findByLinkIDAndOwnerID(linkID, ownerID);
     }
 
+    public Optional<CloudStorageLink> activeCloudStorageLink(Long ownerID) {
+        if (ownerID == null) {
+            return Optional.empty();
+        }
+        return cloudStorageLinkRepository.findByOwnerID(ownerID).stream()
+                .filter(CloudStorageLink::isActive)
+                .filter(link -> "connected".equalsIgnoreCase(link.getStatus()))
+                .findFirst();
+    }
+
     @Transactional
     public Optional<CloudStorageLink> setActiveCloudStorageLink(Long linkID, Long ownerID) {
-        Optional<CloudStorageLink> selected = findCloudStorageLink(linkID, ownerID);
-        selected.ifPresent(link -> {
-            List<CloudStorageLink> links = cloudStorageLinkRepository.findByOwnerID(ownerID);
-            links.forEach(existing -> existing.setActive(existing.getLinkID().equals(linkID)));
-            cloudStorageLinkRepository.saveAll(links);
+        return findCloudStorageLink(linkID, ownerID).map(link -> {
+            if (!"connected".equalsIgnoreCase(link.getStatus())) {
+                throw new IllegalArgumentException("Only connected cloud storage links can be activated.");
+            }
+            makeOnlyActiveCloudLink(ownerID, link.getLinkID());
+            link.setActive(true);
+            return link;
         });
-        return selected;
     }
 
     @Transactional
     public Optional<CloudStorageLink> deactivateCloudStorageLink(Long linkID, Long ownerID) {
         return findCloudStorageLink(linkID, ownerID).map(link -> {
             link.setActive(false);
-            link.setStatus("disconnected");
             return cloudStorageLinkRepository.save(link);
         });
     }
@@ -355,21 +365,25 @@ public class AppDataService {
                     link.setAccountEmail(accountEmail);
                     link.setStatus("connected");
                     link.setLinkedAt(Instant.now());
-                    return cloudStorageLinkRepository.save(link);
+                    link.setActive(true);
+                    CloudStorageLink saved = cloudStorageLinkRepository.save(link);
+                    makeOnlyActiveCloudLink(owner.getUserID(), saved.getLinkID());
+                    return saved;
                 })
                 .orElseGet(() -> {
                     enforceCloudProviderLimit(owner);
-                    boolean firstLink = cloudStorageLinkRepository.findByOwnerID(owner.getUserID()).isEmpty();
                     CloudStorageLink link = new CloudStorageLink(
                             null,
                             normalizedProvider,
                             accountEmail,
                             Instant.now(),
                             "connected",
-                            firstLink,
+                            true,
                             owner.getUserID()
                     );
-                    return cloudStorageLinkRepository.save(link);
+                    CloudStorageLink saved = cloudStorageLinkRepository.save(link);
+                    makeOnlyActiveCloudLink(owner.getUserID(), saved.getLinkID());
+                    return saved;
                 });
     }
 
@@ -544,6 +558,12 @@ public class AppDataService {
             throw new IllegalArgumentException("Your plan can link up to " + limit + " cloud storage provider"
                     + (limit == 1 ? "." : "s."));
         }
+    }
+
+    private void makeOnlyActiveCloudLink(Long ownerID, Long activeLinkID) {
+        List<CloudStorageLink> links = cloudStorageLinkRepository.findByOwnerID(ownerID);
+        links.forEach(existing -> existing.setActive(existing.getLinkID().equals(activeLinkID)));
+        cloudStorageLinkRepository.saveAll(links);
     }
 
     private boolean isBlank(String value) {

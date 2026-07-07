@@ -2,6 +2,8 @@ package com.stealthsync.service;
 
 import com.stealthsync.model.dto.DashboardStatsResponse;
 import com.stealthsync.model.dto.UserAccountDTO;
+import com.stealthsync.model.entity.CloudStorageLink;
+import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.Plan;
 import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.model.entity.SystemLog;
@@ -17,16 +19,20 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -142,6 +148,134 @@ class AppDataServiceTest {
         assertEquals(12, stats.getRevenueStream().size());
         assertTrue(stats.getRevenueStream().stream().anyMatch(month -> month.revenue() == 15.0));
     }
+
+    @Test
+    void storeEncryptedFilePersistsOwnerAndKeyID() {
+        byte[] ciphertext = new byte[] {1, 2, 3};
+        when(encryptedFileRecordRepository.save(any(EncryptedFileRecord.class))).thenAnswer(invocation -> {
+            EncryptedFileRecord record = invocation.getArgument(0);
+            record.setFileID(77L);
+            return record;
+        });
+
+        EncryptedFileRecord record = service().storeEncryptedFile(
+                2L,
+                "contract.pdf",
+                240L,
+                "AES-256-GCM",
+                44L,
+                ciphertext
+        );
+
+        assertEquals(77L, record.getFileID());
+        assertEquals(2L, record.getOwnerID());
+        assertEquals(44L, record.getKeyID());
+        assertEquals("pdf", record.getFileType());
+        assertArrayEquals(ciphertext, record.getEncryptedContent());
+    }
+
+    @Test
+    void premiumCustomerCanLinkThreeCloudProviders() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        List<CloudStorageLink> links = mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+
+        service().linkCloudProvider("google_drive", 2L, "google@example.com");
+        service().linkCloudProvider("dropbox", 2L, "dropbox@example.com");
+        service().linkCloudProvider("onedrive", 2L, "onedrive@example.com");
+
+        assertEquals(3, links.size());
+        assertTrue(links.stream().anyMatch(link -> "google_drive".equals(link.getProvider())));
+        assertTrue(links.stream().anyMatch(link -> "dropbox".equals(link.getProvider())));
+        assertTrue(links.stream().anyMatch(link -> "onedrive".equals(link.getProvider())));
+    }
+
+    @Test
+    void freeCustomerProviderLimitStillApplies() {
+        UserAccount freeCustomer = customer(false, null);
+        mutableCloudLinkRepository(freeCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(freeCustomer));
+
+        service().linkCloudProvider("google_drive", 2L, "google@example.com");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service().linkCloudProvider("dropbox", 2L, "dropbox@example.com"));
+
+        assertEquals("Your plan can link up to 1 cloud storage provider.", error.getMessage());
+    }
+
+    @Test
+    void linkingNewCloudProviderMakesItActiveAndDeactivatesPreviousLinks() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        List<CloudStorageLink> links = mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+
+        CloudStorageLink google = service().linkCloudProvider("google_drive", 2L, "google@example.com");
+        CloudStorageLink dropbox = service().linkCloudProvider("dropbox", 2L, "dropbox@example.com");
+
+        assertEquals(2, links.size());
+        assertFalse(google.isActive());
+        assertTrue(dropbox.isActive());
+        assertEquals(Optional.of(dropbox), service().activeCloudStorageLink(2L));
+    }
+
+    @Test
+    void activatingCloudLinkDeactivatesOtherLinksForSameUser() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+
+        CloudStorageLink google = service().linkCloudProvider("google_drive", 2L, "google@example.com");
+        CloudStorageLink dropbox = service().linkCloudProvider("dropbox", 2L, "dropbox@example.com");
+
+        CloudStorageLink activated = service().setActiveCloudStorageLink(google.getLinkID(), 2L).orElseThrow();
+
+        assertEquals(google, activated);
+        assertTrue(google.isActive());
+        assertFalse(dropbox.isActive());
+    }
+
+    @Test
+    void deactivatingCloudLinkKeepsConnectionStatusAndRecord() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        List<CloudStorageLink> links = mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+
+        CloudStorageLink google = service().linkCloudProvider("google_drive", 2L, "google@example.com");
+
+        CloudStorageLink deactivated = service().deactivateCloudStorageLink(google.getLinkID(), 2L).orElseThrow();
+
+        assertFalse(deactivated.isActive());
+        assertEquals("connected", deactivated.getStatus());
+        assertEquals(1, links.size());
+    }
+
+    @Test
+    void activatingAnotherUsersCloudLinkReturnsEmpty() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+
+        CloudStorageLink google = service().linkCloudProvider("google_drive", 2L, "google@example.com");
+
+        assertTrue(service().setActiveCloudStorageLink(google.getLinkID(), 99L).isEmpty());
+        assertTrue(google.isActive());
+    }
+
+    @Test
+    void disconnectedCloudLinkCannotBeActivated() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+        CloudStorageLink google = service().linkCloudProvider("google_drive", 2L, "google@example.com");
+        google.setStatus("disconnected");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service().setActiveCloudStorageLink(google.getLinkID(), 2L));
+
+        assertEquals("Only connected cloud storage links can be activated.", error.getMessage());
+    }
+
     private AppDataService service() {
         return new AppDataService(
                 userAccountRepository,
@@ -161,5 +295,38 @@ class AppDataServiceTest {
 
     private Plan plan(Long planID, String title, double price, String status) {
         return new Plan(planID, title, price, "Description", status, "AES-256-GCM");
+    }
+
+    private List<CloudStorageLink> mutableCloudLinkRepository(UserAccount owner) {
+        List<CloudStorageLink> links = new ArrayList<>();
+        long[] nextID = {1L};
+        when(cloudStorageLinkRepository.findByOwnerID(owner.getUserID())).thenAnswer(invocation -> List.copyOf(links));
+        when(cloudStorageLinkRepository.findByOwnerID(anyLong())).thenAnswer(invocation -> List.copyOf(links));
+        when(cloudStorageLinkRepository.findByLinkIDAndOwnerID(anyLong(), anyLong())).thenAnswer(invocation -> {
+            Long linkID = invocation.getArgument(0);
+            Long ownerID = invocation.getArgument(1);
+            return links.stream()
+                    .filter(link -> link.getLinkID().equals(linkID))
+                    .filter(link -> link.getOwnerID().equals(ownerID))
+                    .findFirst();
+        });
+        when(cloudStorageLinkRepository.findByOwnerIDAndProviderIgnoreCase(anyLong(), anyString())).thenAnswer(invocation -> {
+            Long ownerID = invocation.getArgument(0);
+            String provider = invocation.getArgument(1);
+            return links.stream()
+                    .filter(link -> link.getOwnerID().equals(ownerID))
+                    .filter(link -> link.getProvider().equalsIgnoreCase(provider))
+                    .findFirst();
+        });
+        when(cloudStorageLinkRepository.save(any(CloudStorageLink.class))).thenAnswer(invocation -> {
+            CloudStorageLink link = invocation.getArgument(0);
+            if (link.getLinkID() == null) {
+                link.setLinkID(nextID[0]++);
+                links.add(link);
+            }
+            return link;
+        });
+        when(cloudStorageLinkRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        return links;
     }
 }

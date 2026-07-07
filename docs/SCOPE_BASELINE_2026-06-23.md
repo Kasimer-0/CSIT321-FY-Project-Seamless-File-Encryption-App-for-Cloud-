@@ -1,11 +1,11 @@
 # StealthSync Scope Baseline - 2026-06-23
 
 ## Current FYP Scope
-StealthSync is frozen around the Windows desktop demo, Google Drive integration, local encryption/decryption, JWT authentication, user data isolation, user vault/key flow, Google Drive metadata protection, AES tier enforcement, and repeatable security/integration test evidence.
+StealthSync is frozen around the Windows desktop demo, Google Drive / Dropbox / OneDrive cloud integration, local encryption/decryption, JWT authentication, user data isolation, user vault/key flow, cloud metadata protection, AES tier enforcement, and repeatable security/integration test evidence.
 
 ## P0
 - Windows desktop app flow.
-- Google Drive link, encrypt-upload, list, decrypt-download, decrypt-save, and delete flow.
+- Google Drive, Dropbox, and OneDrive link, encrypt-upload, list, decrypt-download, decrypt-save, and delete flows.
 - Local encrypted file upload, list, decrypt-download, decrypt-save, and delete flow.
 - JWT/Auth with `sub=userID`, `role`, and `exp` claims.
 - User data isolation: customer-owned cloud links, files, keys, physical tokens, and account-security operations must resolve owner from the current JWT user.
@@ -21,11 +21,10 @@ StealthSync is frozen around the Windows desktop demo, Google Drive integration,
 - Documentation screenshots and manual evidence.
 
 ## Future Work
-- Dropbox integration.
-- OneDrive integration.
 - macOS packaging.
 - Workspace/team sharing.
 - True ML recommendation model.
+- Additional cloud providers beyond Google Drive, Dropbox, and OneDrive.
 
 ## Ticket System Decision
 The current codebase has removed Ticket frontend/backend code. Keep it fully removed for this sprint unless the team formally decides to restore it as Future Work. Do not leave a half-removed Ticket feature in frontend imports, backend controllers, UML, or test documents.

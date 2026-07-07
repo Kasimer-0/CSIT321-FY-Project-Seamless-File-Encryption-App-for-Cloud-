@@ -54,3 +54,14 @@ The teammate proposal is accepted for the demo file-encryption path with a small
 6. New Google Drive objects keep randomized object names, and original file metadata is stored in encrypted Drive description metadata rather than plaintext `appProperties`.
 
 Physical token binding remains prototype/future work. The current project must not claim real USB, FIDO2, WebAuthn, or automatic hardware unlock until actual hardware verification and secure key-release logic are implemented. A future prototype may add a `boundKeyID` on token records, but password entry remains required in the current sprint baseline.
+
+## 2026-06-30 Three-Provider Cloud Flow
+
+Google Drive, Dropbox, and OneDrive now share the same intended encryption boundary:
+
+1. The frontend sends the selected `keyID` and one-time `keyPassword` for upload/decrypt requests.
+2. `EncryptionKeyService` derives request-scoped key material and rejects wrong passwords.
+3. `AesGcmService` encrypts or decrypts locally before/after provider transfer.
+4. Provider adapters handle OAuth, token refresh, list, upload ciphertext, download ciphertext, and delete.
+
+The old `LEGACY_DRIVE_DEMO_PASSPHRASE` may remain only for backwards-compatible decryption of early demo files that have no key metadata. New cloud uploads must not use a fixed demo passphrase.

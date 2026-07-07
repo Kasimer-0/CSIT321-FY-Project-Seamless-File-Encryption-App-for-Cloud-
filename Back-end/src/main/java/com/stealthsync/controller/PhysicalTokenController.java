@@ -26,7 +26,7 @@ import java.util.Map;
 @RequestMapping("/physical-tokens")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
-/** Manages physical-token registrations for the authenticated premium customer. */
+/** Manages prototype physical-token registration records; hardware-backed key unlock remains Future Work. */
 public class PhysicalTokenController {
 
     private final PhysicalTokenRepository physicalTokenRepository;

@@ -3,6 +3,7 @@ package com.stealthsync.service.cloud;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.stealthsync.model.dto.CloudFileDTO;
 import com.stealthsync.model.dto.GoogleDriveFileDTO;
 import com.stealthsync.model.entity.CloudStorageLink;
 import com.stealthsync.model.entity.GoogleDriveCredential;
@@ -43,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Implements Google OAuth, encrypted credential persistence, token refresh, and Drive file transfer.
  * Access and refresh tokens are encrypted with an installation secret before JPA persistence.
  */
-public class GoogleDriveService {
+public class GoogleDriveService implements CloudStorageAdapter {
 
     private static final String AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
     private static final String TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -89,10 +90,27 @@ public class GoogleDriveService {
     @Value("${stealthsync.google-drive.folder-id:}")
     private String folderId;
 
+    @Override
+    public String providerKey() {
+        return "google_drive";
+    }
+
+    @Override
+    public String providerPath() {
+        return "google-drive";
+    }
+
+    @Override
+    public String providerLabel() {
+        return "Google Drive";
+    }
+
+    @Override
     public boolean isConfigured() {
         return !isBlank(clientId) && !isBlank(clientSecret) && !isBlank(redirectUri);
     }
 
+    @Override
     public boolean isConnected(Long ownerID) {
         return ownerID != null
                 && credentialRepository.findByOwnerID(ownerID).isPresent()
@@ -101,6 +119,7 @@ public class GoogleDriveService {
                         && "connected".equalsIgnoreCase(link.getStatus()));
     }
 
+    @Override
     /** Creates a short-lived state token that binds the OAuth callback to one local customer. */
     public String createAuthorizationUrl(Long ownerID) {
         requireConfigured();
@@ -128,6 +147,7 @@ public class GoogleDriveService {
         return authorizationUrl;
     }
 
+    @Override
     @Transactional
     /** Exchanges Google's callback code, records the account email, and stores encrypted tokens. */
     public CloudStorageLink completeAuthorization(String code, String state) throws IOException, InterruptedException {
@@ -177,6 +197,46 @@ public class GoogleDriveService {
         return dataStore.linkCloudProvider("google_drive", pending.ownerID(), accountEmail);
     }
 
+    @Override
+    public List<CloudFileDTO> listEncryptedFilesForProvider(Long ownerID) throws IOException, InterruptedException {
+        return listEncryptedFiles(ownerID).stream()
+                .map(this::toCloudFileDTO)
+                .toList();
+    }
+
+    @Override
+    public CloudFileDTO uploadEncryptedForProvider(Long ownerID, CloudUploadMetadata metadata, InputStream encryptedContent)
+            throws IOException, InterruptedException {
+        return toCloudFileDTO(uploadEncrypted(
+                ownerID,
+                metadata.originalName(),
+                metadata.encMethod(),
+                metadata.keyID(),
+                metadata.keyName(),
+                metadata.keyFingerprint(),
+                encryptedContent
+        ));
+    }
+
+    @Override
+    public DownloadedCloudFile downloadEncryptedForProvider(Long ownerID, String fileId)
+            throws IOException, InterruptedException {
+        DownloadedDriveFile file = downloadEncrypted(ownerID, fileId);
+        return new DownloadedCloudFile(
+                file.originalName(),
+                file.encMethod(),
+                file.keyID(),
+                file.keyName(),
+                file.keyFingerprint(),
+                file.encryptedContent()
+        );
+    }
+
+    @Override
+    public void deleteEncryptedFileForProvider(Long ownerID, String fileId) throws IOException, InterruptedException {
+        deleteEncryptedFile(ownerID, fileId);
+    }
+
     public List<GoogleDriveFileDTO> listEncryptedFiles(Long ownerID) throws IOException, InterruptedException {
         String query = "trashed = false and appProperties has { key='stealthsync' and value='encrypted' }";
         if (!isBlank(folderId)) {
@@ -210,6 +270,7 @@ public class GoogleDriveService {
                 .put("stealthsync", "encrypted")
                 .put("metadataVersion", "1")
                 .put("encMethod", encMethod));
+        writePortableKeyHints((ObjectNode) metadata.get("appProperties"), keyID, keyFingerprint);
         if (!isBlank(folderId)) {
             // Set the parent in metadata so ciphertext never lands in Drive root.
             metadata.putArray("parents").add(folderId);
@@ -254,10 +315,27 @@ public class GoogleDriveService {
     }
 
     @Transactional
+    @Override
     public void disconnect(Long ownerID) {
         if (ownerID != null) {
             credentialRepository.deleteByOwnerID(ownerID);
         }
+    }
+
+    private CloudFileDTO toCloudFileDTO(GoogleDriveFileDTO file) {
+        return new CloudFileDTO(
+                providerKey(),
+                file.fileId(),
+                file.fileName(),
+                file.originalName(),
+                file.fileSize(),
+                file.createdAt(),
+                file.modifiedAt(),
+                file.encMethod(),
+                file.keyID(),
+                file.keyName(),
+                file.keyFingerprint()
+        );
     }
 
     private JsonNode fileMetadata(Long ownerID, String fileId) throws IOException, InterruptedException {
@@ -401,6 +479,7 @@ public class GoogleDriveService {
                 .put("stealthsync", "encrypted")
                 .put("metadataVersion", "1")
                 .put("encMethod", metadata.encMethod());
+        writePortableKeyHints(appProperties, metadata.keyID(), metadata.keyFingerprint());
         // Google Drive treats null appProperties values as delete requests for those keys.
         appProperties.putNull("originalName");
 
@@ -472,7 +551,26 @@ public class GoogleDriveService {
                 // Fall back to legacy metadata so one unreadable entry does not break the file list.
             }
         }
-        return legacyFileMetadata(file);
+        DriveFileMetadata fallback = legacyFileMetadata(file);
+        JsonNode appProperties = file.path("appProperties");
+        Long portableKeyID = appProperties.hasNonNull("keyID") ? Long.valueOf(appProperties.path("keyID").asLong()) : fallback.keyID();
+        String portableFingerprint = textOrNull(appProperties, "keyFingerprint");
+        return new DriveFileMetadata(
+                fallback.originalName(),
+                fallback.encMethod(),
+                portableKeyID,
+                fallback.keyName(),
+                isBlank(portableFingerprint) ? fallback.keyFingerprint() : portableFingerprint
+        );
+    }
+
+    private void writePortableKeyHints(ObjectNode appProperties, Long keyID, String keyFingerprint) {
+        if (keyID != null) {
+            appProperties.put("keyID", keyID.toString());
+        }
+        if (!isBlank(keyFingerprint)) {
+            appProperties.put("keyFingerprint", keyFingerprint);
+        }
     }
 
     private DriveFileMetadata legacyFileMetadata(JsonNode file) {

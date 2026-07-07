@@ -4,11 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stealthsync.model.entity.CloudStorageLink;
 import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.EncryptionKeyRecord;
+import com.stealthsync.model.entity.PhysicalTokenRecord;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.CloudStorageLinkRepository;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
 import com.stealthsync.repository.EncryptionKeyRepository;
+import com.stealthsync.repository.PhysicalTokenRepository;
 import com.stealthsync.repository.UserAccountRepository;
+import com.stealthsync.service.crypto.EncryptionKeyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,12 +21,19 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -63,6 +73,12 @@ class OwnershipSecurityTest {
 
     @Autowired
     private EncryptionKeyRepository encryptionKeyRepository;
+
+    @Autowired
+    private PhysicalTokenRepository physicalTokenRepository;
+
+    @Autowired
+    private EncryptionKeyService encryptionKeyService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -168,6 +184,7 @@ class OwnershipSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userID").value(customerA.getUserID()));
     }
+
     @Test
     void authenticatedCustomerCanLoadCurrentAccount() throws Exception {
         mockMvc.perform(get("/me")
@@ -217,6 +234,146 @@ class OwnershipSecurityTest {
                 .andExpect(jsonPath("$[0].salt").doesNotExist())
                 .andExpect(jsonPath("$[0].passwordVerifier").doesNotExist());
     }
+
+    @Test
+    void protectedApiWithoutTokenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+
+    @Test
+    void customerCannotDeleteAnotherCustomersCloudLink() throws Exception {
+        CloudStorageLink link = cloudStorageLinkRepository.save(new CloudStorageLink(
+                null,
+                "dropbox",
+                "other@example.test",
+                Instant.now(),
+                "connected",
+                false,
+                customerB.getUserID()
+        ));
+
+        mockMvc.perform(delete("/cloud-storage/links/{id}", link.getLinkID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
+
+        assertTrue(cloudStorageLinkRepository.findById(link.getLinkID()).isPresent());
+    }
+
+    @Test
+    void customerCannotModifyAnotherCustomersEncryptionKey() throws Exception {
+        EncryptionKeyRecord key = createCustomerBKey("Other editable key");
+
+        mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"keyName":"Tampered name","status":"inactive"}
+                                """))
+                .andExpect(status().isNotFound());
+
+        EncryptionKeyRecord unchanged = encryptionKeyRepository.findById(key.getKeyID()).orElseThrow();
+        assertEquals("Other editable key", unchanged.getKeyName());
+        assertEquals("active", unchanged.getStatus());
+    }
+
+    @Test
+    void customerCannotDeleteAnotherCustomersEncryptionKey() throws Exception {
+        EncryptionKeyRecord key = createCustomerBKey("Other delete key");
+
+        mockMvc.perform(delete("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
+
+        assertTrue(encryptionKeyRepository.findById(key.getKeyID()).isPresent());
+    }
+
+    @Test
+    void premiumCustomerCannotReadAnotherCustomersPhysicalToken() throws Exception {
+        makeCustomerAPremium();
+        PhysicalTokenRecord token = createCustomerBToken("Other token", "TOKEN-B-READ");
+
+        mockMvc.perform(get("/physical-tokens/{id}", token.getTokenID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void premiumCustomerCannotChangeAnotherCustomersPhysicalTokenLifecycle() throws Exception {
+        makeCustomerAPremium();
+        PhysicalTokenRecord token = createCustomerBToken("Other lifecycle token", "TOKEN-B-LIFE");
+
+        mockMvc.perform(patch("/physical-tokens/{id}/activate", token.getTokenID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(patch("/physical-tokens/{id}/deactivate", token.getTokenID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/physical-tokens/{id}", token.getTokenID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
+
+        PhysicalTokenRecord unchanged = physicalTokenRepository.findById(token.getTokenID()).orElseThrow();
+        assertEquals("inactive", unchanged.getStatus());
+    }
+
+    @Test
+    void customerCannotEncryptLocalFileWithAnotherCustomersKeyID() throws Exception {
+        EncryptionKeyRecord otherKey = createCustomerBKey("Other upload key");
+        int fileCountBefore = encryptedFileRecordRepository
+                .findByOwnerIDOrderByUploadedAtDesc(customerA.getUserID())
+                .size();
+
+        mockMvc.perform(multipart("/files/encrypt-upload")
+                        .file(new MockMultipartFile("file", "note.txt", MediaType.TEXT_PLAIN_VALUE, "secret".getBytes()))
+                        .param("keyID", otherKey.getKeyID().toString())
+                        .param("keyPassword", "OtherKey@12345")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isBadRequest());
+
+        int fileCountAfter = encryptedFileRecordRepository
+                .findByOwnerIDOrderByUploadedAtDesc(customerA.getUserID())
+                .size();
+        assertEquals(fileCountBefore, fileCountAfter);
+    }
+
+    @Test
+    void localFileEncryptUploadRequiresKeyIDAndKeyPassword() throws Exception {
+        mockMvc.perform(multipart("/files/encrypt-upload")
+                        .file(new MockMultipartFile("file", "missing-key.txt", MediaType.TEXT_PLAIN_VALUE, "secret".getBytes()))
+                        .param("keyPassword", "Master@12345")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(multipart("/files/encrypt-upload")
+                        .file(new MockMultipartFile("file", "missing-password.txt", MediaType.TEXT_PLAIN_VALUE, "secret".getBytes()))
+                        .param("keyID", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isBadRequest());
+    }
+
+    private EncryptionKeyRecord createCustomerBKey(String keyName) {
+        return encryptionKeyService.createKey(customerB.getUserID(), keyName, "AES-256-GCM", "OtherKey@12345");
+    }
+
+    private PhysicalTokenRecord createCustomerBToken(String tokenName, String serialNumber) {
+        return physicalTokenRepository.save(new PhysicalTokenRecord(
+                null,
+                customerB.getUserID(),
+                tokenName,
+                serialNumber,
+                "inactive",
+                Instant.now(),
+                null
+        ));
+    }
+
+    private void makeCustomerAPremium() {
+        customerA.setSubscribed(true);
+        customerA = userAccountRepository.save(customerA);
+    }
+
     private String bearer(String token) {
         return "Bearer " + token;
     }

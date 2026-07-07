@@ -1,16 +1,16 @@
 package com.stealthsync.controller;
 
+import com.stealthsync.config.DesktopWindowLauncher;
+import com.stealthsync.config.SystemBrowserLauncher;
+import com.stealthsync.model.dto.CloudFileDTO;
 import com.stealthsync.model.entity.CloudStorageLink;
-import com.stealthsync.model.dto.GoogleDriveFileDTO;
-import com.stealthsync.service.AppDataService;
 import com.stealthsync.security.CurrentUserService;
-import com.stealthsync.service.cloud.GoogleDriveService;
+import com.stealthsync.service.AppDataService;
+import com.stealthsync.service.cloud.CloudStorageAdapter;
 import com.stealthsync.service.crypto.AesGcmService;
 import com.stealthsync.service.crypto.EncryptionKeyService;
 import com.stealthsync.service.crypto.EncryptionPolicyService;
 import com.stealthsync.service.crypto.UserVaultService;
-import com.stealthsync.config.DesktopWindowLauncher;
-import com.stealthsync.config.SystemBrowserLauncher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
@@ -18,7 +18,18 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
@@ -27,7 +38,9 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @RestController
@@ -35,14 +48,13 @@ import java.util.Map;
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
-/**
- * Coordinates cloud-link management and Google Drive OAuth/file operations.
- * Google Drive is real integration; Dropbox and OneDrive links remain prototype records.
- */
+/** Coordinates cloud-link management and provider-neutral encrypted cloud file operations. */
 public class CloudStorageController {
 
+    private static final String LEGACY_DRIVE_DEMO_PASSPHRASE = "stealthsync-demo-passphrase";
+
     private final AppDataService dataStore;
-    private final GoogleDriveService googleDriveService;
+    private final List<CloudStorageAdapter> cloudStorageAdapters;
     private final AesGcmService aesGcmService;
     private final CurrentUserService currentUserService;
     private final UserVaultService userVaultService;
@@ -54,23 +66,49 @@ public class CloudStorageController {
         return ResponseEntity.ok(dataStore.listCloudStorageLinks(currentUserService.requireUserID()));
     }
 
+    @GetMapping("/links/active")
+    public ResponseEntity<Map<String, Object>> getActiveLink() {
+        return dataStore.activeCloudStorageLink(currentUserService.requireUserID())
+                .<ResponseEntity<Map<String, Object>>>map(link -> ResponseEntity.ok(Map.of(
+                        "active", true,
+                        "linkID", link.getLinkID(),
+                        "provider", link.getProvider(),
+                        "accountEmail", link.getAccountEmail(),
+                        "status", link.getStatus(),
+                        "isActive", link.isActive(),
+                        "link", link
+                )))
+                .orElseGet(() -> ResponseEntity.ok(Map.of(
+                        "active", false,
+                        "message", "No active cloud storage account is selected."
+                )));
+    }
+
     @GetMapping("/providers")
     public ResponseEntity<Map<String, Object>> getProviders() {
         Long ownerID = currentUserService.requireUserID();
+        Map<String, String> providerModes = new LinkedHashMap<>();
+        Map<String, Boolean> configured = new LinkedHashMap<>();
+        cloudStorageAdapters.forEach(adapter -> {
+            providerModes.put(adapter.providerKey(), "oauth");
+            configured.put(adapter.providerKey(), adapter.isConfigured());
+        });
         return ResponseEntity.ok(Map.of(
                 "providers", dataStore.supportedCloudProviders(),
+                "providerModes", providerModes,
+                "configured", configured,
                 "providerLimit", dataStore.cloudProviderLimitFor(ownerID)
         ));
     }
 
-    @PatchMapping("/links/{id}/set-active")
+    @RequestMapping(value = {"/links/{id}/activate", "/links/{id}/set-active"}, method = {RequestMethod.POST, RequestMethod.PATCH})
     public ResponseEntity<CloudStorageLink> setActive(@PathVariable Long id) {
         return dataStore.setActiveCloudStorageLink(id, currentUserService.requireUserID())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @PatchMapping("/links/{id}/deactivate")
+    @RequestMapping(value = "/links/{id}/deactivate", method = {RequestMethod.POST, RequestMethod.PATCH})
     public ResponseEntity<CloudStorageLink> deactivate(@PathVariable Long id) {
         return dataStore.deactivateCloudStorageLink(id, currentUserService.requireUserID())
                 .map(ResponseEntity::ok)
@@ -86,8 +124,7 @@ public class CloudStorageController {
     public ResponseEntity<Void> remove(@PathVariable Long id) {
         Long ownerID = currentUserService.requireUserID();
         dataStore.findCloudStorageLink(id, ownerID)
-                .filter(link -> "google_drive".equalsIgnoreCase(link.getProvider()))
-                .ifPresent(link -> googleDriveService.disconnect(ownerID));
+                .ifPresent(link -> adapterFor(link.getProvider()).disconnect(ownerID));
         return dataStore.removeCloudStorageLink(id, ownerID)
                 ? ResponseEntity.noContent().build()
                 : ResponseEntity.notFound().build();
@@ -100,123 +137,120 @@ public class CloudStorageController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/auth/{provider}")
-    public ResponseEntity<Map<String, Object>> startOAuth(@PathVariable String provider) {
+    @GetMapping({"/auth/{provider}", "/{provider}/auth"})
+    public ResponseEntity<Map<String, Object>> startOAuth(@PathVariable String provider) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        if ("google_drive".equalsIgnoreCase(provider)) {
-            String authUrl = googleDriveService.createAuthorizationUrl(ownerID);
-            boolean opened = SystemBrowserLauncher.open(URI.create(authUrl));
-            return ResponseEntity.ok(Map.<String, Object>of(
-                    "authUrl", authUrl,
-                    "openedExternal", opened,
-                    "configured", true
-            ));
-        }
-        CloudStorageLink link = dataStore.linkCloudProvider(provider, ownerID);
+        CloudStorageAdapter adapter = adapterFor(provider);
+        String authUrl = adapter.createAuthorizationUrl(ownerID);
+        boolean opened = SystemBrowserLauncher.open(URI.create(authUrl));
         return ResponseEntity.ok(Map.<String, Object>of(
-                "authUrl", "https://example.com/oauth/" + provider,
-                "link", link
+                "mode", "oauth",
+                "provider", adapter.providerKey(),
+                "authUrl", authUrl,
+                "openedExternal", opened,
+                "configured", adapter.isConfigured(),
+                "message", adapter.providerLabel() + " authorization opened in your browser."
         ));
     }
 
-    @GetMapping("/oauth/google/callback")
-    public ResponseEntity<String> completeGoogleOAuth(
+    @GetMapping({"/oauth/{provider}/callback", "/{provider}/callback"})
+    public ResponseEntity<String> completeCloudOAuth(
+            @PathVariable String provider,
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String error) throws Exception {
+        CloudStorageAdapter adapter = adapterFor(provider);
         if (error != null) {
-            return htmlResponse("Google Drive connection cancelled", "Google returned: " + error);
+            return htmlResponse(adapter.providerLabel() + " connection cancelled", adapter.providerLabel() + " returned: " + error);
         }
-        CloudStorageLink link = googleDriveService.completeAuthorization(code, state);
+        CloudStorageLink link = adapter.completeAuthorization(code, state);
         DesktopWindowLauncher.focusPrimaryWindow();
         return htmlResponse(
-                "Google Drive connected",
+                adapter.providerLabel() + " connected",
                 "Connected " + link.getAccountEmail() + ". You can close this browser tab and return to StealthSync."
         );
     }
 
-    @GetMapping("/google-drive/status")
-    public ResponseEntity<Map<String, Object>> googleDriveStatus() {
+    @GetMapping("/{provider}/status")
+    public ResponseEntity<Map<String, Object>> providerStatus(@PathVariable String provider) {
         Long ownerID = currentUserService.requireUserID();
+        CloudStorageAdapter adapter = adapterFor(provider);
         return ResponseEntity.ok(Map.of(
-                "configured", googleDriveService.isConfigured(),
-                "connected", googleDriveService.isConnected(ownerID)
+                "provider", adapter.providerKey(),
+                "configured", adapter.isConfigured(),
+                "connected", adapter.isConnected(ownerID)
         ));
     }
 
-    @GetMapping("/google-drive/files")
-    public ResponseEntity<List<GoogleDriveFileDTO>> googleDriveFiles() throws Exception {
+    @GetMapping("/{provider}/files")
+    public ResponseEntity<List<CloudFileDTO>> providerFiles(@PathVariable String provider) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        return ResponseEntity.ok(googleDriveService.listEncryptedFiles(ownerID));
+        return ResponseEntity.ok(adapterFor(provider).listEncryptedFilesForProvider(ownerID));
     }
 
-    @PostMapping(value = "/google-drive/files/encrypt-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<GoogleDriveFileDTO> encryptAndUploadToGoogleDrive(
+    @PostMapping(value = "/{provider}/files/encrypt-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CloudFileDTO> encryptAndUploadToProvider(
+            @PathVariable String provider,
             @RequestParam("file") MultipartFile file,
             @RequestParam("keyID") Long keyID,
             @RequestParam("keyPassword") String keyPassword) throws Exception {
         Long ownerID = currentUserService.requireUserID();
+        CloudStorageAdapter adapter = adapterFor(provider);
+        requireActiveProvider(ownerID, adapter);
         String originalName = safeFilename(file.getOriginalFilename(), "uploaded-file");
         EncryptionKeyService.DerivedKeyMaterial keyMaterial =
                 encryptionKeyService.requireActiveKeyMaterial(ownerID, keyID, keyPassword);
         EncryptionPolicyService.EncryptionPolicy policy =
                 encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
-        // Encrypt locally with the selected password-protected key before the stream is handed to Google Drive.
         try (InputStream encrypted = aesGcmService.encryptStream(
                 file.getInputStream(),
                 keyMaterial.passphrase(),
                 policy.keyLengthBits())) {
-            return ResponseEntity.ok(googleDriveService.uploadEncrypted(
+            return ResponseEntity.ok(adapter.uploadEncryptedForProvider(
                     ownerID,
-                    originalName,
-                    policy.algorithm(),
-                    keyMaterial.key().getKeyID(),
-                    keyMaterial.key().getKeyName(),
-                    keyMaterial.key().getFingerprint(),
+                    uploadMetadata(originalName, policy.algorithm(), keyMaterial),
                     encrypted));
         }
     }
 
-    @GetMapping("/google-drive/files/{fileId}/decrypt-download")
-    public ResponseEntity<InputStreamResource> decryptGoogleDriveFile(
+    @GetMapping("/{provider}/files/{fileId}/decrypt-download")
+    public ResponseEntity<InputStreamResource> decryptProviderFile(
+            @PathVariable String provider,
             @PathVariable String fileId,
             @RequestHeader(value = "X-Key-Password", required = false) String keyPassword) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        // Download encrypted bytes first, then return only locally decrypted content to the customer.
-        GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
-        InputStream decrypted = decryptDriveContent(ownerID, driveFile, keyPassword);
+        CloudStorageAdapter.DownloadedCloudFile cloudFile =
+                adapterFor(provider).downloadEncryptedForProvider(ownerID, fileId);
+        InputStream decrypted = decryptCloudContent(ownerID, cloudFile, keyPassword);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
-                        .filename(driveFile.originalName(), StandardCharsets.UTF_8)
+                        .filename(cloudFile.originalName(), StandardCharsets.UTF_8)
                         .build()
                         .toString())
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(new InputStreamResource(decrypted));
     }
 
-    /** Deletes the selected encrypted object from the owner's linked Drive account. */
-    @DeleteMapping("/google-drive/files/{fileId}")
-    public ResponseEntity<Void> deleteGoogleDriveFile(
+    @DeleteMapping("/{provider}/files/{fileId}")
+    public ResponseEntity<Void> deleteProviderFile(
+            @PathVariable String provider,
             @PathVariable String fileId) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        googleDriveService.deleteEncryptedFile(ownerID, fileId);
+        adapterFor(provider).deleteEncryptedFileForProvider(ownerID, fileId);
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * JavaFX WebView cannot persist Blob downloads. The desktop UI uses this
-     * endpoint to decrypt the Drive object locally, save it to Downloads, and
-     * show the exact destination path to the user.
-     */
-    @PostMapping("/google-drive/files/{fileId}/decrypt-save")
-    public ResponseEntity<Map<String, Object>> decryptAndSaveGoogleDriveFile(
+    @PostMapping("/{provider}/files/{fileId}/decrypt-save")
+    public ResponseEntity<Map<String, Object>> decryptAndSaveProviderFile(
+            @PathVariable String provider,
             @PathVariable String fileId,
             @RequestBody(required = false) Map<String, String> request) {
         Long ownerID = currentUserService.requireUserID();
         try {
-            GoogleDriveService.DownloadedDriveFile driveFile = googleDriveService.downloadEncrypted(ownerID, fileId);
+            CloudStorageAdapter.DownloadedCloudFile cloudFile =
+                    adapterFor(provider).downloadEncryptedForProvider(ownerID, fileId);
             byte[] plaintext;
-            try (InputStream decrypted = decryptDriveContent(ownerID, driveFile, keyPassword(request))) {
+            try (InputStream decrypted = decryptCloudContent(ownerID, cloudFile, keyPassword(request))) {
                 plaintext = decrypted.readAllBytes();
             }
 
@@ -224,7 +258,7 @@ public class CloudStorageController {
             Files.createDirectories(downloads);
             Path destination = availableDestination(
                     downloads,
-                    safeFilename(driveFile.originalName(), "decrypted-drive-file")
+                    safeFilename(cloudFile.originalName(), "decrypted-cloud-file")
             );
             Files.write(destination, plaintext);
 
@@ -236,19 +270,14 @@ public class CloudStorageController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            log.error("Google Drive decrypt-save failed", e);
+            log.error("Cloud decrypt-save failed for provider {}", provider, e);
             return ResponseEntity.internalServerError().body(Map.of(
-                    "message", "Unable to decrypt and save the Google Drive file."
+                    "message", "Unable to decrypt and save the cloud file."
             ));
         }
     }
 
-    /**
-     * Resolves JavaFX WebView file:// drag payloads to real local metadata.
-     * WebView reports these payloads as zero-byte File objects, so the backend
-     * reads the native path before the UI displays the file name and size.
-     */
-    @PostMapping(value = "/google-drive/local-file-info", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/{provider}/local-file-info", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> localFileInfo(@RequestBody Map<String, String> request) {
         try {
             Path path = resolveLocalUserFile(asString(request.get("fileUri")));
@@ -264,15 +293,14 @@ public class CloudStorageController {
         }
     }
 
-    /**
-     * Encrypts a native drag-and-drop path as a stream and uploads only its
-     * ciphertext. resolveLocalUserFile validates the path before it is opened.
-     */
-    @PostMapping(value = "/google-drive/files/encrypt-upload-path", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/{provider}/files/encrypt-upload-path", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> encryptAndUploadLocalPath(
+            @PathVariable String provider,
             @RequestBody Map<String, Object> request) {
         Long ownerID = currentUserService.requireUserID();
         try {
+            CloudStorageAdapter adapter = adapterFor(provider);
+            requireActiveProvider(ownerID, adapter);
             Path path = resolveLocalUserFile(asString(request.get("fileUri")));
             EncryptionKeyService.DerivedKeyMaterial keyMaterial = encryptionKeyService.requireActiveKeyMaterial(
                     ownerID,
@@ -283,13 +311,9 @@ public class CloudStorageController {
                     encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
             try (InputStream input = Files.newInputStream(path);
                  InputStream encrypted = aesGcmService.encryptStream(input, keyMaterial.passphrase(), policy.keyLengthBits())) {
-                return ResponseEntity.ok(googleDriveService.uploadEncrypted(
+                return ResponseEntity.ok(adapter.uploadEncryptedForProvider(
                         ownerID,
-                        safeFilename(path.getFileName().toString(), "uploaded-file"),
-                        policy.algorithm(),
-                        keyMaterial.key().getKeyID(),
-                        keyMaterial.key().getKeyName(),
-                        keyMaterial.key().getFingerprint(),
+                        uploadMetadata(safeFilename(path.getFileName().toString(), "uploaded-file"), policy.algorithm(), keyMaterial),
                         encrypted
                 ));
             }
@@ -303,23 +327,81 @@ public class CloudStorageController {
         }
     }
 
-    private InputStream decryptDriveContent(Long ownerID, GoogleDriveService.DownloadedDriveFile driveFile, String keyPassword) throws Exception {
-        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(driveFile.encMethod());
-        if (driveFile.keyID() == null) {
-            // Legacy Drive files created before password-protected keys are still decrypted with the user vault.
-            return aesGcmService.decryptStream(
-                    new ByteArrayInputStream(driveFile.encryptedContent()),
-                    userVaultService.filePassphraseFor(ownerID),
-                    policy.keyLengthBits()
-            );
+    private void requireActiveProvider(Long ownerID, CloudStorageAdapter adapter) {
+        CloudStorageLink activeLink = dataStore.activeCloudStorageLink(ownerID)
+                .orElseThrow(() -> new IllegalArgumentException("Activate a cloud storage account before uploading."));
+        if (!adapter.providerKey().equalsIgnoreCase(activeLink.getProvider())) {
+            throw new IllegalArgumentException("Activate " + adapter.providerLabel() + " before uploading to it.");
+        }
+    }
+
+    private CloudStorageAdapter.CloudUploadMetadata uploadMetadata(
+            String originalName,
+            String algorithm,
+            EncryptionKeyService.DerivedKeyMaterial keyMaterial) {
+        return new CloudStorageAdapter.CloudUploadMetadata(
+                originalName,
+                algorithm,
+                keyMaterial.key().getKeyID(),
+                keyMaterial.key().getKeyName(),
+                keyMaterial.key().getFingerprint()
+        );
+    }
+
+    private InputStream decryptCloudContent(
+            Long ownerID,
+            CloudStorageAdapter.DownloadedCloudFile cloudFile,
+            String keyPassword) throws Exception {
+        EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(cloudFile.encMethod());
+        if (cloudFile.keyID() == null) {
+            return decryptLegacyCloudContent(ownerID, cloudFile.encryptedContent(), policy.keyLengthBits());
         }
         EncryptionKeyService.DerivedKeyMaterial keyMaterial =
-                encryptionKeyService.requireActiveKeyMaterial(ownerID, driveFile.keyID(), keyPassword);
+                encryptionKeyService.requireActiveKeyMaterial(ownerID, cloudFile.keyID(), keyPassword);
         return aesGcmService.decryptStream(
-                new ByteArrayInputStream(driveFile.encryptedContent()),
+                new ByteArrayInputStream(cloudFile.encryptedContent()),
                 keyMaterial.passphrase(),
                 policy.keyLengthBits()
         );
+    }
+
+    private InputStream decryptLegacyCloudContent(Long ownerID, byte[] encryptedContent, int keyLengthBits) throws Exception {
+        try {
+            return new ByteArrayInputStream(decryptCloudBytes(encryptedContent, userVaultService.filePassphraseFor(ownerID), keyLengthBits));
+        } catch (Exception vaultFailure) {
+            try {
+                return new ByteArrayInputStream(decryptCloudBytes(encryptedContent, LEGACY_DRIVE_DEMO_PASSPHRASE, keyLengthBits));
+            } catch (Exception legacyFailure) {
+                vaultFailure.addSuppressed(legacyFailure);
+                throw vaultFailure;
+            }
+        }
+    }
+
+    private byte[] decryptCloudBytes(byte[] encryptedContent, String passphrase, int keyLengthBits) throws Exception {
+        try (InputStream decrypted = aesGcmService.decryptStream(
+                new ByteArrayInputStream(encryptedContent),
+                passphrase,
+                keyLengthBits)) {
+            return decrypted.readAllBytes();
+        }
+    }
+
+    private CloudStorageAdapter adapterFor(String provider) {
+        String normalized = normalizeProvider(provider);
+        return cloudStorageAdapters.stream()
+                .filter(adapter -> adapter.providerKey().equalsIgnoreCase(normalized)
+                        || adapter.providerPath().equalsIgnoreCase(provider))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported cloud storage provider: " + provider));
+    }
+
+    private String normalizeProvider(String provider) {
+        String normalized = provider == null ? "" : provider.trim().toLowerCase(Locale.ROOT).replace("-", "_");
+        if ("google".equals(normalized)) {
+            return "google_drive";
+        }
+        return normalized;
     }
 
     private String keyPassword(Map<String, String> request) {
@@ -339,6 +421,7 @@ public class CloudStorageController {
     private String asString(Object value) {
         return value instanceof String text ? text : null;
     }
+
     private ResponseEntity<String> htmlResponse(String title, String message) {
         String html = """
                 <!doctype html>
@@ -359,7 +442,6 @@ public class CloudStorageController {
         return filename.replace("\\", "_").replace("/", "_");
     }
 
-    /** Keeps previous downloads by adding " (n)" instead of overwriting them. */
     private Path availableDestination(Path directory, String filename) {
         Path initial = directory.resolve(filename);
         if (!Files.exists(initial)) {
@@ -378,11 +460,6 @@ public class CloudStorageController {
         throw new IllegalStateException("Unable to choose an available download filename.");
     }
 
-    /**
-     * Restricts the native-file bridge to regular files inside the signed-in
-     * Windows user's profile. This prevents crafted UI requests from reading
-     * arbitrary system paths.
-     */
     private Path resolveLocalUserFile(String fileUri) throws Exception {
         if (fileUri == null || fileUri.isBlank()) {
             throw new IllegalArgumentException("A local file URI is required.");

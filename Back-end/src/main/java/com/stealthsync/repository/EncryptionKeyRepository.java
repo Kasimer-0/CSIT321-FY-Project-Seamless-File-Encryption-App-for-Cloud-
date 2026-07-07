@@ -12,5 +12,7 @@ public interface EncryptionKeyRepository extends JpaRepository<EncryptionKeyReco
 
     Optional<EncryptionKeyRecord> findByKeyIDAndOwnerID(Long keyID, Long ownerID);
 
+    Optional<EncryptionKeyRecord> findByOwnerIDAndFingerprint(Long ownerID, String fingerprint);
+
     void deleteByOwnerID(Long ownerID);
 }

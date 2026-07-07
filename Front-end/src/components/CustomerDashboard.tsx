@@ -19,16 +19,16 @@ type TopSection = "files" | "keys" | "cloud" | "security" | "faq" | "account"
 type FileSub = "encrypt" | "decrypt"
 
 const topSections: { key: TopSection; label: string; icon: string }[] = [
-    { key: "files", label: "File Management", icon: "Files" },
-    { key: "keys", label: "Encryption Keys", icon: "Keys" },
-    { key: "cloud", label: "Cloud Storage Link", icon: "Cloud" },
-    { key: "security", label: "Security", icon: "Security" },
+    { key: "files", label: "File Management", icon: "FILE" },
+    { key: "keys", label: "Encryption Keys", icon: "KEY" },
+    { key: "cloud", label: "Cloud Storage Link", icon: "DRV" },
+    { key: "security", label: "Security", icon: "SEC" },
     { key: "faq", label: "FAQ", icon: "FAQ" },
 ]
 
 const fileSidebarItems: { key: FileSub; label: string; icon: string }[] = [
-    { key: "encrypt", label: "Encrypt and Upload File", icon: "Upload" },
-    { key: "decrypt", label: "Decrypt and Download File", icon: "Download" },
+    { key: "encrypt", label: "Encrypt and Upload File", icon: "UP" },
+    { key: "decrypt", label: "Decrypt and Download File", icon: "DL" },
 ]
 
 function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardProps) {
@@ -67,90 +67,95 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
         return ""
     }
 
+    const subscriptionLabel = user.isSubscribed ? "Premium access" : "Free plan"
+
     return (
-        <div className="d-flex vh-100 overflow-hidden">
-            <aside className="d-flex flex-column flex-shrink-0 bg-white border-end" style={{ width: 220 }}>
-                <div className="px-3 py-3 border-bottom">
-                    <h5 className="mb-0 fw-bold text-primary">Dashboard</h5>
-                    <small className="text-muted">Customer</small>
+        <div className="dashboard-root">
+            <aside className="dashboard-sidebar">
+                <div className="sidebar-brand-area">
+                    <div className="d-flex align-items-center gap-3">
+                        <span className="brand-dot-indicator" aria-hidden="true" />
+                        <div>
+                            <div className="brand-text-main">STEALTHSYNC</div>
+                            <div className="brand-text-sub">Root level console</div>
+                        </div>
+                    </div>
                 </div>
 
-                <nav className="flex-grow-1 p-2">
-                    <small className="text-muted px-2">MAIN</small>
-                    {topSections.map(section => (
-                        <div key={section.key}>
-                            <button
-                                className={`btn w-100 text-start mb-1 mt-1 d-flex align-items-center gap-2 ${activeSection === section.key ? "btn-primary" : "btn-outline-light text-dark"}`}
-                                onClick={() => setActiveSection(section.key)}
-                            >
-                                <span>{section.icon}</span>
-                                {section.label}
-                            </button>
+                <nav className="sidebar-nav-container" aria-label="Customer workspace navigation">
+                    <div className="sidebar-nav-group">
+                        <div className="sidebar-section-tag px-2">Main modules</div>
+                        {topSections.map(section => (
+                            <div key={section.key}>
+                                <button
+                                    className={`sidebar-nav-item ${activeSection === section.key ? "active" : ""}`}
+                                    type="button"
+                                    onClick={() => setActiveSection(section.key)}
+                                >
+                                    <span className="sidebar-nav-icon">{section.icon}</span>
+                                    <span>{section.label}</span>
+                                </button>
 
-                            {activeSection === "files" && section.key === "files" && (
-                                <div className="ms-3 mb-1">
-                                    {fileSidebarItems.map(item => (
-                                        <button
-                                            key={item.key}
-                                            className={`btn w-100 text-start mb-1 d-flex align-items-center gap-2 ${fileSub === item.key ? "btn-primary" : "btn-outline-light text-dark"}`}
-                                            style={{ fontSize: 12 }}
-                                            onClick={() => setFileSub(item.key)}
-                                        >
-                                            <span>{item.icon}</span>
-                                            {item.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                                {activeSection === "files" && section.key === "files" && (
+                                    <div className="ps-3">
+                                        {fileSidebarItems.map(item => (
+                                            <button
+                                                key={item.key}
+                                                className={`sidebar-nav-item ${fileSub === item.key ? "active" : ""}`}
+                                                type="button"
+                                                onClick={() => setFileSub(item.key)}
+                                            >
+                                                <span className="sidebar-nav-icon">{item.icon}</span>
+                                                <span>{item.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </nav>
 
-                <div className="p-3 border-top">
+                <div className="sidebar-footer-profile">
                     <button
-                        className={`btn w-100 text-start p-2 d-flex align-items-center gap-2 ${activeSection === "account" ? "btn-primary" : "btn-outline-light"}`}
+                        className={`sidebar-nav-item m-0 ${activeSection === "account" ? "active" : ""}`}
+                        type="button"
                         onClick={() => setActiveSection("account")}
                     >
-                        <div
-                            className={`rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 fw-bold ${activeSection === "account" ? "bg-white text-primary" : "bg-primary text-white"}`}
-                            style={{ width: 36, height: 36, fontSize: 13 }}
-                        >
-                            {initials}
-                        </div>
-                        <div className="text-start">
-                            <div className={`fw-medium ${activeSection === "account" ? "text-white" : "text-dark"}`} style={{ fontSize: 13 }}>
-                                {user.username}
-                            </div>
-                            <small className={activeSection === "account" ? "text-white opacity-75" : user.isSubscribed ? "text-success" : "text-muted"}>
-                                {user.isSubscribed ? "Premium" : "Free Plan"}
-                            </small>
-                        </div>
+                        <span className="profile-avatar-pill">{initials}</span>
+                        <span className="min-w-0">
+                            <span className="d-block fw-bold text-truncate">{user.username}</span>
+                            <small className={user.isSubscribed ? "text-success" : "console-muted"}>{subscriptionLabel}</small>
+                        </span>
                     </button>
                 </div>
             </aside>
 
-            <main className="d-flex flex-column flex-grow-1 overflow-hidden bg-light">
-                <div className="d-flex align-items-center gap-3 px-4 bg-white border-bottom" style={{ height: 56, flexShrink: 0 }}>
-                    <div className="flex-grow-1 fw-semibold">{getPageTitle()}</div>
-                    <button className="btn btn-outline-danger" onClick={() => setShowLogoutConfirm(true)}>
+            <main className="dashboard-main-viewport">
+                <header className="dashboard-top-navbar">
+                    <div>
+                        <div className="console-kicker">Customer workspace</div>
+                        <h2 className="navbar-active-title">{getPageTitle()}</h2>
+                    </div>
+                    <button className="btn-navbar-logout" type="button" onClick={() => setShowLogoutConfirm(true)}>
                         Logout
                     </button>
-                </div>
+                </header>
 
-                <div className="flex-grow-1 p-4" style={{ overflowY: "auto" }}>
+                <div className="dashboard-content-scroll">
                     {activeSection === "files" && (
-                        <div className="card p-4">
+                        <section className="workspace-card-wrapper p-4">
                             {fileSub === "encrypt" && <CustomerEncryptFile />}
                             {fileSub === "decrypt" && <CustomerDecryptFile user={user} />}
-                        </div>
+                        </section>
                     )}
 
                     {activeSection === "cloud" && (
-                        <div className="card p-4"><CustomerManageCloudAccLinks user={user} /></div>
+                        <section className="workspace-card-wrapper p-4"><CustomerManageCloudAccLinks user={user} /></section>
                     )}
 
                     {activeSection === "keys" && (
-                        <div className="card p-4"><CustomerManageEncryptionKeysPage /></div>
+                        <section className="workspace-card-wrapper p-4"><CustomerManageEncryptionKeysPage /></section>
                     )}
 
                     {activeSection === "security" && (
@@ -158,7 +163,7 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
                     )}
 
                     {activeSection === "faq" && (
-                        <div className="card p-4"><CustomerFAQPage /></div>
+                        <section className="workspace-card-wrapper p-4"><CustomerFAQPage /></section>
                     )}
 
                     {activeSection === "account" && (
@@ -174,17 +179,16 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
             </main>
 
             {showLogoutConfirm && (
-                <div
-                    className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-                    style={{ background: "rgba(0,0,0,0.5)", zIndex: 999 }}
-                    onClick={() => setShowLogoutConfirm(false)}
-                >
-                    <div className="card p-4" style={{ width: 360 }} onClick={(event) => event.stopPropagation()}>
-                        <h6 className="mb-2">Logout?</h6>
-                        <p className="text-muted mb-4" style={{ fontSize: 14 }}>Are you sure you want to logout from your account?</p>
-                        <div className="d-flex gap-2 justify-content-end">
-                            <button className="btn btn-outline-secondary" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
-                            <button className="btn btn-danger" onClick={onLogout}>Yes, Logout</button>
+                <div className="premium-modal-backdrop" onClick={() => setShowLogoutConfirm(false)}>
+                    <div className="premium-modal-surface" onClick={(event) => event.stopPropagation()}>
+                        <div className="modal-accent-strip-alert" />
+                        <div className="premium-modal-content">
+                            <div className="modal-title-main">End console session?</div>
+                            <p className="modal-description-text">You will be returned to the authentication screen.</p>
+                            <div className="d-flex gap-2 justify-content-end">
+                                <button className="btn-modal-dismiss" type="button" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+                                <button className="btn-modal-destructive" type="button" onClick={onLogout}>Logout</button>
+                            </div>
                         </div>
                     </div>
                 </div>

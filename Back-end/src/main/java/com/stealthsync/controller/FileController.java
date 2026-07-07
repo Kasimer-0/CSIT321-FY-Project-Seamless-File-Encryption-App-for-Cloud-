@@ -40,7 +40,8 @@ public class FileController {
     private final UserVaultService userVaultService;
 
     /**
-     * Receive files uploaded via drag-and-drop from the frontend and encrypt them silently in the background (FR2.2 / FR1.1)
+     * Legacy direct-passphrase demo endpoint kept for manual local encryption tests.
+     * The main customer workflow is /files/encrypt-upload or Google Drive upload with keyID + keyPassword.
      */
     @PostMapping("/api/file/encrypt")
     public ResponseEntity<InputStreamResource> encryptFile(
@@ -65,7 +66,8 @@ public class FileController {
     }
 
     /**
-     * Receive encrypted files and automatically decrypt and download them (FR2.3)
+     * Legacy direct-passphrase demo endpoint kept for manual local decryption tests.
+     * Records created by the app are decrypted through owner-scoped key metadata instead.
      */
     @PostMapping("/api/file/decrypt")
     public ResponseEntity<InputStreamResource> decryptFile(

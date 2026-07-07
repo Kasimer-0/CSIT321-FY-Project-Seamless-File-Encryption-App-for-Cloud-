@@ -11,25 +11,37 @@ function Auth({ onLogin }: AuthProps) {
     const [tab, setTab] = useState("login")
 
     return (
-        <div className="container vh-100 d-flex justify-content-center align-items-center">
-            <div className="card p-4" style={{ width: "400px" }}>
-                <div className="d-flex mb-3">
-                    <button
-                        className={`btn w-50 ${tab === "login" ? "btn-primary" : "btn-outline-primary"}`}
-                        onClick={() => setTab("login")}
-                    >
-                        Login
-                    </button>
-                    <button
-                        className={`btn w-50 ms-2 ${tab === "signup" ? "btn-primary" : "btn-outline-primary"}`}
-                        onClick={() => setTab("signup")}
-                    >
-                        Sign Up
-                    </button>
+        <main className="auth-viewport-wrapper">
+            <section className="auth-stage">
+                <div className="auth-branding-header">
+                    <div className="auth-brand-kicker">Encrypted cloud access</div>
+                    <h1 className="auth-brand-title">STEALTHSYNC</h1>
+                    <p className="auth-brand-subtitle mb-0">Root level console for protected file exchange.</p>
                 </div>
-                {tab === "login" ? <LoginForm onLogin={onLogin} /> : <SignUpForm />}
-            </div>
-        </div>
+
+                <div className="auth-card-expanded">
+                    <div className="auth-tab-group" role="tablist" aria-label="Authentication mode">
+                        <button
+                            className={`auth-tab-button ${tab === "login" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setTab("login")}
+                        >
+                            Login
+                        </button>
+                        <button
+                            className={`auth-tab-button ${tab === "signup" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setTab("signup")}
+                        >
+                            Sign Up
+                        </button>
+                    </div>
+                    <div className="auth-card-inner">
+                        {tab === "login" ? <LoginForm onLogin={onLogin} /> : <SignUpForm />}
+                    </div>
+                </div>
+            </section>
+        </main>
     )
 }
 

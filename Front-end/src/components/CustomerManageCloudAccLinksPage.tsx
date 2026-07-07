@@ -14,11 +14,11 @@ const providerLabels: Record<string, { label: string; icon: string }> = {
 }
 
 const availableProviders = ["google_drive", "dropbox", "onedrive"]
+const providerPath = (provider: string) => provider === "google_drive" ? "google-drive" : provider
 
 /**
  * This page provides persisted cloud links,
- * free/premium provider limits, and the complete Google Drive OAuth/encrypted-file workflow.
- * Dropbox and OneDrive remain visible prototype providers; only Google Drive performs real remote I/O.
+ * free/premium provider limits, and OAuth connection entry points for every supported provider.
  */
 type Props = {
     user: UserAccount
@@ -32,6 +32,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const [selectedProvider, setSelectedProvider] = useState("")
     const [usage, setUsage] = useState<CloudStorageUsage | null>(null)
     const [providerLimit, setProviderLimit] = useState(user.isSubscribed ? 5 : 1)
+    const [providerConfigured, setProviderConfigured] = useState<Record<string, boolean>>({})
     const [driveConfigured, setDriveConfigured] = useState(false)
     const [driveConnected, setDriveConnected] = useState(false)
     const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
@@ -84,6 +85,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             if (response.ok) {
                 const data = await response.json()
                 setProviderLimit(Number(data.providerLimit ?? (user.isSubscribed ? 5 : 1)))
+                setProviderConfigured(data.configured ?? {})
             }
         } catch (err) {
             console.error("Failed to fetch cloud provider info")
@@ -143,9 +145,9 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         const selectedLink = links.find(link => link.linkID === linkID)
         try {
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/links/${linkID}/set-active`,
+                `http://localhost:8080/cloud-storage/links/${linkID}/activate`,
                 {
-                    method: "PATCH",
+                    method: "POST",
                     credentials: "include"
                 }
             )
@@ -202,7 +204,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}/deactivate`,
                 {
-                    method: "PATCH",
+                    method: "POST",
                     credentials: "include"
                 }
             )
@@ -214,7 +216,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
             await fetchLinks()
             if (selectedLink?.provider === "google_drive") {
-                setDriveConnected(false)
+                await fetchDriveStatus()
             }
             toast.success("Cloud account deactivated")
 
@@ -223,25 +225,37 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    // Poll the local callback result because Google completes authorization in the system browser,
+    const fetchProviderStatus = async (provider: string) => {
+        const response = await apiFetch(
+            `http://localhost:8080/cloud-storage/${providerPath(provider)}/status`,
+            { credentials: "include" }
+        )
+        return response.ok ? await response.json() as { connected: boolean } : { connected: false }
+    }
+
+    // Poll the local callback result because OAuth completes in the system browser,
     // outside the packaged JavaFX desktop window.
-    const waitForGoogleConnection = async () => {
+    const waitForProviderConnection = async (provider: string) => {
         for (let attempt = 0; attempt < 45; attempt += 1) {
             await new Promise(resolve => window.setTimeout(resolve, 2000))
-            if (await fetchDriveStatus()) {
+            const status = await fetchProviderStatus(provider)
+            if (status.connected) {
                 await fetchLinks()
-                await fetchDriveFiles()
-                toast.success("Google Drive connected successfully")
+                if (provider === "google_drive") {
+                    await fetchDriveStatus()
+                    await fetchDriveFiles()
+                }
+                toast.success(`${providerLabels[provider]?.label ?? provider} connected successfully`)
                 return
             }
         }
-        toast.error("Google Drive authorization was not completed. Try Connect again.")
+        toast.error(`${providerLabels[provider]?.label ?? provider} authorization was not completed. Try Connect again.`)
     }
 
-    // Google Drive starts real OAuth; Dropbox and OneDrive intentionally use prototype link records.
+    // Every provider starts OAuth; encrypted file transfer remains provider-neutral after linking.
     const beginProviderConnection = async (provider: string) => {
         const response = await apiFetch(
-            `http://localhost:8080/cloud-storage/auth/${provider}`,
+            `http://localhost:8080/cloud-storage/${providerPath(provider)}/auth`,
             { credentials: "include" }
         )
         if (!response.ok) {
@@ -250,42 +264,20 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
 
         const data = await response.json()
-        if (provider === "google_drive") {
-            if (!data.openedExternal && data.authUrl) {
-                window.open(data.authUrl, "_blank", "noopener,noreferrer")
-            }
-            toast.success("Google authorization opened in your browser")
-            void waitForGoogleConnection()
-        } else {
-            await fetchLinks()
-            toast.success(`${providerLabels[provider]?.label ?? provider} connected in prototype mode`)
+        if (!data.openedExternal && data.authUrl) {
+            window.open(data.authUrl, "_blank", "noopener,noreferrer")
         }
+        toast.success(data.message ?? `${providerLabels[provider]?.label ?? provider} authorization opened in your browser`)
+        void waitForProviderConnection(provider)
     }
 
     const handleReconnect = async (linkID: number) => {
         const link = links.find(item => item.linkID === linkID)
-        if (link?.provider === "google_drive") {
-            try {
-                await beginProviderConnection("google_drive")
-            } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Failed to reconnect Google Drive")
-            }
-            return
-        }
-
+        if (!link) return
         try {
-            const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/links/${linkID}/reconnect`,
-                { method: "PATCH", credentials: "include" }
-            )
-            if (!response.ok) {
-                toast.error("Failed to reconnect cloud account")
-                return
-            }
-            await fetchLinks()
-            toast.success("Cloud account reconnected successfully")
+            await beginProviderConnection(link.provider)
         } catch (err) {
-            toast.error("Server connection failed")
+            toast.error(err instanceof Error ? err.message : "Failed to reconnect cloud account")
         }
     }
 
@@ -389,7 +381,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             </div>
 
             <div className="alert alert-info py-2 mb-3" style={{ fontSize: 13 }}>
-                Linked providers: {linkedProviders.length}/{providerLimit}. Available providers: Google Drive, Dropbox, OneDrive.
+                Linked providers: {linkedProviders.length}/{providerLimit}. Only one account can be active at a time; the active account is the default upload destination.
             </div>
 
             {usage && (
@@ -414,7 +406,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                 <p className="text-muted" style={{ fontSize: 13 }}>Loading accounts...</p>
             ) : links.length === 0 ? (
                 <div className="text-center py-5">
-                    <div style={{ fontSize: 40 }} className="mb-2">☁️</div>
+                    <div style={{ fontSize: 40 }} className="mb-2">Cloud</div>
                     <p className="text-muted">No cloud storage accounts linked yet.</p>
                     <button className="btn btn-primary" onClick={() => setShowAddModal(true)} disabled={providerLimitReached}>
                         Link your first account
@@ -448,7 +440,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                         )}
                                     </div>
                                     <small className="text-muted text-truncate d-block">
-                                        {link.accountEmail} · Linked{" "}
+                                        {link.accountEmail} | Linked{" "}
                                         {new Date(link.linkedAt).toLocaleDateString()}
                                     </small>
                                 </div>
@@ -460,7 +452,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                         className="btn btn-outline-primary btn-sm"
                                         onClick={() => handleSetActive(link.linkID)}
                                     >
-                                        Set Active
+                                        Activate
                                     </button>
                                 )}
                                 {link.isActive && !(link.provider === "google_drive" && !driveConnected) && (
@@ -490,7 +482,6 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                     ))}
                 </ul>
             )}
-
             <div className="border-top mt-4 pt-4">
                 <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
                     <div>
@@ -551,7 +542,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                 <div style={{ minWidth: 0 }}>
                                     <div className="fw-medium text-truncate">{file.originalName}</div>
                                     <small className="text-muted">
-                                        {formatBytes(file.fileSize)}{file.modifiedAt ? ` · ${new Date(file.modifiedAt).toLocaleString()}` : ""}
+                                        {formatBytes(file.fileSize)}{file.modifiedAt ? ` | ${new Date(file.modifiedAt).toLocaleString()}` : ""}
                                     </small>
                                 </div>
                                 <div className="d-flex gap-2 flex-shrink-0">
@@ -578,7 +569,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                     <div className="card p-4" style={{ width: 380 }} onClick={e => e.stopPropagation()}>
                         <h6 className="mb-1">Link Cloud Storage Account</h6>
                         <p className="text-muted mb-3" style={{ fontSize: 13 }}>
-                            Select a provider then click Connect. A browser window will open for you to log in and approve access.
+                            Select a provider then click Connect. A browser window will open for approval, and the newly connected account becomes active automatically.
                         </p>
 
                         {providerLimitReached && (
@@ -587,20 +578,27 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                             </div>
                         )}
 
-                        {unlinkableProviders.map(p => (
-                            <div
-                                key={p}
-                                className={`d-flex align-items-center justify-content-between border rounded p-2 mb-2 ${selectedProvider === p ? "border-primary bg-primary bg-opacity-10" : ""}`}
-                                onClick={() => setSelectedProvider(p)}
-                                style={{ cursor: "pointer" }}
-                            >
-                                <div className="d-flex align-items-center gap-2">
-                                    <img src={providerLabels[p]?.icon} alt="" style={{ width: 20, height: 20 }} />
-                                    <span>{providerLabels[p]?.label}</span>
+                        {unlinkableProviders.map(p => {
+                            const configured = providerConfigured[p] === true
+                            return (
+                                <div
+                                    key={p}
+                                    className={`d-flex align-items-center justify-content-between border rounded p-2 mb-2 ${selectedProvider === p ? "border-primary bg-primary bg-opacity-10" : ""} ${configured ? "" : "opacity-75"}`}
+                                    onClick={() => configured && setSelectedProvider(p)}
+                                    style={{ cursor: configured ? "pointer" : "not-allowed" }}
+                                >
+                                    <div className="d-flex align-items-center gap-2">
+                                        <img src={providerLabels[p]?.icon} alt="" style={{ width: 20, height: 20 }} />
+                                        <span>{providerLabels[p]?.label}</span>
+                                    </div>
+                                    {!configured ? (
+                                        <span className="badge bg-warning text-dark">Setup required</span>
+                                    ) : selectedProvider === p ? (
+                                        <span className="text-primary">Selected</span>
+                                    ) : null}
                                 </div>
-                                {selectedProvider === p && <span className="text-primary">✓</span>}
-                            </div>
-                        ))}
+                            )
+                        })}
 
                         {selectedProvider && (
                             <div className="alert alert-info py-2 mt-2 mb-0" style={{ fontSize: 12 }}>
@@ -618,7 +616,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                             <button
                                 className="btn btn-primary"
                                 onClick={handleAddAccount}
-                                disabled={!selectedProvider || providerLimitReached}
+                                disabled={!selectedProvider || providerLimitReached || providerConfigured[selectedProvider] !== true}
                             >
                                 Connect
                             </button>

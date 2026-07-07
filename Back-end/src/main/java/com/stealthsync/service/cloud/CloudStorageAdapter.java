@@ -1,13 +1,54 @@
 package com.stealthsync.service.cloud;
 
-import java.io.InputStream;
+import com.stealthsync.model.dto.CloudFileDTO;
+import com.stealthsync.model.entity.CloudStorageLink;
 
-/** Common provider contract reserved for interchangeable cloud upload/download implementations. */
+import java.io.InputStream;
+import java.util.List;
+
+/** Provider-neutral contract for OAuth, encrypted object transfer, and owner-scoped cloud access. */
 public interface CloudStorageAdapter {
 
-    String upload(String filename, InputStream content);
+    String providerKey();
 
-    InputStream download(String fileId);
+    String providerPath();
 
-    void delete(String fileId);
+    String providerLabel();
+
+    boolean isConfigured();
+
+    boolean isConnected(Long ownerID);
+
+    String createAuthorizationUrl(Long ownerID) throws Exception;
+
+    CloudStorageLink completeAuthorization(String code, String state) throws Exception;
+
+    List<CloudFileDTO> listEncryptedFilesForProvider(Long ownerID) throws Exception;
+
+    CloudFileDTO uploadEncryptedForProvider(Long ownerID, CloudUploadMetadata metadata, InputStream encryptedContent) throws Exception;
+
+    DownloadedCloudFile downloadEncryptedForProvider(Long ownerID, String fileId) throws Exception;
+
+    void deleteEncryptedFileForProvider(Long ownerID, String fileId) throws Exception;
+
+    void disconnect(Long ownerID);
+
+    record CloudUploadMetadata(
+            String originalName,
+            String encMethod,
+            Long keyID,
+            String keyName,
+            String keyFingerprint
+    ) {
+    }
+
+    record DownloadedCloudFile(
+            String originalName,
+            String encMethod,
+            Long keyID,
+            String keyName,
+            String keyFingerprint,
+            byte[] encryptedContent
+    ) {
+    }
 }

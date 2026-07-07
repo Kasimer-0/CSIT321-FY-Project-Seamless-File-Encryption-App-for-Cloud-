@@ -1,6 +1,10 @@
 package com.stealthsync.service.crypto;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stealthsync.model.dto.TrustedKeyPackage;
+import com.stealthsync.model.dto.TrustedKeyPackageImportResponse;
 import com.stealthsync.model.entity.EncryptionKeyRecord;
+import com.stealthsync.repository.EncryptionKeyRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,6 +14,8 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,6 +40,12 @@ class EncryptionKeyServiceTest {
 
     @Autowired
     private AesGcmService aesGcmService;
+
+    @Autowired
+    private EncryptionKeyRepository encryptionKeyRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Test
     void createKeyStoresOnlyPasswordVerificationMaterial() {
@@ -99,5 +111,110 @@ class EncryptionKeyServiceTest {
     void blankPasswordCannotCreateKey() {
         assertThrows(IllegalArgumentException.class, () -> encryptionKeyService
                 .createKey(OWNER_ID, "Blank key", "AES-256-GCM", " "));
+    }
+
+    @Test
+    void differentKeyPasswordsDeriveDifferentFilePassphrases() {
+        EncryptionKeyRecord firstKey = encryptionKeyService.createKey(OWNER_ID, "First material key", "AES-256-GCM", PASSWORD);
+        EncryptionKeyRecord secondKey = encryptionKeyService.createKey(OWNER_ID, "Second material key", "AES-256-GCM", "Other@12345");
+
+        String firstPassphrase = encryptionKeyService
+                .requireActiveKeyMaterial(OWNER_ID, firstKey.getKeyID(), PASSWORD)
+                .passphrase();
+        String secondPassphrase = encryptionKeyService
+                .requireActiveKeyMaterial(OWNER_ID, secondKey.getKeyID(), "Other@12345")
+                .passphrase();
+
+        assertNotEquals(firstPassphrase, secondPassphrase);
+    }
+
+    @Test
+    void inactiveKeyCannotProvideEncryptionMaterial() {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(OWNER_ID, "Inactive key", "AES-256-GCM", PASSWORD);
+        key.setStatus("inactive");
+        encryptionKeyRepository.save(key);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> encryptionKeyService
+                .requireActiveKeyMaterial(OWNER_ID, key.getKeyID(), PASSWORD));
+
+        assertEquals("Encryption key is not active.", error.getMessage());
+    }
+
+    @Test
+    void fingerprintIsStableAndDoesNotContainPassword() {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(OWNER_ID, "Fingerprint key", "AES-256-GCM", PASSWORD);
+        String fingerprint = key.getFingerprint();
+
+        EncryptionKeyRecord materialKey = encryptionKeyService
+                .requireActiveKeyMaterial(OWNER_ID, key.getKeyID(), PASSWORD)
+                .key();
+
+        assertEquals(fingerprint, materialKey.getFingerprint());
+        assertNotEquals(PASSWORD, fingerprint);
+        assertFalse(fingerprint.contains(PASSWORD));
+    }
+
+    @Test
+    void serializedKeyDoesNotExposeSaltOrPasswordVerifier() throws Exception {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(OWNER_ID, "Serialized key", "AES-256-GCM", PASSWORD);
+
+        String json = objectMapper.writeValueAsString(key);
+
+        assertFalse(json.contains("salt"));
+        assertFalse(json.contains("passwordVerifier"));
+        assertFalse(json.contains(key.getSalt()));
+        assertFalse(json.contains(key.getPasswordVerifier()));
+    }
+
+    @Test
+    void trustedDevicePackageDoesNotExposeVerifierOrRawKeyMaterial() throws Exception {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(OWNER_ID, "Transfer key", "AES-256-GCM", PASSWORD);
+
+        TrustedKeyPackage keyPackage = encryptionKeyService.exportTrustedKeyPackage(OWNER_ID, key.getKeyID());
+        String json = objectMapper.writeValueAsString(keyPackage);
+
+        assertEquals("trusted-device-key-package-v1", keyPackage.version());
+        assertEquals(key.getFingerprint(), keyPackage.fingerprint());
+        assertEquals(key.getSalt(), keyPackage.salt());
+        assertFalse(json.contains("passwordVerifier"));
+        assertFalse(json.contains(key.getPasswordVerifier()));
+        assertFalse(json.contains(PASSWORD));
+    }
+
+    @Test
+    void importedTrustedDevicePackageDerivesSamePassphraseWithSamePassword() {
+        EncryptionKeyRecord sourceKey = encryptionKeyService.createKey(OWNER_ID, "Demo transfer key", "AES-256-GCM", PASSWORD);
+        TrustedKeyPackage keyPackage = encryptionKeyService.exportTrustedKeyPackage(OWNER_ID, sourceKey.getKeyID());
+
+        TrustedKeyPackageImportResponse response = encryptionKeyService.importTrustedKeyPackage(5502L, keyPackage);
+
+        assertEquals("imported", response.status());
+        assertEquals(sourceKey.getFingerprint(), response.key().getFingerprint());
+        assertEquals(sourceKey.getSalt(), response.key().getSalt());
+        assertEquals(null, response.key().getPasswordVerifier());
+
+        String sourcePassphrase = encryptionKeyService
+                .requireActiveKeyMaterial(OWNER_ID, sourceKey.getKeyID(), PASSWORD)
+                .passphrase();
+        String importedPassphrase = encryptionKeyService
+                .requireActiveKeyMaterial(5502L, response.key().getKeyID(), PASSWORD)
+                .passphrase();
+
+        assertEquals(sourcePassphrase, importedPassphrase);
+        assertThrows(IllegalArgumentException.class, () -> encryptionKeyService
+                .requireActiveKeyMaterial(5502L, response.key().getKeyID(), "Wrong@12345"));
+    }
+
+    @Test
+    void importingSameTrustedDevicePackageReturnsExistingKey() {
+        EncryptionKeyRecord sourceKey = encryptionKeyService.createKey(OWNER_ID, "Existing transfer key", "AES-256-GCM", PASSWORD);
+        TrustedKeyPackage keyPackage = encryptionKeyService.exportTrustedKeyPackage(OWNER_ID, sourceKey.getKeyID());
+
+        TrustedKeyPackageImportResponse first = encryptionKeyService.importTrustedKeyPackage(6603L, keyPackage);
+        TrustedKeyPackageImportResponse second = encryptionKeyService.importTrustedKeyPackage(6603L, keyPackage);
+
+        assertEquals("imported", first.status());
+        assertEquals("existing", second.status());
+        assertEquals(first.key().getKeyID(), second.key().getKeyID());
     }
 }

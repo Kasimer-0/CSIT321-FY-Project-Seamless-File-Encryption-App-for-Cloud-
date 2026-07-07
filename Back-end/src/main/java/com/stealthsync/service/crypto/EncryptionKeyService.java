@@ -1,6 +1,8 @@
 package com.stealthsync.service.crypto;
 
 import com.stealthsync.model.entity.EncryptionKeyRecord;
+import com.stealthsync.model.dto.TrustedKeyPackage;
+import com.stealthsync.model.dto.TrustedKeyPackageImportResponse;
 import com.stealthsync.repository.EncryptionKeyRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ import java.util.Optional;
 public class EncryptionKeyService {
 
     private static final String KEY_SCHEME = "password-derived-v1";
+    private static final String TRUSTED_DEVICE_PACKAGE_VERSION = "trusted-device-key-package-v1";
     private static final int SALT_LENGTH_BYTE = 16;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -41,6 +44,48 @@ public class EncryptionKeyService {
 
     public Optional<EncryptionKeyRecord> findKey(Long ownerID, Long keyID) {
         return encryptionKeyRepository.findByKeyIDAndOwnerID(keyID, ownerID);
+    }
+
+    public TrustedKeyPackage exportTrustedKeyPackage(Long ownerID, Long keyID) {
+        EncryptionKeyRecord key = findKey(ownerID, keyID)
+                .orElseThrow(() -> new IllegalArgumentException("Encryption key was not found."));
+        return new TrustedKeyPackage(
+                TRUSTED_DEVICE_PACKAGE_VERSION,
+                Instant.now(),
+                key.getKeyID(),
+                key.getKeyName(),
+                key.getAlgorithm(),
+                key.getFingerprint(),
+                key.getSalt(),
+                key.getKeyScheme()
+        );
+    }
+
+    @Transactional
+    public TrustedKeyPackageImportResponse importTrustedKeyPackage(Long ownerID, TrustedKeyPackage keyPackage) {
+        validateTrustedKeyPackage(keyPackage);
+        Optional<EncryptionKeyRecord> existing =
+                encryptionKeyRepository.findByOwnerIDAndFingerprint(ownerID, keyPackage.fingerprint());
+        if (existing.isPresent()) {
+            return new TrustedKeyPackageImportResponse("existing", existing.get());
+        }
+
+        String normalizedAlgorithm = encryptionPolicyService.policyForAlgorithm(keyPackage.algorithm()).algorithm();
+        Instant now = Instant.now();
+        EncryptionKeyRecord imported = new EncryptionKeyRecord(
+                null,
+                ownerID,
+                isBlank(keyPackage.keyName()) ? "Imported trusted-device key" : keyPackage.keyName().trim(),
+                normalizedAlgorithm,
+                "active",
+                keyPackage.fingerprint().trim(),
+                keyPackage.salt().trim(),
+                null,
+                isBlank(keyPackage.keyScheme()) ? KEY_SCHEME : keyPackage.keyScheme().trim(),
+                now,
+                now
+        );
+        return new TrustedKeyPackageImportResponse("imported", encryptionKeyRepository.save(imported));
     }
 
     @Transactional
@@ -98,21 +143,44 @@ public class EncryptionKeyService {
 
     private void verifyPassword(EncryptionKeyRecord key, String keyPassword) {
         requirePassword(keyPassword);
-        if (isBlank(key.getSalt()) || isBlank(key.getPasswordVerifier())) {
+        if (isBlank(key.getSalt())) {
             throw new IllegalArgumentException("This encryption key must be recreated before it can encrypt or decrypt files.");
         }
         byte[] salt = decode(key.getSalt());
         byte[] derivedBytes = derivePasswordKey(keyPassword, salt);
         try {
-            byte[] expected = decode(key.getPasswordVerifier());
-            byte[] actual = decode(verifier(derivedBytes));
-            if (!MessageDigest.isEqual(expected, actual)) {
+            if (!passwordMatches(key, derivedBytes)) {
                 throw new IllegalArgumentException("Wrong key password or corrupted ciphertext.");
             }
         } finally {
             Arrays.fill(salt, (byte) 0);
             Arrays.fill(derivedBytes, (byte) 0);
         }
+    }
+
+    private boolean passwordMatches(EncryptionKeyRecord key, byte[] derivedBytes) {
+        if (!isBlank(key.getPasswordVerifier())) {
+            byte[] expected = decode(key.getPasswordVerifier());
+            byte[] actual = decode(verifier(derivedBytes));
+            return MessageDigest.isEqual(expected, actual);
+        }
+        return MessageDigest.isEqual(
+                key.getFingerprint().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                fingerprint(derivedBytes).getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+    }
+
+    private void validateTrustedKeyPackage(TrustedKeyPackage keyPackage) {
+        if (keyPackage == null) {
+            throw new IllegalArgumentException("Trusted-device key package is required.");
+        }
+        if (!TRUSTED_DEVICE_PACKAGE_VERSION.equals(keyPackage.version())) {
+            throw new IllegalArgumentException("Unsupported trusted-device key package version.");
+        }
+        if (isBlank(keyPackage.fingerprint()) || isBlank(keyPackage.salt())) {
+            throw new IllegalArgumentException("Trusted-device key package is missing key metadata.");
+        }
+        encryptionPolicyService.policyForAlgorithm(keyPackage.algorithm());
     }
 
     private byte[] derivePasswordKey(String keyPassword, byte[] salt) {
