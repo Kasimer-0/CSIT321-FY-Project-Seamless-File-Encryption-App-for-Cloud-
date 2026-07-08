@@ -2,10 +2,6 @@ package com.stealthsync.controller;
 
 import com.stealthsync.model.dto.LoginResponse;
 import com.stealthsync.model.entity.UserAccount;
-import com.stealthsync.repository.CloudStorageLinkRepository;
-import com.stealthsync.repository.EncryptionKeyRepository;
-import com.stealthsync.repository.PhysicalTokenRepository;
-import com.stealthsync.repository.SubscriptionRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.security.JwtService;
@@ -27,7 +23,7 @@ import java.util.Map;
 @RequestMapping("/account")
 @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
-/** Exposes password reset, recovery-phrase, and destructive account-reset operations. */
+/** Exposes customer account-security actions that remain available after the dashboard split. */
 public class AccountSecurityController {
 
     private static final List<String> RECOVERY_WORDS = List.of(
@@ -36,15 +32,13 @@ public class AccountSecurityController {
     );
 
     private final UserAccountRepository userAccountRepository;
-    private final SubscriptionRepository subscriptionRepository;
-    private final CloudStorageLinkRepository cloudStorageLinkRepository;
-    private final EncryptionKeyRepository encryptionKeyRepository;
-    private final PhysicalTokenRepository physicalTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserService currentUserService;
     private final JwtService jwtService;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    // Reset password now lives on the customer View Account page; the old
+    // destructive account-wipe action is intentionally no longer exposed.
     @PostMapping("/reset-password")
     @Transactional
     public ResponseEntity<UserAccount> resetPassword(@RequestBody Map<String, Object> request) {
@@ -57,26 +51,8 @@ public class AccountSecurityController {
         return ResponseEntity.ok(userAccountRepository.save(user));
     }
 
-    @PostMapping("/factory-reset")
-    @Transactional
-    public ResponseEntity<UserAccount> factoryReset() {
-        UserAccount user = currentUserService.requireUser();
-        if (user.getSubscription() != null) {
-            subscriptionRepository.findById(user.getSubscription()).ifPresent(subscription -> {
-                subscription.setSubcriptionStatus("cancelled");
-                subscriptionRepository.save(subscription);
-            });
-        }
-        cloudStorageLinkRepository.deleteByOwnerID(user.getUserID());
-        encryptionKeyRepository.deleteByOwnerID(user.getUserID());
-        physicalTokenRepository.deleteByOwnerID(user.getUserID());
-        user.setSubscribed(false);
-        user.setSubscription(null);
-        user.setSuspended(false);
-        user.setRecoveryPhraseHash(null);
-        return ResponseEntity.ok(userAccountRepository.save(user));
-    }
-
+    // The backend generates and stores the recovery phrase hash so the frontend
+    // never sends a caller-controlled userID or owns the phrase-generation rules.
     @PostMapping("/recovery-phrase/generate")
     @Transactional
     public ResponseEntity<Map<String, String>> generateRecoveryPhrase() {

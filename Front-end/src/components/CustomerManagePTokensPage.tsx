@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { PhysicalTokenRecord, UserAccount } from "../Type"
-import CustomerCreatePToken from "./CustomerCreatePTokenPage"
+import { apiFetch } from "../lib/api"
 
 type Props = {
     user: UserAccount
@@ -10,6 +10,8 @@ function CustomerManagePTokens({ user }: Props) {
     const [tokens, setTokens] = useState<PhysicalTokenRecord[]>([])
     const [loadingTokens, setLoadingTokens] = useState(false)
     const [view, setView] = useState<"list" | "create">("list")
+    const [tokenName, setTokenName] = useState("")
+    const [serialNumber, setSerialNumber] = useState("")
     const [localBanner, setLocalBanner] = useState<{ msg: string; type: "success" | "error" } | null>(null)
 
     const [pendingActionToken, setPendingActionToken] = useState<PhysicalTokenRecord | null>(null)
@@ -23,10 +25,15 @@ function CustomerManagePTokens({ user }: Props) {
     }
 
     const fetchTokens = async () => {
-        if (!premium) { setTokens([]); return }
+        if (!premium) {
+            setTokens([])
+            return
+        }
         try {
             setLoadingTokens(true)
-            const res = await fetch(`http://localhost:8080/physical-tokens?ownerID=${user.userID}`, { credentials: "include" })
+            // apiFetch attaches the JWT; the backend scopes tokens to the current
+            // user, so the old ownerID query parameter is no longer needed.
+            const res = await apiFetch("http://localhost:8080/physical-tokens", { credentials: "include" })
             if (res.ok) {
                 setTokens(await res.json())
             } else {
@@ -39,30 +46,48 @@ function CustomerManagePTokens({ user }: Props) {
         }
     }
 
-    useEffect(() => { fetchTokens() }, [user.userID, premium])
-
-    const handleBack = () => {
-        setView("list")
+    useEffect(() => {
         fetchTokens()
-    }
+    }, [user.userID, premium])
 
-    const handleCreateSuccess = () => {
-        setView("list")
-        fetchTokens()
-        triggerBanner("Hardware security token provisioned successfully.", "success")
+    const createToken = async () => {
+        try {
+            // The teammate's uploaded page referenced a missing create component,
+            // so token provisioning is kept inline and uses the same protected API.
+            const res = await apiFetch("http://localhost:8080/physical-tokens", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    tokenName: tokenName.trim() || "Security Token",
+                    serialNumber: serialNumber.trim() || undefined
+                })
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => null)
+                throw new Error(data?.message ?? "Failed to provision token.")
+            }
+            setTokenName("")
+            setSerialNumber("")
+            setView("list")
+            triggerBanner("Hardware security token provisioned successfully.", "success")
+            await fetchTokens()
+        } catch (error) {
+            triggerBanner(error instanceof Error ? error.message : "Failed to provision token.", "error")
+        }
     }
 
     const toggleTokenStatus = async (token: PhysicalTokenRecord) => {
         const nextAction = token.status === "active" ? "deactivate" : "activate"
         try {
-            const res = await fetch(`http://localhost:8080/physical-tokens/${token.tokenID}/${nextAction}?ownerID=${user.userID}`, {
+            const res = await apiFetch(`http://localhost:8080/physical-tokens/${token.tokenID}/${nextAction}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include"
             })
             if (!res.ok) throw new Error()
             triggerBanner("Hardware token status updated successfully.", "success")
-            fetchTokens()
+            await fetchTokens()
         } catch {
             triggerBanner("Failed to modify hardware token status vector.", "error")
         }
@@ -73,43 +98,76 @@ function CustomerManagePTokens({ user }: Props) {
         setShowStatusConfirm(true)
     }
 
-    if (view === "create") {
-        return (
-            <CustomerCreatePToken 
-                user={user}
-                onBack={handleBack}
-                onCreateSuccess={handleCreateSuccess}
-            />
-        )
-    }
+    const renderCreateView = () => (
+        <div className="rounded border p-4" style={{ backgroundColor: "#0b0c10", borderColor: "#27272a" }}>
+            <div className="d-flex align-items-start justify-content-between gap-3 mb-4">
+                <div>
+                    <h4 className="fw-semibold text-white mb-1" style={{ fontSize: "18px" }}>Provision Hardware Token</h4>
+                    <p className="small mb-0" style={{ color: "#a1a1aa" }}>Register a prototype token record for this premium account.</p>
+                </div>
+                <button className="btn-modal-dismiss" type="button" onClick={() => setView("list")}>
+                    Back
+                </button>
+            </div>
+            <div className="row g-3">
+                <div className="col-12 col-md-6">
+                    <label className="form-label text-uppercase small" style={{ color: "#a1a1aa" }}>Token Name</label>
+                    <input
+                        className="form-control"
+                        value={tokenName}
+                        onChange={event => setTokenName(event.target.value)}
+                        placeholder="YubiKey Demo"
+                    />
+                </div>
+                <div className="col-12 col-md-6">
+                    <label className="form-label text-uppercase small" style={{ color: "#a1a1aa" }}>Serial Number</label>
+                    <input
+                        className="form-control"
+                        value={serialNumber}
+                        onChange={event => setSerialNumber(event.target.value)}
+                        placeholder="Optional serial"
+                    />
+                </div>
+            </div>
+            <div className="d-flex justify-content-end gap-3 mt-4">
+                <button className="btn-modal-dismiss" type="button" onClick={() => setView("list")}>
+                    Cancel
+                </button>
+                <button className="btn border-0 fw-semibold text-dark px-4" type="button" style={{ backgroundColor: "#06b6d4", borderRadius: "6px" }} onClick={createToken}>
+                    Create Token
+                </button>
+            </div>
+        </div>
+    )
 
     return (
         <div className="premium-metric-card-wrapper border rounded p-4 position-relative text-white" style={{ backgroundColor: "#141417", borderColor: "#27272a", fontFamily: "system-ui, -apple-system, sans-serif" }}>
-            
             <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-4" style={{ borderColor: "#27272a" }}>
                 <div>
                     <h3 className="fw-semibold mb-1 text-white" style={{ fontSize: "22px" }}>Hardware Token Vault</h3>
                     <p className="small mb-0" style={{ color: "#a1a1aa", fontSize: "14px" }}>Authenticate, link, and mutate registration status verification parameters of hardware tokens.</p>
                 </div>
-                <button
-                    className="btn border-0 fw-semibold text-white px-4 py-3 d-inline-flex align-items-center justify-content-center"
-                    style={{ 
-                        fontSize: "15px", 
-                        backgroundColor: "#06b6d4", 
-                        borderRadius: "6px",
-                        lineHeight: "1",
-                        letterSpacing: "0.02em"
-                    }}
-                    disabled={!premium}
-                    onClick={() => setView("create")}
-                >
-                    + Provision New Token
-                </button>
+                {view === "list" && (
+                    <button
+                        className="btn border-0 fw-semibold text-white px-4 py-3 d-inline-flex align-items-center justify-content-center"
+                        style={{
+                            fontSize: "15px",
+                            backgroundColor: "#06b6d4",
+                            borderRadius: "6px",
+                            lineHeight: "1",
+                            letterSpacing: "0.02em"
+                        }}
+                        disabled={!premium}
+                        onClick={() => setView("create")}
+                    >
+                        + Provision New Token
+                    </button>
+                )}
             </div>
 
             {localBanner && (
-                <div className="p-3 mb-4 rounded border d-flex align-items-center gap-2" style={{ 
-                    backgroundColor: localBanner.type === "error" ? "rgba(244, 63, 94, 0.15)" : "rgba(16, 185, 129, 0.15)", 
+                <div className="p-3 mb-4 rounded border d-flex align-items-center gap-2" style={{
+                    backgroundColor: localBanner.type === "error" ? "rgba(244, 63, 94, 0.15)" : "rgba(16, 185, 129, 0.15)",
                     borderColor: localBanner.type === "error" ? "#f43f5e" : "#10b981",
                     color: localBanner.type === "error" ? "#f43f5e" : "#10b981",
                     fontSize: "13px"
@@ -123,6 +181,8 @@ function CustomerManagePTokens({ user }: Props) {
                 <div className="text-center py-5 rounded border border-dashed" style={{ color: "#a1a1aa", backgroundColor: "#1c1f22", borderColor: "#495057", fontSize: "14px" }}>
                     Hardware token compliance interfaces require premium account credentials.
                 </div>
+            ) : view === "create" ? (
+                renderCreateView()
             ) : (
                 <div className="table-responsive" style={{ maxHeight: "620px", overflowY: "auto" }}>
                     <table className="table table-dark table-hover align-middle mb-0" style={{ backgroundColor: "#141417" }}>
@@ -167,8 +227,8 @@ function CustomerManagePTokens({ user }: Props) {
                                             {t.serialNumber}
                                         </td>
                                         <td className="bg-transparent py-3 text-end">
-                                            <button 
-                                                className="btn btn-sm fw-medium text-white px-3" 
+                                            <button
+                                                className="btn btn-sm fw-medium text-white px-3"
                                                 style={{ fontSize: "13px", backgroundColor: "#3f3f46", border: "none", borderRadius: "4px" }}
                                                 onClick={() => triggerStatusConfirm(t)}
                                             >
@@ -184,23 +244,23 @@ function CustomerManagePTokens({ user }: Props) {
             )}
 
             {showStatusConfirm && pendingActionToken && (
-                <dialog 
+                <dialog
                     open
-                    className="premium-modal-backdrop" 
+                    className="premium-modal-backdrop"
                     onClick={() => {
                         setShowStatusConfirm(false)
                         setPendingActionToken(null)
                     }}
-                    onKeyDown={(e) => {
-                        if (e.key === "Escape") {
+                    onKeyDown={(event) => {
+                        if (event.key === "Escape") {
                             setShowStatusConfirm(false)
                             setPendingActionToken(null)
                         }
                     }}
                 >
-                    <div 
-                        className="premium-modal-surface" 
-                        onClick={(e) => e.stopPropagation()}
+                    <div
+                        className="premium-modal-surface"
+                        onClick={(event) => event.stopPropagation()}
                         role="presentation"
                     >
                         <div className="modal-accent-strip-alert" style={{ backgroundColor: "#06b6d4" }}></div>
@@ -217,7 +277,7 @@ function CustomerManagePTokens({ user }: Props) {
                             }}>
                                 Cancel
                             </button>
-                            <button 
+                            <button
                                 className="btn border-0 fw-semibold text-white px-3"
                                 style={{ backgroundColor: "#06b6d4", borderRadius: "4px", fontSize: "14px" }}
                                 onClick={() => {

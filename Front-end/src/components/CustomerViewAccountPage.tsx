@@ -29,6 +29,10 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
     const [saving, setSaving] = useState(false)
     const [saveError, setSaveError] = useState<string | null>(null)
 
+    const [newPassword, setNewPassword] = useState("")
+    const [resettingPassword, setResettingPassword] = useState(false)
+    const [passwordError, setPasswordError] = useState<string | null>(null)
+
     const [showSuspendConfirm, setShowSuspendConfirm] = useState(false)
     const [suspending, setSuspending] = useState(false)
 
@@ -130,6 +134,40 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         } finally {
             setCancellingSub(false)
             setShowCancelSubConfirm(false)
+        }
+    }
+
+    const handleResetPassword = async () => {
+        if (newPassword.length < 8) {
+            setPasswordError("Password must contain at least 8 characters.")
+            return
+        }
+
+        setResettingPassword(true)
+        setPasswordError(null)
+
+        try {
+            // Password reset moved from the removed Security Center into View Account.
+            // apiFetch keeps the request on the logged-in customer instead of using a userID parameter.
+            const response = await apiFetch("http://localhost:8080/account/reset-password", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ newPassword })
+            })
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => null)
+                setPasswordError(data?.message ?? "Failed to reset password.")
+                return
+            }
+
+            setNewPassword("")
+            toast.success("Password reset successfully")
+        } catch {
+            setPasswordError("Server connection failed.")
+        } finally {
+            setResettingPassword(false)
         }
     }
 
@@ -261,6 +299,38 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Reset Password */}
+            <div className="card p-4 mb-4">
+                <h6 className="text-muted text-uppercase fw-semibold mb-3" style={{ fontSize: 11, letterSpacing: 1.4 }}>
+                    Reset Password
+                </h6>
+                <div className="row g-2 align-items-end">
+                    <div className="col-12 col-md-8">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>New Password</label>
+                        <input
+                            className="form-control"
+                            type="password"
+                            value={newPassword}
+                            onChange={event => {
+                                setNewPassword(event.target.value)
+                                setPasswordError(null)
+                            }}
+                            placeholder="At least 8 characters"
+                        />
+                    </div>
+                    <div className="col-12 col-md-4">
+                        <button
+                            className="btn btn-primary w-100"
+                            onClick={handleResetPassword}
+                            disabled={resettingPassword || newPassword.length < 8}
+                        >
+                            {resettingPassword ? "Resetting..." : "Reset Password"}
+                        </button>
+                    </div>
+                </div>
+                {passwordError && <div className="text-danger mt-2" style={{ fontSize: 13 }}>{passwordError}</div>}
             </div>
 
             {/* Subscription */}

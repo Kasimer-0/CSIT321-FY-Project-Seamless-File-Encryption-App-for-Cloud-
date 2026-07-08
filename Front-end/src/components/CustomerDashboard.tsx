@@ -5,7 +5,8 @@ import CustomerDecryptFile from "./CustomerDecryptFilePage"
 import CustomerManageCloudAccLinks from "./CustomerManageCloudAccLinksPage"
 import CustomerViewAccount from "./CustomerViewAccountPage"
 import CustomerManageEncryptionKeysPage from "./CustomerManageEncryptionKeysPage"
-import CustomerSecurityPage from "./CustomerSecurityPage"
+import CustomerManagePTokens from "./CustomerManagePTokensPage"
+import CustomerManageRecPhrase from "./CustomerManageRecPhrasePage"
 import CustomerFAQPage from "./CustomerFAQPage"
 import { apiFetch } from "../lib/api"
 
@@ -15,14 +16,15 @@ type CustomerDashboardProps = {
     onUserUpdate: (updatedUser: UserAccount) => void
 }
 
-type CustomerTab = "encrypt-file" | "decrypt-file" | "encryption-keys" | "cloud-storage" | "security" | "faq" | "view-account"
+type CustomerTab = "encrypt-file" | "decrypt-file" | "encryption-keys" | "cloud-storage" | "recovery-phrase" | "physical-tokens" | "faq" | "view-account"
 
 const pageTitles: Record<CustomerTab, string> = {
     "encrypt-file": "Encrypt File",
     "decrypt-file": "Decrypt File",
     "encryption-keys": "Manage Encryption Keys",
     "cloud-storage": "Cloud Storage Links",
-    "security": "Security Center",
+    "recovery-phrase": "Recovery Phrase",
+    "physical-tokens": "Physical Tokens",
     "faq": "Frequently Asked Questions",
     "view-account": "Manage Account"
 }
@@ -61,9 +63,16 @@ const tabIcons: Record<CustomerTab | "file-ops", (active: boolean) => ReactNode>
             <path d="M17.5 19H7a5 5 0 1 1 1.1-9.88A7 7 0 0 1 21 12.5a3.5 3.5 0 0 1-3.5 6.5z"></path>
         </svg>
     ),
-    "security": active => (
+    "recovery-phrase": active => (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+    ),
+    "physical-tokens": active => (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="7.5" cy="15.5" r="5.5"></circle>
+            <path d="M21 2l-9.6 9.6"></path>
+            <path d="M15.5 7.5l3 3L22 7"></path>
         </svg>
     ),
     "faq": active => (
@@ -92,6 +101,14 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
             setFileOpsExpanded(false)
         }
     }, [activeTab])
+
+    useEffect(() => {
+        // Recovery phrase and physical token pages are premium-only modules; if a
+        // downgrade happens while the tab is open, return the user to account details.
+        if (!user.isSubscribed && (activeTab === "recovery-phrase" || activeTab === "physical-tokens")) {
+            setActiveTab("view-account")
+        }
+    }, [activeTab, user.isSubscribed])
 
     // Purchase still calls the JWT-protected backend endpoint; the redesigned
     // account view only changes how the action is presented.
@@ -126,8 +143,10 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
                 return <CustomerManageEncryptionKeysPage />
             case "cloud-storage":
                 return <CustomerManageCloudAccLinks user={user} />
-            case "security":
-                return <CustomerSecurityPage user={user} onUserUpdate={onUserUpdate} />
+            case "recovery-phrase":
+                return <CustomerManageRecPhrase user={user} />
+            case "physical-tokens":
+                return <CustomerManagePTokens user={user} />
             case "faq":
                 return <CustomerFAQPage />
             case "view-account":
@@ -209,14 +228,28 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
                             Cloud Storage Links
                         </button>
 
-                        <button
-                            className={`sidebar-nav-item ${activeTab === "security" ? "active" : ""}`}
-                            type="button"
-                            onClick={() => setActiveTab("security")}
-                        >
-                            <span className="sidebar-nav-icon">{tabIcons.security(activeTab === "security")}</span>
-                            Security Center
-                        </button>
+                        {/* Premium-only security modules are split from the old Security Center page. */}
+                        {user.isSubscribed && (
+                            <>
+                                <button
+                                    className={`sidebar-nav-item ${activeTab === "recovery-phrase" ? "active" : ""}`}
+                                    type="button"
+                                    onClick={() => setActiveTab("recovery-phrase")}
+                                >
+                                    <span className="sidebar-nav-icon">{tabIcons["recovery-phrase"](activeTab === "recovery-phrase")}</span>
+                                    Recovery Phrase
+                                </button>
+
+                                <button
+                                    className={`sidebar-nav-item ${activeTab === "physical-tokens" ? "active" : ""}`}
+                                    type="button"
+                                    onClick={() => setActiveTab("physical-tokens")}
+                                >
+                                    <span className="sidebar-nav-icon">{tabIcons["physical-tokens"](activeTab === "physical-tokens")}</span>
+                                    Physical Tokens
+                                </button>
+                            </>
+                        )}
                     </nav>
                 </div>
 

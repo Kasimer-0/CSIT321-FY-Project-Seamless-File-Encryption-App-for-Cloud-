@@ -1,6 +1,6 @@
 import { useState } from "react"
 import type { UserAccount } from "../Type"
-import { bip39Wordlist } from "./Bip39Words" // <-- Import your massive dictionary here
+import { apiFetch } from "../lib/api"
 
 type Props = {
     user: UserAccount
@@ -9,7 +9,7 @@ type Props = {
 function CustomerManageRecPhrase({ user }: Props) {
     const premium = user.isSubscribed
 
-    const [recoveryWords, setRecoveryWords] = useState<string[] | null>(null) 
+    const [recoveryWords, setRecoveryWords] = useState<string[] | null>(null)
     const [isRevealed, setIsRevealed] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [localBanner, setLocalBanner] = useState<{ msg: string; type: "success" | "error" } | null>(null)
@@ -21,7 +21,7 @@ function CustomerManageRecPhrase({ user }: Props) {
 
     const handleGeneratePhrase = async () => {
         if (recoveryWords) {
-            triggerBanner("SECURITY_VIOLATION: Recovery phrase has already been initialized.", "error")
+            triggerBanner("Recovery phrase has already been initialized for this session.", "error")
             return
         }
 
@@ -29,40 +29,27 @@ function CustomerManageRecPhrase({ user }: Props) {
         setLocalBanner(null)
 
         try {
-            const generatedPool: string[] = []
-            
-            // Generate a 6-word array by picking indices across the entire dictionary space
-            for (let i = 0; i < 6; i++) {
-                const randomIndex = Math.floor(Math.random() * bip39Wordlist.length)
-                generatedPool.push(bip39Wordlist[randomIndex].toUpperCase())
-            }
-
-            const plainTextPhraseString = generatedPool.join(" ")
-
-            // Commit the wide-dictionary phrase to the database
-            const response = await fetch("/api/account/initialize-recovery", {
+            // Recovery phrases must be generated and hashed by the backend; this
+            // avoids storing a caller-supplied phrase through an unprotected route.
+            const response = await apiFetch("http://localhost:8080/account/recovery-phrase/generate", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
-                },
-                body: JSON.stringify({
-                    userId: user.userID, 
-                    recoveryPhrase: plainTextPhraseString 
-                })
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({})
             })
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
-                throw new Error(errorData.message || "Database persistence layer rejected transaction.")
+                throw new Error(errorData.message || "Recovery phrase persistence layer rejected transaction.")
             }
 
+            const data: { recoveryPhrase: string } = await response.json()
+            const generatedPool = data.recoveryPhrase.split(/[-\s]+/).map(word => word.toUpperCase())
             setRecoveryWords(generatedPool)
             setIsRevealed(true)
-            triggerBanner("SUCCESS: High-entropy recovery phrase committed to database vault.", "success")
-
-        } catch (error: any) {
-            triggerBanner(`DATABASE_ERROR: ${error.message || "Failed to commit phrase to system database."}`, "error")
+            triggerBanner("SUCCESS: Recovery phrase committed to account vault.", "success")
+        } catch (error) {
+            triggerBanner(error instanceof Error ? `DATABASE_ERROR: ${error.message}` : "DATABASE_ERROR: Failed to commit phrase.", "error")
         } finally {
             setIsGenerating(false)
         }
@@ -70,13 +57,12 @@ function CustomerManageRecPhrase({ user }: Props) {
 
     return (
         <div className="premium-metric-card-wrapper border rounded p-4 text-white" style={{ backgroundColor: "#141417", borderColor: "#27272a" }}>
-            {/* Component Layout Elements */}
             <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-4" style={{ borderColor: "#27272a" }}>
                 <div>
                     <h3 className="fw-semibold mb-1 text-white" style={{ fontSize: "20px" }}>Master Recovery Phrase</h3>
                     <p className="small mb-0" style={{ color: "#a1a1aa", fontSize: "14px" }}>High-entropy database authentication backup indices designed to replace normal password login layers.</p>
                 </div>
-                
+
                 {premium && recoveryWords && (
                     <div className="d-inline-flex gap-2">
                         <button
@@ -89,7 +75,7 @@ function CustomerManageRecPhrase({ user }: Props) {
                         <button
                             className="btn fw-semibold text-dark px-3 py-2"
                             style={{ backgroundColor: "#06b6d4", border: "none", fontSize: "13px", borderRadius: "6px" }}
-                            onClick={() => navigator.clipboard.writeText(recoveryWords.join(" "))}
+                            onClick={() => navigator.clipboard.writeText(recoveryWords.join("-").toLowerCase())}
                         >
                             Copy Sequence
                         </button>
@@ -111,7 +97,7 @@ function CustomerManageRecPhrase({ user }: Props) {
                 <div className="text-center py-5 my-3 rounded border" style={{ backgroundColor: "#0b0c10", borderColor: "#27272a" }}>
                     <h5 className="fw-semibold text-white mb-2">No Password Alternative Registered</h5>
                     <p className="small text-muted mx-auto mb-4" style={{ maxWidth: "420px" }}>
-                        Click below to choose 6 high-entropy words from our security dictionary and lock them to your account data.
+                        Click below to generate and store a 6-word recovery phrase for this account.
                     </p>
                     <button
                         className="btn border-0 fw-semibold text-dark px-4 py-2.5"
@@ -132,7 +118,7 @@ function CustomerManageRecPhrase({ user }: Props) {
                                         WORD 0{index + 1}
                                     </div>
                                     <div className="w-100 text-center font-monospace mt-2" style={{ fontSize: "20px" }}>
-                                        {isRevealed ? word : "••••••••"}
+                                        {isRevealed ? word : "******"}
                                     </div>
                                 </div>
                             </div>
