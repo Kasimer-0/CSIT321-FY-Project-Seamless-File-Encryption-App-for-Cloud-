@@ -5,18 +5,20 @@ import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.UserAccountRepository;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.security.JwtService;
+import com.stealthsync.service.security.RecoveryPhraseService;
+import com.stealthsync.service.security.RecoveryLoginAttemptService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.security.SecureRandom;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,16 +28,12 @@ import java.util.Map;
 /** Exposes customer account-security actions that remain available after the dashboard split. */
 public class AccountSecurityController {
 
-    private static final List<String> RECOVERY_WORDS = List.of(
-            "cipher", "vault", "cloud", "secure", "token", "backup",
-            "stream", "shield", "private", "restore", "silent", "access"
-    );
-
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserService currentUserService;
     private final JwtService jwtService;
-    private final SecureRandom secureRandom = new SecureRandom();
+    private final RecoveryPhraseService recoveryPhraseService;
+    private final RecoveryLoginAttemptService recoveryLoginAttemptService;
 
     // Reset password now lives on the customer View Account page; the old
     // destructive account-wipe action is intentionally no longer exposed.
@@ -53,45 +51,59 @@ public class AccountSecurityController {
 
     // The backend generates and stores the recovery phrase hash so the frontend
     // never sends a caller-controlled userID or owns the phrase-generation rules.
+    @GetMapping("/recovery-phrase/status")
+    public ResponseEntity<Map<String, Boolean>> recoveryPhraseStatus() {
+        UserAccount user = currentUserService.requireUser();
+        return ResponseEntity.ok(Map.of(
+                "configured",
+                user.getRecoveryPhraseHash() != null && !user.getRecoveryPhraseHash().isBlank()
+        ));
+    }
+
     @PostMapping("/recovery-phrase/generate")
     @Transactional
-    public ResponseEntity<Map<String, String>> generateRecoveryPhrase() {
+    public ResponseEntity<Map<String, String>> generateRecoveryPhrase(
+            @RequestBody(required = false) Map<String, Object> request) {
         UserAccount user = currentUserService.requireUser();
         requirePremium(user);
-        String phrase = generatePhrase();
+        boolean configured = user.getRecoveryPhraseHash() != null && !user.getRecoveryPhraseHash().isBlank();
+        boolean rotationConfirmed = request != null && Boolean.TRUE.equals(request.get("confirmRotation"));
+        if (configured && !rotationConfirmed) {
+            throw new IllegalArgumentException("Recovery phrase is already configured. Confirm rotation to replace it.");
+        }
+        String phrase = recoveryPhraseService.generate();
         user.setRecoveryPhraseHash(passwordEncoder.encode(phrase));
         userAccountRepository.save(user);
         return ResponseEntity.ok(Map.of("recoveryPhrase", phrase));
     }
 
     @PostMapping("/recovery-phrase/login")
-    public ResponseEntity<LoginResponse> loginWithRecoveryPhrase(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<LoginResponse> loginWithRecoveryPhrase(
+            @RequestBody Map<String, Object> request,
+            HttpServletRequest servletRequest) {
         String usernameOrEmail = asString(request.get("usernameOrEmail"), "");
-        String phrase = asString(request.get("recoveryPhrase"), "");
-        UserAccount user = userAccountRepository.findByUsernameIgnoreCaseOrEmailIgnoreCase(usernameOrEmail, usernameOrEmail)
-                .filter(account -> account.getRecoveryPhraseHash() != null)
-                .filter(account -> passwordEncoder.matches(phrase, account.getRecoveryPhraseHash()))
-                .filter(account -> !account.isSuspended())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid recovery phrase."));
-        requirePremium(user);
-        return ResponseEntity.ok(new LoginResponse(user, jwtService.createToken(user)));
+        String remoteAddress = servletRequest.getRemoteAddr();
+        recoveryLoginAttemptService.requireAllowed(usernameOrEmail, remoteAddress);
+        try {
+            String phrase = recoveryPhraseService.normalize(asString(request.get("recoveryPhrase"), ""));
+            UserAccount user = userAccountRepository.findByUsernameIgnoreCaseOrEmailIgnoreCase(usernameOrEmail, usernameOrEmail)
+                    .filter(account -> account.getRecoveryPhraseHash() != null)
+                    .filter(account -> passwordEncoder.matches(phrase, account.getRecoveryPhraseHash()))
+                    .filter(account -> !account.isSuspended())
+                    .filter(UserAccount::isSubscribed)
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid recovery phrase."));
+            recoveryLoginAttemptService.recordSuccess(usernameOrEmail, remoteAddress);
+            return ResponseEntity.ok(new LoginResponse(user, jwtService.createToken(user)));
+        } catch (Exception exception) {
+            recoveryLoginAttemptService.recordFailure(usernameOrEmail, remoteAddress);
+            throw new IllegalArgumentException("Invalid recovery phrase.");
+        }
     }
 
     private void requirePremium(UserAccount user) {
         if (!user.isSubscribed()) {
             throw new IllegalArgumentException("Premium subscription required.");
         }
-    }
-
-    private String generatePhrase() {
-        StringBuilder phrase = new StringBuilder();
-        for (int index = 0; index < 6; index++) {
-            if (index > 0) {
-                phrase.append('-');
-            }
-            phrase.append(RECOVERY_WORDS.get(secureRandom.nextInt(RECOVERY_WORDS.size())));
-        }
-        return phrase.toString();
     }
 
     private String asString(Object value, String fallback) {

@@ -79,7 +79,9 @@ function LoginForm({ onLogin }: LoginFormProps) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ usernameOrEmail, recoveryPhrase: recoveryWords.join(" ") })
+                // The backend accepts spaces or hyphens, while this canonical form
+                // matches the phrase returned by the generation endpoint.
+                body: JSON.stringify({ usernameOrEmail, recoveryPhrase: recoveryWords.join("-") })
             })
 
             const data = await response.json()
@@ -138,7 +140,7 @@ function LoginForm({ onLogin }: LoginFormProps) {
                 </div>
             ) : (
                 <div className="form-group-custom mb-4">
-                    <label className="input-label">6-Word Security Recovery Phrase</label>
+                    <label className="input-label">6-Word Account Recovery Phrase</label>
                     <div className="row g-2">
                         {recoveryWords.map((word, index) => (
                             <div className="col-4" key={index}>

@@ -15,7 +15,6 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -32,18 +31,58 @@ public class EncryptionKeyService {
     private final KeyManagementService keyManagementService;
     private final EncryptionPolicyService encryptionPolicyService;
 
-    public List<EncryptionKeyRecord> listKeys(Long ownerID, String search) {
-        String keyword = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
-        return encryptionKeyRepository.findByOwnerIDOrderByCreatedAtDesc(ownerID).stream()
-                .filter(key -> keyword.isBlank()
-                        || key.getKeyName().toLowerCase(Locale.ROOT).contains(keyword)
-                        || key.getAlgorithm().toLowerCase(Locale.ROOT).contains(keyword)
-                        || key.getFingerprint().toLowerCase(Locale.ROOT).contains(keyword))
-                .toList();
+    public List<EncryptionKeyRecord> listKeys(Long ownerID) {
+        return encryptionKeyRepository.findByOwnerIDOrderByCreatedAtDesc(ownerID);
     }
 
     public Optional<EncryptionKeyRecord> findKey(Long ownerID, Long keyID) {
         return encryptionKeyRepository.findByKeyIDAndOwnerID(keyID, ownerID);
+    }
+
+    @Transactional
+    public Optional<EncryptionKeyRecord> renameKey(Long ownerID, Long keyID, String keyName) {
+        if (isBlank(keyName)) {
+            throw new IllegalArgumentException("Encryption key name cannot be empty.");
+        }
+        return findKey(ownerID, keyID).map(key -> {
+            key.setKeyName(keyName.trim());
+            key.setUpdatedAt(Instant.now());
+            return encryptionKeyRepository.save(key);
+        });
+    }
+
+    @Transactional
+    public Optional<EncryptionKeyRecord> updateStatus(Long ownerID, Long keyID, String status) {
+        String normalizedStatus = status == null ? "" : status.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!"active".equals(normalizedStatus) && !"inactive".equals(normalizedStatus)) {
+            throw new IllegalArgumentException("Encryption key status must be active or inactive.");
+        }
+        return findKey(ownerID, keyID).map(key -> {
+            if ("retired".equalsIgnoreCase(key.getStatus())) {
+                throw new IllegalArgumentException("Retired encryption keys cannot be reactivated.");
+            }
+            key.setStatus(normalizedStatus);
+            key.setUpdatedAt(Instant.now());
+            return encryptionKeyRepository.save(key);
+        });
+    }
+
+    @Transactional
+    public boolean deleteKey(Long ownerID, Long keyID) {
+        return findKey(ownerID, keyID).map(key -> {
+            // Retirement preserves the salt and fingerprint needed to derive
+            // key material for files encrypted before the key was archived.
+            key.setStatus("retired");
+            key.setUpdatedAt(Instant.now());
+            encryptionKeyRepository.save(key);
+            return true;
+        }).orElse(false);
+    }
+
+    public Optional<EncryptionKeyRecord> findKeyByFingerprint(Long ownerID, String fingerprint) {
+        return isBlank(fingerprint)
+                ? Optional.empty()
+                : encryptionKeyRepository.findByOwnerIDAndFingerprint(ownerID, fingerprint.trim());
     }
 
     public TrustedKeyPackage exportTrustedKeyPackage(Long ownerID, Long keyID) {
@@ -70,7 +109,7 @@ public class EncryptionKeyService {
             return new TrustedKeyPackageImportResponse("existing", existing.get());
         }
 
-        String normalizedAlgorithm = encryptionPolicyService.policyForAlgorithm(keyPackage.algorithm()).algorithm();
+        String normalizedAlgorithm = encryptionPolicyService.requireAlgorithmAllowedForUser(ownerID, keyPackage.algorithm()).algorithm();
         Instant now = Instant.now();
         EncryptionKeyRecord imported = new EncryptionKeyRecord(
                 null,
@@ -91,7 +130,7 @@ public class EncryptionKeyService {
     @Transactional
     public EncryptionKeyRecord createKey(Long ownerID, String keyName, String algorithm, String keyPassword) {
         requirePassword(keyPassword);
-        String normalizedAlgorithm = encryptionPolicyService.policyForAlgorithm(algorithm).algorithm();
+        String normalizedAlgorithm = encryptionPolicyService.requireAlgorithmAllowedForUser(ownerID, algorithm).algorithm();
         byte[] salt = randomBytes(SALT_LENGTH_BYTE);
         byte[] derivedBytes = derivePasswordKey(keyPassword, salt);
         try {
@@ -117,7 +156,52 @@ public class EncryptionKeyService {
     }
 
     public DerivedKeyMaterial requireActiveKeyMaterial(Long ownerID, Long keyID, String keyPassword) {
+        return deriveMaterial(requireActiveKey(ownerID, keyID), keyPassword);
+    }
+
+    public DerivedKeyMaterial requireActiveKeyMaterialForEncryption(Long ownerID, Long keyID, String keyPassword) {
         EncryptionKeyRecord key = requireActiveKey(ownerID, keyID);
+        encryptionPolicyService.requireAlgorithmAllowedForUser(ownerID, key.getAlgorithm());
+        return deriveMaterial(key, keyPassword);
+    }
+
+    public DerivedKeyMaterial requireActiveKeyMaterial(Long ownerID, Long keyID, String keyFingerprint, String keyPassword) {
+        EncryptionKeyRecord key = findKey(ownerID, keyID)
+                .or(() -> findKeyByFingerprint(ownerID, keyFingerprint))
+                .orElseThrow(() -> new IllegalArgumentException("Encryption key was not found."));
+        if (!"active".equalsIgnoreCase(key.getStatus())) {
+            throw new IllegalArgumentException("Encryption key is not active.");
+        }
+        return deriveMaterial(key, keyPassword);
+    }
+
+    public DerivedKeyMaterial requireKeyMaterialForDecryption(Long ownerID, Long keyID, String keyPassword) {
+        EncryptionKeyRecord key = findKey(ownerID, keyID)
+                .orElseThrow(() -> new IllegalArgumentException("Encryption key was not found."));
+        requireDecryptableStatus(key);
+        return deriveMaterial(key, keyPassword);
+    }
+
+    public DerivedKeyMaterial requireKeyMaterialForDecryption(
+            Long ownerID,
+            Long keyID,
+            String keyFingerprint,
+            String keyPassword) {
+        // Trusted-device imports may create a new database keyID, so cloud decrypt can fall back to the portable fingerprint.
+        EncryptionKeyRecord key = findKey(ownerID, keyID)
+                .or(() -> findKeyByFingerprint(ownerID, keyFingerprint))
+                .orElseThrow(() -> new IllegalArgumentException("Encryption key was not found."));
+        requireDecryptableStatus(key);
+        return deriveMaterial(key, keyPassword);
+    }
+
+    private void requireDecryptableStatus(EncryptionKeyRecord key) {
+        if (!"active".equalsIgnoreCase(key.getStatus()) && !"retired".equalsIgnoreCase(key.getStatus())) {
+            throw new IllegalArgumentException("Encryption key is inactive. Reactivate it before decrypting files.");
+        }
+    }
+
+    private DerivedKeyMaterial deriveMaterial(EncryptionKeyRecord key, String keyPassword) {
         verifyPassword(key, keyPassword);
         byte[] salt = decode(key.getSalt());
         byte[] derivedBytes = derivePasswordKey(keyPassword, salt);

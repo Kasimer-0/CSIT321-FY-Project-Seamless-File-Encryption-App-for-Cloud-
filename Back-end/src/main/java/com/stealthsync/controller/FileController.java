@@ -108,7 +108,7 @@ public class FileController {
         try {
             String filename = safeFilename(file.getOriginalFilename(), "uploaded-file");
             EncryptionKeyService.DerivedKeyMaterial keyMaterial =
-                    encryptionKeyService.requireActiveKeyMaterial(ownerID, keyID, keyPassword);
+                    encryptionKeyService.requireActiveKeyMaterialForEncryption(ownerID, keyID, keyPassword);
             EncryptionPolicyService.EncryptionPolicy policy =
                     encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
             try (InputStream encryptedStream = aesGcmService.encryptStream(
@@ -210,7 +210,7 @@ public class FileController {
         EncryptionPolicyService.EncryptionPolicy policy = encryptionPolicyService.policyForAlgorithm(record.getEncMethod());
         try {
             EncryptionKeyService.DerivedKeyMaterial keyMaterial =
-                    encryptionKeyService.requireActiveKeyMaterial(ownerID, record.getKeyID(), keyPassword);
+                    encryptionKeyService.requireKeyMaterialForDecryption(ownerID, record.getKeyID(), keyPassword);
             try (InputStream decryptedStream = aesGcmService.decryptStream(
                     new ByteArrayInputStream(record.getEncryptedContent()),
                     keyMaterial.passphrase(),

@@ -44,6 +44,20 @@ public class EncryptionPolicyService {
         throw new IllegalArgumentException("Unsupported encryption method: " + encMethod);
     }
 
+    public EncryptionPolicy requireAlgorithmAllowedForUser(Long ownerID, String requestedAlgorithm) {
+        EncryptionPolicy requested = policyForAlgorithm(requestedAlgorithm);
+        EncryptionPolicy allowed = policyForUser(ownerID);
+        if (allowed.algorithm().equals(requested.algorithm())) {
+            return requested;
+        }
+        if (AES_256_GCM.equals(requested.algorithm()) && AES_128.equals(allowed.algorithm())) {
+            throw new IllegalArgumentException("AES-256-GCM requires an active premium subscription.");
+        }
+        throw new IllegalArgumentException(
+                "Your current plan allows " + allowed.algorithm() + " encryption keys, not " + requested.algorithm() + "."
+        );
+    }
+
     public List<String> supportedPlanMethods() {
         return List.of(AES_128, AES_256_GCM);
     }

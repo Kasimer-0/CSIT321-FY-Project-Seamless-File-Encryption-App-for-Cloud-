@@ -50,9 +50,26 @@ export type EncryptionKeyRecord = {
     updatedAt: Date
 }
 
+export type TrustedKeyPackage = {
+    version: string
+    exportedAt: string
+    keyID: number
+    keyName: string
+    algorithm: string
+    fingerprint: string
+    salt: string
+    keyScheme: string
+}
+
+export type TrustedKeyPackageImportResponse = {
+    status: "existing" | "imported"
+    key: EncryptionKeyRecord
+}
+
 export type PhysicalTokenRecord = {
     tokenID: number
     ownerID: number
+    encryptionKeyID: number | null
     tokenName: string
     serialNumber: string
     status: "active" | "inactive"

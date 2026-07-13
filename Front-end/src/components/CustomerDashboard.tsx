@@ -140,7 +140,7 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
             case "decrypt-file":
                 return <CustomerDecryptFile user={user} />
             case "encryption-keys":
-                return <CustomerManageEncryptionKeysPage />
+                return <CustomerManageEncryptionKeysPage user={user} />
             case "cloud-storage":
                 return <CustomerManageCloudAccLinks user={user} />
             case "recovery-phrase":

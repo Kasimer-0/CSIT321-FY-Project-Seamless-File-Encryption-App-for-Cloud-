@@ -60,7 +60,4 @@ public class KeyManagementService {
         return new SecretKeySpec(keyBytes, "AES");
     }
 
-    public boolean verifyPhysicalToken(String tokenCode) {
-        return tokenCode != null && !tokenCode.isBlank();
-    }
 }

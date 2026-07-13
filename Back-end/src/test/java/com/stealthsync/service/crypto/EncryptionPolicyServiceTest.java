@@ -55,6 +55,39 @@ class EncryptionPolicyServiceTest {
     }
 
     @Test
+    void freeCustomerCannotRequestAes256() {
+        UserAccount customer = new UserAccount(4L, "free-blocked", "free-blocked@example.com", "customer", false, false, null);
+        when(userAccountRepository.findById(4L)).thenReturn(Optional.of(customer));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> service
+                .requireAlgorithmAllowedForUser(4L, "AES-256-GCM"));
+
+        assertEquals("AES-256-GCM requires an active premium subscription.", error.getMessage());
+    }
+
+    @Test
+    void premiumCustomerCanRequestAes256() {
+        UserAccount customer = new UserAccount(5L, "premium-allowed", "premium-allowed@example.com", "customer", true, false, 10L);
+        Plan premiumPlan = new Plan(5L, "Premium", 15.0, "Description", "active", "AES-256-GCM");
+        Subscription subscription = new Subscription(
+                10L,
+                premiumPlan,
+                customer,
+                "active",
+                LocalDate.now().minusDays(1),
+                LocalDate.now().plusDays(29)
+        );
+        when(userAccountRepository.findById(5L)).thenReturn(Optional.of(customer));
+        when(subscriptionRepository.findFirstBySubscriber_UserIDOrderBySubscriptionIDDesc(5L))
+                .thenReturn(Optional.of(subscription));
+
+        EncryptionPolicyService.EncryptionPolicy policy = service.requireAlgorithmAllowedForUser(5L, "AES-256-GCM");
+
+        assertEquals("AES-256-GCM", policy.algorithm());
+        assertEquals(256, policy.keyLengthBits());
+    }
+
+    @Test
     void rejectsUnimplementedAlgorithms() {
         assertThrows(IllegalArgumentException.class, () -> service.policyForAlgorithm("ChaCha20"));
     }

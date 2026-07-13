@@ -34,10 +34,12 @@ Allow a second trusted Windows device/profile to decrypt files that were encrypt
   - `POST /trusted-devices/export-key-package`
   - `POST /trusted-devices/import-key-package`
 - Tests verify that exported packages do not expose verifier/password material and that imported packages derive the same passphrase with the same password.
+- A minimum frontend workflow is available on the Encryption Keys page:
+  - export a selected key as a trusted-device JSON package
+  - paste/import a trusted-device JSON package into another profile/device
 
 ## Remaining Work
 
-- Add frontend export/import controls to the Encryption Keys page.
 - Capture demo evidence:
   - Device/Profile A encrypts a file.
   - Device/Profile B imports the key package.

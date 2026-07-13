@@ -27,6 +27,9 @@ public class PhysicalTokenRecord {
     @Column(nullable = false)
     private Long ownerID;
 
+    @Column(name = "encryption_key_id")
+    private Long encryptionKeyID;
+
     @Column(nullable = false)
     private String tokenName;
 

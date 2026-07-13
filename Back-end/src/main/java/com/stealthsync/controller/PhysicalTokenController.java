@@ -1,9 +1,11 @@
 package com.stealthsync.controller;
 
 import com.stealthsync.model.entity.PhysicalTokenRecord;
+import com.stealthsync.model.entity.EncryptionKeyRecord;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.PhysicalTokenRepository;
 import com.stealthsync.security.CurrentUserService;
+import com.stealthsync.service.crypto.EncryptionKeyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +33,7 @@ public class PhysicalTokenController {
 
     private final PhysicalTokenRepository physicalTokenRepository;
     private final CurrentUserService currentUserService;
+    private final EncryptionKeyService encryptionKeyService;
 
     @GetMapping
     public ResponseEntity<List<PhysicalTokenRecord>> listTokens() {
@@ -52,8 +55,16 @@ public class PhysicalTokenController {
         UserAccount owner = requirePremium();
         String tokenName = asString(request.get("tokenName"), "Security Token");
         String serialNumber = asString(request.get("serialNumber"), "TOKEN-" + Instant.now().toEpochMilli());
+        Long encryptionKeyID = asLong(request.get("encryptionKeyID"));
+        if (encryptionKeyID != null) {
+            EncryptionKeyRecord selectedKey = encryptionKeyService.findKey(owner.getUserID(), encryptionKeyID)
+                    .orElseThrow(() -> new IllegalArgumentException("Selected encryption key does not belong to the current user."));
+            if (!"active".equalsIgnoreCase(selectedKey.getStatus())) {
+                throw new IllegalArgumentException("Selected encryption key must be active.");
+            }
+        }
         PhysicalTokenRecord token = new PhysicalTokenRecord(
-                null, owner.getUserID(), tokenName, serialNumber, "inactive", Instant.now(), null
+                null, owner.getUserID(), encryptionKeyID, tokenName, serialNumber, "inactive", Instant.now(), null
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(physicalTokenRepository.save(token));
     }
@@ -107,5 +118,19 @@ public class PhysicalTokenController {
             return text.trim();
         }
         return fallback;
+    }
+
+    private Long asLong(Object value) {
+        if (value == null || (value instanceof String text && text.isBlank())) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.valueOf(value.toString());
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("Encryption key ID must be a number.");
+        }
     }
 }

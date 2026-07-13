@@ -1,5 +1,5 @@
 -- PostgreSQL test-account bootstrap for StealthSync.
--- Run with: psql -U postgres -d stealthsync -f scripts/init_data.sql
+-- Run with: psql -U postgres -d "CSIT321-FYP" -f scripts/init_data.sql
 
 BEGIN;
 

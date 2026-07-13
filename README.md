@@ -10,7 +10,9 @@ Seamless file encryption app for cloud storage workflows.
 
 ## Encryption
 
-The backend encrypts files with AES-256-GCM. New encrypted files use a versioned `STLH` header:
+The backend applies the subscription tier on the server: free customers create
+AES-128 keys, while customers with an active Premium subscription may create
+AES-256-GCM keys. New encrypted files use a versioned `STLH` header:
 
 ```text
 STLH | version | salt | IV | ciphertext + auth tag
@@ -48,25 +50,61 @@ npm run build
 Backend development uses PostgreSQL by default:
 
 ```properties
-jdbc:postgresql://localhost:5432/stealthsync
+jdbc:postgresql://localhost:5432/CSIT321-FYP
 ```
 
 Spring JPA `ddl-auto=update` creates and updates tables after the application
-connects, but PostgreSQL must already have the `stealthsync` database. Create it
+connects, but PostgreSQL must already have the `CSIT321-FYP` database. Create it
 once before starting the backend:
 
 ```powershell
 psql -U postgres -d postgres -f scripts/create_stealthsync_database.sql
 ```
 
+Start the backend with the local helper so the database password is requested
+securely instead of being committed to the repository:
+
+```powershell
+.\scripts\start-backend-local.ps1
+```
+
+If you prefer to run Maven directly, set the database environment variables in
+the same PowerShell session first:
+
+```powershell
+$env:DB_URL="jdbc:postgresql://localhost:5432/CSIT321-FYP"
+$env:DB_USERNAME="postgres"
+$env:DB_PASSWORD="your PostgreSQL password"
+cd Back-end
+mvn spring-boot:run
+```
+
 The app seeds demo accounts automatically on startup. To reset the core test
 accounts manually, run:
 
 ```powershell
-psql -U postgres -d stealthsync -f scripts/init_data.sql
+psql -U postgres -d "CSIT321-FYP" -f scripts/init_data.sql
 ```
 
-## Desktop App Packaging
+## Web Validation Target
+
+The web application is the current FYP validation target. Start both services
+from the repository root with:
+
+```powershell
+.\scripts\start-web-demo.ps1
+```
+
+Stop them with `scripts\stop-web-demo.cmd`. Google Drive, Dropbox, and OneDrive
+OAuth credentials must be supplied through user environment variables; never
+commit credential values.
+
+## Desktop App Packaging (Known Issue)
+
+The source still contains a Windows packaging prototype, but the final web E2E
+and multi-device evidence must be completed before treating the desktop build as
+submission-ready. Do not describe the desktop package as a verified final
+product until its startup and OAuth callbacks have been retested.
 
 `dist-desktop/` is a generated Windows desktop app image, so it is intentionally not committed to GitHub. It is large, platform-specific, and can be rebuilt from source.
 
@@ -83,10 +121,9 @@ The script:
 - packages the Spring Boot backend JAR
 - runs `jpackage` to create `dist-desktop/StealthSync/StealthSync.exe`
 
-The packaged application opens the React interface inside its own JavaFX
-desktop window. It does not open the system browser. Closing the window also
-stops the local Spring Boot service, and launching the app again focuses the
-existing window instead of starting another server process.
+The intended packaged application opens the React interface inside its own
+JavaFX desktop window. This packaging path is retained for investigation and is
+not the current validation baseline.
 
 Desktop packages use a local H2 database stored under the current user's
 `.stealthsync` directory. They do not require PostgreSQL or a `DB_PASSWORD`
@@ -124,7 +161,7 @@ seeding also runs when the backend starts. The same two required test accounts
 can be created or reset manually with:
 
 ```powershell
-psql -U postgres -d stealthsync -f scripts/init_data.sql
+psql -U postgres -d "CSIT321-FYP" -f scripts/init_data.sql
 ```
 
 The SQL script is idempotent and stores BCrypt password hashes rather than
@@ -149,9 +186,10 @@ database and does not require PostgreSQL or Maven on the end user's computer.
 ## Google Drive Integration
 
 StealthSync uses Google OAuth 2.0 and the Google Drive API to link a user's
-account. Files uploaded through the Google Drive section are encrypted with
-AES-256-GCM before they leave the application. Downloads are retrieved as
-ciphertext and decrypted locally before being saved by the user.
+account. Files uploaded through the Google Drive section are encrypted with the
+server-approved AES tier (AES-128 for free accounts or AES-256-GCM for active
+Premium accounts) before cloud upload. Downloads are retrieved as ciphertext
+and decrypted by the local StealthSync backend before being saved by the user.
 
 Google Drive setup:
 
@@ -169,7 +207,8 @@ and [Google Drive API upload guide](https://developers.google.com/drive/api/guid
 http://localhost:8080/cloud-storage/oauth/google/callback
 ```
 
-6. Set these environment variables before starting the backend or desktop app:
+6. Set these environment variables before starting the backend/web app. The
+   desktop path must be retested separately:
 
 ```powershell
 [Environment]::SetEnvironmentVariable(

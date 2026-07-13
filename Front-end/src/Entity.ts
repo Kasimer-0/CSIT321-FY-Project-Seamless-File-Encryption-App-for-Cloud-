@@ -41,6 +41,7 @@ export type EncryptionKeyRecord = {
 export type PhysicalTokenRecord = {
     tokenID: number
     ownerID: number
+    encryptionKeyID: number | null
     tokenName: string
     serialNumber: string
     status: "active" | "inactive"

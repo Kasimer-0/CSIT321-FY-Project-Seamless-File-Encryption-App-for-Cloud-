@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { UserAccount } from "../Type"
 import { apiFetch } from "../lib/api"
 
@@ -10,6 +10,8 @@ function CustomerManageRecPhrase({ user }: Props) {
     const premium = user.isSubscribed
 
     const [recoveryWords, setRecoveryWords] = useState<string[] | null>(null)
+    const [configured, setConfigured] = useState(false)
+    const [loadingStatus, setLoadingStatus] = useState(true)
     const [isRevealed, setIsRevealed] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [localBanner, setLocalBanner] = useState<{ msg: string; type: "success" | "error" } | null>(null)
@@ -19,9 +21,23 @@ function CustomerManageRecPhrase({ user }: Props) {
         setTimeout(() => setLocalBanner(null), 4000)
     }
 
+    useEffect(() => {
+        if (!premium) {
+            setLoadingStatus(false)
+            return
+        }
+        apiFetch("http://localhost:8080/account/recovery-phrase/status", { credentials: "include" })
+            .then(async response => {
+                if (!response.ok) throw new Error("Unable to load recovery phrase status.")
+                const data: { configured: boolean } = await response.json()
+                setConfigured(data.configured)
+            })
+            .catch(error => triggerBanner(error instanceof Error ? error.message : "Unable to load recovery phrase status.", "error"))
+            .finally(() => setLoadingStatus(false))
+    }, [premium, user.userID])
+
     const handleGeneratePhrase = async () => {
-        if (recoveryWords) {
-            triggerBanner("Recovery phrase has already been initialized for this session.", "error")
+        if (configured && !window.confirm("Rotate the existing Account Recovery Phrase? The previous phrase will stop working immediately.")) {
             return
         }
 
@@ -35,7 +51,7 @@ function CustomerManageRecPhrase({ user }: Props) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({})
+                body: JSON.stringify({ confirmRotation: configured })
             })
 
             if (!response.ok) {
@@ -46,6 +62,7 @@ function CustomerManageRecPhrase({ user }: Props) {
             const data: { recoveryPhrase: string } = await response.json()
             const generatedPool = data.recoveryPhrase.split(/[-\s]+/).map(word => word.toUpperCase())
             setRecoveryWords(generatedPool)
+            setConfigured(true)
             setIsRevealed(true)
             triggerBanner("SUCCESS: Recovery phrase committed to account vault.", "success")
         } catch (error) {
@@ -59,8 +76,8 @@ function CustomerManageRecPhrase({ user }: Props) {
         <div className="premium-metric-card-wrapper border rounded p-4 text-white" style={{ backgroundColor: "#141417", borderColor: "#27272a" }}>
             <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-4" style={{ borderColor: "#27272a" }}>
                 <div>
-                    <h3 className="fw-semibold mb-1 text-white" style={{ fontSize: "20px" }}>Master Recovery Phrase</h3>
-                    <p className="small mb-0" style={{ color: "#a1a1aa", fontSize: "14px" }}>High-entropy database authentication backup indices designed to replace normal password login layers.</p>
+                    <h3 className="fw-semibold mb-1 text-white" style={{ fontSize: "20px" }}>Account Recovery Phrase</h3>
+                    <p className="small mb-0" style={{ color: "#a1a1aa", fontSize: "14px" }}>A six-word alternative for recovering access to your StealthSync account login.</p>
                 </div>
 
                 {premium && recoveryWords && (
@@ -89,15 +106,23 @@ function CustomerManageRecPhrase({ user }: Props) {
                 </div>
             )}
 
+            <div className="alert alert-warning mb-4" role="note">
+                This phrase cannot recover encryption keys, key passwords, or files that have already been encrypted.
+            </div>
+
             {!premium ? (
                 <div className="text-center py-5 rounded border border-dashed" style={{ color: "#a1a1aa" }}>
                     Recovery key compliance interfaces require premium account credentials.
                 </div>
+            ) : loadingStatus ? (
+                <div className="text-center py-5" style={{ color: "#a1a1aa" }}>Loading account recovery status...</div>
             ) : !recoveryWords ? (
                 <div className="text-center py-5 my-3 rounded border" style={{ backgroundColor: "#0b0c10", borderColor: "#27272a" }}>
-                    <h5 className="fw-semibold text-white mb-2">No Password Alternative Registered</h5>
+                    <h5 className="fw-semibold text-white mb-2">{configured ? "Account Recovery Phrase Configured" : "No Account Recovery Phrase Configured"}</h5>
                     <p className="small text-muted mx-auto mb-4" style={{ maxWidth: "420px" }}>
-                        Click below to generate and store a 6-word recovery phrase for this account.
+                        {configured
+                            ? "The saved phrase is never returned after creation. Rotate it only when you intend to invalidate the previous phrase."
+                            : "Generate and securely store a 6-word phrase for account login recovery."}
                     </p>
                     <button
                         className="btn border-0 fw-semibold text-dark px-4 py-2.5"
@@ -105,7 +130,7 @@ function CustomerManageRecPhrase({ user }: Props) {
                         disabled={isGenerating}
                         onClick={handleGeneratePhrase}
                     >
-                        {isGenerating ? "Compiling Cryptographic Indices..." : "Generate & Save Master Phrase"}
+                        {isGenerating ? "Generating Account Recovery Phrase..." : configured ? "Rotate Account Recovery Phrase" : "Generate Account Recovery Phrase"}
                     </button>
                 </div>
             ) : (

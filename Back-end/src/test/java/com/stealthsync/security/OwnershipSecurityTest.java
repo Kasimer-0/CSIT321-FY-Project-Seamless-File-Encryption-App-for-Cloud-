@@ -215,12 +215,24 @@ class OwnershipSecurityTest {
     }
 
     @Test
+    void freeCustomerCannotCreateAes256EncryptionKey() throws Exception {
+        mockMvc.perform(post("/encryption-keys")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"keyName":"Blocked premium key","algorithm":"AES-256-GCM","keyPassword":"Master@12345"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("AES-256-GCM requires an active premium subscription."));
+    }
+
+    @Test
     void createEncryptionKeyDoesNotReturnSensitiveMaterialAndCanBeListed() throws Exception {
         mockMvc.perform(post("/encryption-keys")
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"keyName":"Demo key","algorithm":"AES-256-GCM","keyPassword":"Master@12345"}
+                                {"keyName":"Demo key","algorithm":"AES-128","keyPassword":"Master@12345"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.keyName").value("Demo key"))
@@ -233,6 +245,69 @@ class OwnershipSecurityTest {
                 .andExpect(jsonPath("$[0].keyName").value("Demo key"))
                 .andExpect(jsonPath("$[0].salt").doesNotExist())
                 .andExpect(jsonPath("$[0].passwordVerifier").doesNotExist());
+    }
+
+    @Test
+    void customerCanRenameActivateDeactivateAndDeleteOwnEncryptionKey() throws Exception {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(customerA.getUserID(), "Original key", "AES-128", "Master@12345");
+
+        mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"keyName\":\"Renamed key\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keyName").value("Renamed key"));
+
+        mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"inactive\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("inactive"));
+
+        mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"active\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("active"));
+
+        mockMvc.perform(delete("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("retired"))
+                .andExpect(jsonPath("$.salt").doesNotExist())
+                .andExpect(jsonPath("$.passwordVerifier").doesNotExist());
+    }
+
+    @Test
+    void encryptionKeyAlgorithmCannotBeChangedAfterCreation() throws Exception {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(customerA.getUserID(), "Immutable algorithm", "AES-128", "Master@12345");
+
+        mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"algorithm\":\"AES-256-GCM\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Encryption key algorithm cannot be changed after creation."));
+
+        assertEquals("AES-128", encryptionKeyRepository.findById(key.getKeyID()).orElseThrow().getAlgorithm());
+    }
+
+    @Test
+    void encryptionKeyRenameRejectsEmptyName() throws Exception {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(customerA.getUserID(), "Named key", "AES-128", "Master@12345");
+
+        mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"keyName\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Encryption key name cannot be empty."));
     }
 
     @Test
@@ -354,13 +429,14 @@ class OwnershipSecurityTest {
     }
 
     private EncryptionKeyRecord createCustomerBKey(String keyName) {
-        return encryptionKeyService.createKey(customerB.getUserID(), keyName, "AES-256-GCM", "OtherKey@12345");
+        return encryptionKeyService.createKey(customerB.getUserID(), keyName, "AES-128", "OtherKey@12345");
     }
 
     private PhysicalTokenRecord createCustomerBToken(String tokenName, String serialNumber) {
         return physicalTokenRepository.save(new PhysicalTokenRecord(
                 null,
                 customerB.getUserID(),
+                null,
                 tokenName,
                 serialNumber,
                 "inactive",

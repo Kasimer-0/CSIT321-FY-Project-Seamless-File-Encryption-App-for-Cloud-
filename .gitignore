@@ -12,10 +12,13 @@ outputs/
 
 # Logs and temporary files
 *.log
+*.pid
 *.tmp
 tmp/
 Front-end/tmp/
 ~$*.docx
+.codex/
+.stealthsync-run/
 
 # IDE and OS metadata
 .vscode/

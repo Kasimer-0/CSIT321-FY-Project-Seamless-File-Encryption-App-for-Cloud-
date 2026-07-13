@@ -199,7 +199,7 @@ public class CloudStorageController {
         requireActiveProvider(ownerID, adapter);
         String originalName = safeFilename(file.getOriginalFilename(), "uploaded-file");
         EncryptionKeyService.DerivedKeyMaterial keyMaterial =
-                encryptionKeyService.requireActiveKeyMaterial(ownerID, keyID, keyPassword);
+                encryptionKeyService.requireActiveKeyMaterialForEncryption(ownerID, keyID, keyPassword);
         EncryptionPolicyService.EncryptionPolicy policy =
                 encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
         try (InputStream encrypted = aesGcmService.encryptStream(
@@ -302,7 +302,7 @@ public class CloudStorageController {
             CloudStorageAdapter adapter = adapterFor(provider);
             requireActiveProvider(ownerID, adapter);
             Path path = resolveLocalUserFile(asString(request.get("fileUri")));
-            EncryptionKeyService.DerivedKeyMaterial keyMaterial = encryptionKeyService.requireActiveKeyMaterial(
+            EncryptionKeyService.DerivedKeyMaterial keyMaterial = encryptionKeyService.requireActiveKeyMaterialForEncryption(
                     ownerID,
                     asLong(request.get("keyID")),
                     asString(request.get("keyPassword"))
@@ -357,7 +357,12 @@ public class CloudStorageController {
             return decryptLegacyCloudContent(ownerID, cloudFile.encryptedContent(), policy.keyLengthBits());
         }
         EncryptionKeyService.DerivedKeyMaterial keyMaterial =
-                encryptionKeyService.requireActiveKeyMaterial(ownerID, cloudFile.keyID(), keyPassword);
+                encryptionKeyService.requireKeyMaterialForDecryption(
+                        ownerID,
+                        cloudFile.keyID(),
+                        cloudFile.keyFingerprint(),
+                        keyPassword
+                );
         return aesGcmService.decryptStream(
                 new ByteArrayInputStream(cloudFile.encryptedContent()),
                 keyMaterial.passphrase(),

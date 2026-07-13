@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import type { PhysicalTokenRecord, UserAccount } from "../Type"
+import type { EncryptionKeyRecord, PhysicalTokenRecord, UserAccount } from "../Type"
 import { apiFetch } from "../lib/api"
 
 type Props = {
@@ -8,14 +8,17 @@ type Props = {
 
 function CustomerManagePTokens({ user }: Props) {
     const [tokens, setTokens] = useState<PhysicalTokenRecord[]>([])
+    const [keys, setKeys] = useState<EncryptionKeyRecord[]>([])
     const [loadingTokens, setLoadingTokens] = useState(false)
     const [view, setView] = useState<"list" | "create">("list")
     const [tokenName, setTokenName] = useState("")
     const [serialNumber, setSerialNumber] = useState("")
+    const [selectedKeyID, setSelectedKeyID] = useState("")
     const [localBanner, setLocalBanner] = useState<{ msg: string; type: "success" | "error" } | null>(null)
 
     const [pendingActionToken, setPendingActionToken] = useState<PhysicalTokenRecord | null>(null)
     const [showStatusConfirm, setShowStatusConfirm] = useState(false)
+    const [pendingDeleteToken, setPendingDeleteToken] = useState<PhysicalTokenRecord | null>(null)
 
     const premium = user.isSubscribed
 
@@ -37,7 +40,7 @@ function CustomerManagePTokens({ user }: Props) {
             if (res.ok) {
                 setTokens(await res.json())
             } else {
-                triggerBanner("Failed to retrieve hardware vault tokens.", "error")
+                triggerBanner("Failed to retrieve physical token registration records.", "error")
             }
         } catch {
             triggerBanner("Server connection failed.", "error")
@@ -46,34 +49,50 @@ function CustomerManagePTokens({ user }: Props) {
         }
     }
 
+    const fetchKeys = async () => {
+        if (!premium) {
+            setKeys([])
+            return
+        }
+        try {
+            const response = await apiFetch("http://localhost:8080/encryption-keys", { credentials: "include" })
+            if (!response.ok) throw new Error()
+            setKeys(await response.json())
+        } catch {
+            triggerBanner("Failed to retrieve encryption keys for token association.", "error")
+        }
+    }
+
     useEffect(() => {
         fetchTokens()
+        fetchKeys()
     }, [user.userID, premium])
 
     const createToken = async () => {
         try {
-            // The teammate's uploaded page referenced a missing create component,
-            // so token provisioning is kept inline and uses the same protected API.
+            // Registration stays inline and uses the same owner-scoped protected API.
             const res = await apiFetch("http://localhost:8080/physical-tokens", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
                 body: JSON.stringify({
                     tokenName: tokenName.trim() || "Security Token",
-                    serialNumber: serialNumber.trim() || undefined
+                    serialNumber: serialNumber.trim() || undefined,
+                    encryptionKeyID: selectedKeyID ? Number(selectedKeyID) : null
                 })
             })
             if (!res.ok) {
                 const data = await res.json().catch(() => null)
-                throw new Error(data?.message ?? "Failed to provision token.")
+                throw new Error(data?.message ?? "Failed to register token record.")
             }
             setTokenName("")
             setSerialNumber("")
+            setSelectedKeyID("")
             setView("list")
-            triggerBanner("Hardware security token provisioned successfully.", "success")
+            triggerBanner("Physical token registration created.", "success")
             await fetchTokens()
         } catch (error) {
-            triggerBanner(error instanceof Error ? error.message : "Failed to provision token.", "error")
+            triggerBanner(error instanceof Error ? error.message : "Failed to register token record.", "error")
         }
     }
 
@@ -86,10 +105,10 @@ function CustomerManagePTokens({ user }: Props) {
                 credentials: "include"
             })
             if (!res.ok) throw new Error()
-            triggerBanner("Hardware token status updated successfully.", "success")
+            triggerBanner("Physical token registration status updated.", "success")
             await fetchTokens()
         } catch {
-            triggerBanner("Failed to modify hardware token status vector.", "error")
+            triggerBanner("Failed to update physical token registration status.", "error")
         }
     }
 
@@ -98,11 +117,33 @@ function CustomerManagePTokens({ user }: Props) {
         setShowStatusConfirm(true)
     }
 
+    const removeToken = async (token: PhysicalTokenRecord) => {
+        try {
+            const response = await apiFetch(`http://localhost:8080/physical-tokens/${token.tokenID}`, {
+                method: "DELETE",
+                credentials: "include"
+            })
+            if (!response.ok) throw new Error()
+            triggerBanner("Physical token registration removed.", "success")
+            await fetchTokens()
+        } catch {
+            triggerBanner("Failed to remove physical token registration.", "error")
+        } finally {
+            setPendingDeleteToken(null)
+        }
+    }
+
+    const keyLabel = (token: PhysicalTokenRecord) => {
+        if (token.encryptionKeyID == null) return "Not associated"
+        const key = keys.find(candidate => candidate.keyID === token.encryptionKeyID)
+        return key ? `${key.keyName} (#${key.keyID})` : `Key #${token.encryptionKeyID}`
+    }
+
     const renderCreateView = () => (
         <div className="rounded border p-4" style={{ backgroundColor: "#0b0c10", borderColor: "#27272a" }}>
             <div className="d-flex align-items-start justify-content-between gap-3 mb-4">
                 <div>
-                    <h4 className="fw-semibold text-white mb-1" style={{ fontSize: "18px" }}>Provision Hardware Token</h4>
+                    <h4 className="fw-semibold text-white mb-1" style={{ fontSize: "18px" }}>Register Token Record</h4>
                     <p className="small mb-0" style={{ color: "#a1a1aa" }}>Register a prototype token record for this premium account.</p>
                 </div>
                 <button className="btn-modal-dismiss" type="button" onClick={() => setView("list")}>
@@ -110,16 +151,16 @@ function CustomerManagePTokens({ user }: Props) {
                 </button>
             </div>
             <div className="row g-3">
-                <div className="col-12 col-md-6">
+                <div className="col-12 col-md-4">
                     <label className="form-label text-uppercase small" style={{ color: "#a1a1aa" }}>Token Name</label>
                     <input
                         className="form-control"
                         value={tokenName}
                         onChange={event => setTokenName(event.target.value)}
-                        placeholder="YubiKey Demo"
+                        placeholder="Demo token"
                     />
                 </div>
-                <div className="col-12 col-md-6">
+                <div className="col-12 col-md-4">
                     <label className="form-label text-uppercase small" style={{ color: "#a1a1aa" }}>Serial Number</label>
                     <input
                         className="form-control"
@@ -127,6 +168,15 @@ function CustomerManagePTokens({ user }: Props) {
                         onChange={event => setSerialNumber(event.target.value)}
                         placeholder="Optional serial"
                     />
+                </div>
+                <div className="col-12 col-md-4">
+                    <label className="form-label text-uppercase small" style={{ color: "#a1a1aa" }}>Encryption Key</label>
+                    <select className="form-select" value={selectedKeyID} onChange={event => setSelectedKeyID(event.target.value)}>
+                        <option value="">No key association</option>
+                        {keys.filter(key => key.status === "active").map(key => (
+                            <option key={key.keyID} value={key.keyID}>{key.keyName} (#{key.keyID})</option>
+                        ))}
+                    </select>
                 </div>
             </div>
             <div className="d-flex justify-content-end gap-3 mt-4">
@@ -144,8 +194,8 @@ function CustomerManagePTokens({ user }: Props) {
         <div className="premium-metric-card-wrapper border rounded p-4 position-relative text-white" style={{ backgroundColor: "#141417", borderColor: "#27272a", fontFamily: "system-ui, -apple-system, sans-serif" }}>
             <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-4" style={{ borderColor: "#27272a" }}>
                 <div>
-                    <h3 className="fw-semibold mb-1 text-white" style={{ fontSize: "22px" }}>Hardware Token Vault</h3>
-                    <p className="small mb-0" style={{ color: "#a1a1aa", fontSize: "14px" }}>Authenticate, link, and mutate registration status verification parameters of hardware tokens.</p>
+                    <h3 className="fw-semibold mb-1 text-white" style={{ fontSize: "22px" }}>Physical Token Registration Prototype</h3>
+                    <p className="small mb-0" style={{ color: "#a1a1aa", fontSize: "14px" }}>Records token registration, lifecycle status, and an optional encryption-key association.</p>
                 </div>
                 {view === "list" && (
                     <button
@@ -160,7 +210,7 @@ function CustomerManagePTokens({ user }: Props) {
                         disabled={!premium}
                         onClick={() => setView("create")}
                     >
-                        + Provision New Token
+                        + Register Token Record
                     </button>
                 )}
             </div>
@@ -177,9 +227,13 @@ function CustomerManagePTokens({ user }: Props) {
                 </div>
             )}
 
+            <div className="alert alert-warning mb-4" role="note">
+                Prototype: this records token registration and key association only. Real USB/FIDO2 presence verification is Future Work.
+            </div>
+
             {!premium ? (
                 <div className="text-center py-5 rounded border border-dashed" style={{ color: "#a1a1aa", backgroundColor: "#1c1f22", borderColor: "#495057", fontSize: "14px" }}>
-                    Hardware token compliance interfaces require premium account credentials.
+                    Physical token prototype requires a premium account.
                 </div>
             ) : view === "create" ? (
                 renderCreateView()
@@ -188,23 +242,24 @@ function CustomerManagePTokens({ user }: Props) {
                     <table className="table table-dark table-hover align-middle mb-0" style={{ backgroundColor: "#141417" }}>
                         <thead>
                             <tr className="small tracking-wider" style={{ borderBottom: "2px solid #27272a", color: "#a1a1aa" }}>
-                                <th className="bg-transparent py-3 text-uppercase fw-semibold" style={{ fontSize: "12px", color: "#a1a1aa" }}>Hardware Token Name</th>
+                                <th className="bg-transparent py-3 text-uppercase fw-semibold" style={{ fontSize: "12px", color: "#a1a1aa" }}>Token Record Name</th>
                                 <th className="bg-transparent py-3 text-uppercase fw-semibold" style={{ fontSize: "12px", color: "#a1a1aa" }}>Serial Number</th>
+                                <th className="bg-transparent py-3 text-uppercase fw-semibold" style={{ fontSize: "12px", color: "#a1a1aa" }}>Encryption Key</th>
                                 <th className="bg-transparent py-3 text-uppercase text-end fw-semibold" style={{ fontSize: "12px", color: "#a1a1aa" }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loadingTokens ? (
                                 <tr>
-                                    <td colSpan={3} className="text-center py-5" style={{ color: "#a1a1aa", backgroundColor: "transparent", borderBottom: "none", fontSize: "14px" }}>
+                                    <td colSpan={4} className="text-center py-5" style={{ color: "#a1a1aa", backgroundColor: "transparent", borderBottom: "none", fontSize: "14px" }}>
                                         <div className="spinner-border spinner-border-sm text-cyan me-2" role="status"></div>
-                                        Synchronizing secure enclave hardware layers...
+                                        Loading token registration records...
                                     </td>
                                 </tr>
                             ) : tokens.length === 0 ? (
                                 <tr>
-                                    <td colSpan={3} className="text-center py-5" style={{ color: "#a1a1aa", backgroundColor: "transparent", borderBottom: "none", fontSize: "14px" }}>
-                                        No provisioned hardware security keys attached to account profile.
+                                    <td colSpan={4} className="text-center py-5" style={{ color: "#a1a1aa", backgroundColor: "transparent", borderBottom: "none", fontSize: "14px" }}>
+                                        No physical token registration records for this account.
                                     </td>
                                 </tr>
                             ) : (
@@ -226,14 +281,20 @@ function CustomerManagePTokens({ user }: Props) {
                                         <td className="bg-transparent py-3 font-monospace" style={{ fontSize: "13px", color: "#a1a1aa" }}>
                                             {t.serialNumber}
                                         </td>
+                                        <td className="bg-transparent py-3" style={{ fontSize: "13px", color: "#a1a1aa" }}>
+                                            {keyLabel(t)}
+                                        </td>
                                         <td className="bg-transparent py-3 text-end">
-                                            <button
-                                                className="btn btn-sm fw-medium text-white px-3"
-                                                style={{ fontSize: "13px", backgroundColor: "#3f3f46", border: "none", borderRadius: "4px" }}
-                                                onClick={() => triggerStatusConfirm(t)}
-                                            >
-                                                {t.status === "active" ? "Deactivate" : "Activate"}
-                                            </button>
+                                            <div className="d-flex gap-2 justify-content-end">
+                                                <button
+                                                    className="btn btn-sm fw-medium text-white px-3"
+                                                    style={{ fontSize: "13px", backgroundColor: "#3f3f46", border: "none", borderRadius: "4px" }}
+                                                    onClick={() => triggerStatusConfirm(t)}
+                                                >
+                                                    {t.status === "active" ? "Deactivate" : "Activate"}
+                                                </button>
+                                                <button className="btn btn-outline-danger btn-sm" onClick={() => setPendingDeleteToken(t)}>Remove</button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -288,6 +349,22 @@ function CustomerManagePTokens({ user }: Props) {
                             >
                                 Confirm Change
                             </button>
+                        </div>
+                    </div>
+                </dialog>
+            )}
+
+            {pendingDeleteToken && (
+                <dialog open className="premium-modal-backdrop" onClick={() => setPendingDeleteToken(null)}>
+                    <div className="premium-modal-surface" onClick={event => event.stopPropagation()} role="presentation">
+                        <div className="modal-accent-strip-alert"></div>
+                        <h4 className="modal-title-main">Remove Physical Token Registration?</h4>
+                        <p className="modal-description-text">
+                            Remove <strong>{pendingDeleteToken.tokenName}</strong> and its key association from this account? This does not delete the encryption key.
+                        </p>
+                        <div className="d-flex gap-3 justify-content-end">
+                            <button className="btn-modal-dismiss" onClick={() => setPendingDeleteToken(null)}>Cancel</button>
+                            <button className="btn-modal-destructive" onClick={() => removeToken(pendingDeleteToken)}>Remove</button>
                         </div>
                     </div>
                 </dialog>
