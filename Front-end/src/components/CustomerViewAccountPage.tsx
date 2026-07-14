@@ -32,6 +32,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
     const [newPassword, setNewPassword] = useState("")
     const [resettingPassword, setResettingPassword] = useState(false)
     const [passwordError, setPasswordError] = useState<string | null>(null)
+    const [showResetConfirm, setShowResetConfirm] = useState(false)
 
     const [showSuspendConfirm, setShowSuspendConfirm] = useState(false)
     const [suspending, setSuspending] = useState(false)
@@ -163,6 +164,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
             }
 
             setNewPassword("")
+            setShowResetConfirm(false)
             toast.success("Password reset successfully")
         } catch {
             setPasswordError("Server connection failed.")
@@ -323,7 +325,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                     <div className="col-12 col-md-4">
                         <button
                             className="btn btn-primary w-100"
-                            onClick={handleResetPassword}
+                            onClick={() => setShowResetConfirm(true)}
                             disabled={resettingPassword || newPassword.length < 8}
                         >
                             {resettingPassword ? "Resetting..." : "Reset Password"}
@@ -472,6 +474,29 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                 </div>
             )}
         </div>
+
+        {/* Password reset is security-sensitive and requires explicit confirmation. */}
+        {showResetConfirm && (
+            <div
+                className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }}
+                onClick={() => !resettingPassword && setShowResetConfirm(false)}
+            >
+                <div className="card p-4" style={{ width: 420 }} onClick={event => event.stopPropagation()}>
+                    <h6 className="mb-2">Reset Password?</h6>
+                    <p className="text-muted mb-4" style={{ fontSize: 14 }}>
+                        Confirm changing the password for <strong>{user.username}</strong>. Use the new password the next time you sign in.
+                    </p>
+                    {passwordError && <div className="alert alert-danger py-2" style={{ fontSize: 13 }}>{passwordError}</div>}
+                    <div className="d-flex justify-content-end gap-2">
+                        <button className="btn btn-outline-secondary" onClick={() => setShowResetConfirm(false)} disabled={resettingPassword}>Cancel</button>
+                        <button className="btn btn-danger" onClick={handleResetPassword} disabled={resettingPassword}>
+                            {resettingPassword ? "Resetting..." : "Yes, Reset Password"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* Cancel Subscription confirmation prompt */}
         {showCancelSubConfirm && subscription && (

@@ -9,18 +9,14 @@ function AdminManageSubscription() {
     const [availablePlans, setAvailablePlans] = useState<Plan[]>([])
     const [view, setView] = useState<"list" | "detail">("list")
     const [selectedSubscription, setSelectedSubscription] = useState<SubscriptionDTO | null>(null)
-    const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
 
     const fetchSubscriptions = async () => {
         try {
             setLoading(true)
 
-            const params = new URLSearchParams()
-            if (search) params.append("search", search)
-
             const response = await apiFetch(
-                `http://localhost:8080/subscriptions?${params.toString()}`,
+                "http://localhost:8080/subscriptions",
                 { credentials: "include" }
             )
 
@@ -59,9 +55,8 @@ function AdminManageSubscription() {
     }
 
     useEffect(() => {
-        const timer = setTimeout(fetchSubscriptions, 400)
-        return () => clearTimeout(timer)
-    }, [search])
+        fetchSubscriptions()
+    }, [])
 
     useEffect(() => {
         fetchAvailablePlans()
@@ -150,13 +145,6 @@ function AdminManageSubscription() {
 
     return (
         <>
-            <input
-                className="form-control mb-3"
-                placeholder="Search by username, email or plan..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-            />
-
             <ul className="list-group" style={{ maxHeight: 620, overflowY: "auto" }}>
                 {loading ? (
                     <li className="list-group-item text-center text-muted">Loading...</li>

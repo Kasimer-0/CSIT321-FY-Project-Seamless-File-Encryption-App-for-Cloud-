@@ -248,7 +248,7 @@ class OwnershipSecurityTest {
     }
 
     @Test
-    void customerCanRenameActivateDeactivateAndDeleteOwnEncryptionKey() throws Exception {
+    void customerCanRenameAndRetireOwnEncryptionKeyButCannotDeactivateIt() throws Exception {
         EncryptionKeyRecord key = encryptionKeyService.createKey(customerA.getUserID(), "Original key", "AES-128", "Master@12345");
 
         mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
@@ -260,17 +260,10 @@ class OwnershipSecurityTest {
 
         mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"inactive\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("inactive"));
-
-        mockMvc.perform(patch("/encryption-keys/{id}", key.getKeyID())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"active\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("active"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"inactive\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Encryption keys can only be active or retired."));
 
         mockMvc.perform(delete("/encryption-keys/{id}", key.getKeyID())
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))

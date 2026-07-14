@@ -50,6 +50,9 @@ class StaticFrontendSmokeTest {
         assertTrue(script.contains("Rotate Account Recovery Phrase"));
         assertTrue(script.contains("Save Name"));
         assertTrue(script.contains("This key will be retired"));
+        assertTrue(script.contains("Activate Cloud Account?"));
+        assertTrue(script.contains("Deactivate Cloud Account?"));
+        assertTrue(script.contains("Yes, Reset Password"));
         assertTrue(script.contains("Physical Token Registration Prototype"));
         assertTrue(script.contains("Remove Physical Token Registration"));
     }

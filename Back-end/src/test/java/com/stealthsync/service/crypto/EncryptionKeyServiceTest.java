@@ -114,7 +114,7 @@ class EncryptionKeyServiceTest {
     }
 
     @Test
-    void ownerScopedCrudSupportsListRenameStatusAndDelete() {
+    void ownerScopedCrudSupportsListRenameAndRetirementOnly() {
         EncryptionKeyRecord ownerKey = encryptionKeyService.createKey(ownerID, "Original name", "AES-256-GCM", PASSWORD);
         encryptionKeyService.createKey(importOwnerID, "Other owner key", "AES-256-GCM", PASSWORD);
 
@@ -124,8 +124,9 @@ class EncryptionKeyServiceTest {
         EncryptionKeyRecord renamed = encryptionKeyService.renameKey(ownerID, ownerKey.getKeyID(), "Renamed key").orElseThrow();
         assertEquals("Renamed key", renamed.getKeyName());
 
-        EncryptionKeyRecord inactive = encryptionKeyService.updateStatus(ownerID, ownerKey.getKeyID(), "inactive").orElseThrow();
-        assertEquals("inactive", inactive.getStatus());
+        IllegalArgumentException inactiveError = assertThrows(IllegalArgumentException.class,
+                () -> encryptionKeyService.updateStatus(ownerID, ownerKey.getKeyID(), "inactive"));
+        assertEquals("Encryption keys can only be active or retired.", inactiveError.getMessage());
         EncryptionKeyRecord active = encryptionKeyService.updateStatus(ownerID, ownerKey.getKeyID(), "active").orElseThrow();
         assertEquals("active", active.getStatus());
 

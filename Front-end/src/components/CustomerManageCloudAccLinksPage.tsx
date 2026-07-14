@@ -32,6 +32,9 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const [loading, setLoading] = useState(true)
     const [showAddModal, setShowAddModal] = useState(false)
     const [showRemoveConfirm, setShowRemoveConfirm] = useState<CloudStorageLink | null>(null)
+    const [showActivateConfirm, setShowActivateConfirm] = useState<CloudStorageLink | null>(null)
+    const [showDeactivateConfirm, setShowDeactivateConfirm] = useState<CloudStorageLink | null>(null)
+    const [changingActiveLinkID, setChangingActiveLinkID] = useState<number | null>(null)
     const [selectedProvider, setSelectedProvider] = useState("")
     const [usage, setUsage] = useState<CloudStorageUsage | null>(null)
     const [providerLimit, setProviderLimit] = useState(user.isSubscribed ? 5 : 1)
@@ -126,6 +129,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const handleSetActive = async (linkID: number) => {
         const selectedLink = links.find(link => link.linkID === linkID)
         try {
+            setChangingActiveLinkID(linkID)
             const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}/activate`,
                 {
@@ -147,6 +151,9 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
         } catch (err) {
             toast.error("Server connection failed")
+        } finally {
+            setChangingActiveLinkID(null)
+            setShowActivateConfirm(null)
         }
     }
 
@@ -180,6 +187,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
     const handleDeactivate = async (linkID: number) => {
         try {
+            setChangingActiveLinkID(linkID)
             const response = await apiFetch(
                 `http://localhost:8080/cloud-storage/links/${linkID}/deactivate`,
                 {
@@ -199,6 +207,9 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
         } catch (err) {
             toast.error("Server connection failed")
+        } finally {
+            setChangingActiveLinkID(null)
+            setShowDeactivateConfirm(null)
         }
     }
 
@@ -425,7 +436,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                 {!link.isActive && link.status === "connected" && (
                                     <button
                                         className="btn btn-outline-primary btn-sm"
-                                        onClick={() => handleSetActive(link.linkID)}
+                                        onClick={() => setShowActivateConfirm(link)}
                                     >
                                         Activate
                                     </button>
@@ -433,7 +444,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                 {link.isActive && link.status === "connected" && (
                                     <button
                                         className="btn btn-outline-secondary btn-sm"
-                                        onClick={() => handleDeactivate(link.linkID)}
+                                        onClick={() => setShowDeactivateConfirm(link)}
                                     >
                                         Deactivate
                                     </button>
@@ -577,6 +588,51 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                 disabled={!selectedProvider || providerLimitReached || providerConfigured[selectedProvider] !== true}
                             >
                                 Connect
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Activating one provider automatically deactivates the currently active provider. */}
+            {showActivateConfirm && (
+                <div
+                    className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+                    style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }}
+                    onClick={() => changingActiveLinkID === null && setShowActivateConfirm(null)}
+                >
+                    <div className="card p-4" style={{ width: 420 }} onClick={event => event.stopPropagation()}>
+                        <h6>Activate Cloud Account?</h6>
+                        <p className="text-muted mb-4">
+                            Activate <strong>{providerLabel(showActivateConfirm.provider)}</strong> ({showActivateConfirm.accountEmail})?
+                            Any other active cloud account will be deactivated automatically.
+                        </p>
+                        <div className="d-flex justify-content-end gap-2">
+                            <button className="btn btn-outline-secondary" onClick={() => setShowActivateConfirm(null)} disabled={changingActiveLinkID !== null}>Cancel</button>
+                            <button className="btn btn-primary" onClick={() => handleSetActive(showActivateConfirm.linkID)} disabled={changingActiveLinkID !== null}>
+                                {changingActiveLinkID !== null ? "Activating..." : "Yes, Activate"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showDeactivateConfirm && (
+                <div
+                    className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+                    style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }}
+                    onClick={() => changingActiveLinkID === null && setShowDeactivateConfirm(null)}
+                >
+                    <div className="card p-4" style={{ width: 420 }} onClick={event => event.stopPropagation()}>
+                        <h6>Deactivate Cloud Account?</h6>
+                        <p className="text-muted mb-4">
+                            Deactivate <strong>{providerLabel(showDeactivateConfirm.provider)}</strong> ({showDeactivateConfirm.accountEmail})?
+                            Upload and download actions will remain unavailable until a provider is activated.
+                        </p>
+                        <div className="d-flex justify-content-end gap-2">
+                            <button className="btn btn-outline-secondary" onClick={() => setShowDeactivateConfirm(null)} disabled={changingActiveLinkID !== null}>Cancel</button>
+                            <button className="btn btn-danger" onClick={() => handleDeactivate(showDeactivateConfirm.linkID)} disabled={changingActiveLinkID !== null}>
+                                {changingActiveLinkID !== null ? "Deactivating..." : "Yes, Deactivate"}
                             </button>
                         </div>
                     </div>

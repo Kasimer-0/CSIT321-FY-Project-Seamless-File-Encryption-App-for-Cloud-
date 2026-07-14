@@ -31,8 +31,8 @@ Implemented and covered by code paths or automated tests:
 - authenticated, owner-scoped account, encryption-key, file, and cloud APIs;
 - server-enforced AES tier: free uses AES-128, active Premium may use
   AES-256-GCM;
-- password-protected encryption keys with safe retirement instead of destructive
-  deletion;
+- password-protected encryption keys with an Active/Retired lifecycle and safe
+  retirement instead of destructive deletion;
 - real OAuth and encrypted upload/list/download/decrypt/delete paths for Google
   Drive, Dropbox, and OneDrive;
 - trusted-device metadata package export/import with stable key-fingerprint

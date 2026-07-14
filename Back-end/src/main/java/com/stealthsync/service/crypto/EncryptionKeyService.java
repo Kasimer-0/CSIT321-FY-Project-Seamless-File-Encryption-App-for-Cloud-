@@ -54,8 +54,10 @@ public class EncryptionKeyService {
     @Transactional
     public Optional<EncryptionKeyRecord> updateStatus(Long ownerID, Long keyID, String status) {
         String normalizedStatus = status == null ? "" : status.trim().toLowerCase(java.util.Locale.ROOT);
-        if (!"active".equals(normalizedStatus) && !"inactive".equals(normalizedStatus)) {
-            throw new IllegalArgumentException("Encryption key status must be active or inactive.");
+        // The current user story has only Active and Retired states. PATCH may
+        // reactivate legacy inactive rows, while retirement remains DELETE-only.
+        if (!"active".equals(normalizedStatus)) {
+            throw new IllegalArgumentException("Encryption keys can only be active or retired.");
         }
         return findKey(ownerID, keyID).map(key -> {
             if ("retired".equalsIgnoreCase(key.getStatus())) {

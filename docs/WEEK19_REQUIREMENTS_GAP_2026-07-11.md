@@ -7,7 +7,7 @@ This record compares the current StealthSync implementation with the Week 19 Tec
 - Account authentication and account management with JWT-protected APIs.
 - Admin account, plan, subscription, report, and log features.
 - Backend-enforced AES tiers: free users use AES-128 and active premium users use AES-256-GCM.
-- Owner-scoped encryption key CRUD: create, list, rename, activate, deactivate, and delete.
+- Owner-scoped encryption key lifecycle: create, list, rename, and safe retirement. New keys are active; the removed deactivate action is retained only as a legacy-data compatibility concern.
 - Google Drive, Dropbox, and OneDrive OAuth and file-operation code paths.
 - Encrypted cloud upload, encrypted listing metadata, download/decrypt, and delete.
 - Cloud storage usage reporting.

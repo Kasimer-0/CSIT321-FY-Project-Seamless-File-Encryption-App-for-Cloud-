@@ -23,6 +23,9 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
     const [trustedExportingKeyID, setTrustedExportingKeyID] = useState<number | null>(null)
     const [editingKeyID, setEditingKeyID] = useState<number | null>(null)
     const [renameValue, setRenameValue] = useState("")
+    const [showRetireConfirm, setShowRetireConfirm] = useState(false)
+    const [pendingRetireKey, setPendingRetireKey] = useState<EncryptionKeyRecord | null>(null)
+    const [retiringKeyID, setRetiringKeyID] = useState<number | null>(null)
     const embeddedSubscription = typeof user.subscription === "number" ? null : user.subscription
     const [currentSubscription, setCurrentSubscription] = useState<SubscriptionDTO | null>(embeddedSubscription)
     const canUseAes256 = Boolean(
@@ -141,11 +144,16 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
         setRenameValue("")
     }
 
-    const retireKey = async (key: EncryptionKeyRecord) => {
-        if (!window.confirm("This key will be retired. It cannot encrypt new files, but remains available to decrypt existing files.")) {
-            return
-        }
+    const requestRetireKey = (key: EncryptionKeyRecord) => {
+        setPendingRetireKey(key)
+        setShowRetireConfirm(true)
+    }
+
+    const retireKey = async () => {
+        if (!pendingRetireKey) return
+        const key = pendingRetireKey
         try {
+            setRetiringKeyID(key.keyID)
             const response = await apiFetch(`http://localhost:8080/encryption-keys/${key.keyID}`, {
                 method: "DELETE",
                 credentials: "include"
@@ -158,6 +166,10 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
             toast.success("Encryption key retired")
         } catch {
             toast.error("Server connection failed")
+        } finally {
+            setRetiringKeyID(null)
+            setShowRetireConfirm(false)
+            setPendingRetireKey(null)
         }
     }
 
@@ -334,9 +346,9 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                                 </span>
                             </div>
                             <div className="d-flex gap-2 mt-3">
-                                {key.status !== "retired" && (
-                                    <button className="btn btn-outline-primary btn-sm" onClick={() => updateKey(key, { status: key.status === "active" ? "inactive" : "active" })}>
-                                        {key.status === "active" ? "Deactivate" : "Activate"}
+                                {key.status === "inactive" && (
+                                    <button className="btn btn-outline-primary btn-sm" onClick={() => updateKey(key, { status: "active" })}>
+                                        Activate legacy key
                                     </button>
                                 )}
                                 {editingKeyID === key.keyID ? (
@@ -351,7 +363,7 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                                     {trustedExportingKeyID === key.keyID ? "Exporting..." : "Export Trusted Package"}
                                 </button>
                                 {key.status !== "retired" && (
-                                    <button className="btn btn-outline-danger btn-sm" onClick={() => retireKey(key)}>
+                                    <button className="btn btn-outline-danger btn-sm" onClick={() => requestRetireKey(key)}>
                                         Retire
                                     </button>
                                 )}
@@ -359,6 +371,39 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                         </li>
                     ))}
                 </ul>
+            )}
+
+            {showRetireConfirm && pendingRetireKey && (
+                <div
+                    className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                    style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }}
+                    onClick={() => retiringKeyID === null && setShowRetireConfirm(false)}
+                >
+                    <div className="card p-4" style={{ width: 420 }} onClick={event => event.stopPropagation()}>
+                        <h6 className="mb-2">Retire Encryption Key?</h6>
+                        <p className="text-muted mb-2" style={{ fontSize: 14 }}>
+                            Retire <strong>{pendingRetireKey.keyName}</strong>?
+                        </p>
+                        <p className="text-muted mb-4" style={{ fontSize: 14 }}>
+                            This key will be retired. It cannot encrypt new files, but remains available to decrypt existing files.
+                        </p>
+                        <div className="d-flex justify-content-end gap-2">
+                            <button
+                                className="btn btn-outline-secondary"
+                                onClick={() => {
+                                    setShowRetireConfirm(false)
+                                    setPendingRetireKey(null)
+                                }}
+                                disabled={retiringKeyID !== null}
+                            >
+                                Cancel
+                            </button>
+                            <button className="btn btn-danger" onClick={retireKey} disabled={retiringKeyID !== null}>
+                                {retiringKeyID !== null ? "Retiring..." : "Yes, Retire"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     )

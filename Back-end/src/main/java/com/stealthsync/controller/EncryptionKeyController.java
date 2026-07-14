@@ -59,16 +59,21 @@ public class EncryptionKeyController {
             @PathVariable Long id,
             @RequestBody Map<String, Object> request) {
         Long ownerID = currentUserService.requireUserID();
+        Optional<EncryptionKeyRecord> updated = encryptionKeyService.findKey(ownerID, id);
+        if (updated.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
         if (request.containsKey("algorithm")) {
             throw new IllegalArgumentException("Encryption key algorithm cannot be changed after creation.");
         }
 
-        Optional<EncryptionKeyRecord> updated = encryptionKeyService.findKey(ownerID, id);
-        if (request.containsKey("keyName")) {
-            updated = encryptionKeyService.renameKey(ownerID, id, asString(request.get("keyName"), null));
-        }
+        // Validate the lifecycle request before applying a rename, so one PATCH
+        // cannot partially rename a key and then fail on an unsupported status.
         if (request.containsKey("status")) {
             updated = encryptionKeyService.updateStatus(ownerID, id, asString(request.get("status"), null));
+        }
+        if (request.containsKey("keyName")) {
+            updated = encryptionKeyService.renameKey(ownerID, id, asString(request.get("keyName"), null));
         }
         return updated.map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
