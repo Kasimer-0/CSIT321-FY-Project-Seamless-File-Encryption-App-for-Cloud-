@@ -69,13 +69,14 @@
             animation: pulse-lock 5s ease-in-out infinite;
         }
 
-        @keyframes data-stream {
-            0% { opacity: 0; transform: translateX(-10px); }
-            50% { opacity: 0.8; }
-            100% { opacity: 0; transform: translateX(10px); }
+        @keyframes key-transfer {
+            0% { transform: translateX(-24px); opacity: 0; }
+            30% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { transform: translateX(24px); opacity: 0; }
         }
-        .animate-stream {
-            animation: data-stream 2s linear infinite;
+        .animate-key-transfer {
+            animation: key-transfer 3s ease-in-out infinite;
         }
     </style>
 </head>
@@ -99,7 +100,7 @@
             <nav class="hidden md:flex items-center gap-8 text-sm font-medium tracking-wide text-neutral-400">
                 <a href="#features" class="hover:text-white transition-colors">Explore</a>
                 <a href="#architecture" class="hover:text-white transition-colors">AI Security Layer</a>
-                <a href="#token-security" class="hover:text-white transition-colors">Hardware Auth</a>
+                <a href="#key-portability" class="hover:text-white transition-colors">Key Portability</a>
                 <a href="#pricing" class="hover:text-white transition-colors">Pricing</a>
             </nav>
         </div>
@@ -124,15 +125,15 @@
                 Encrypt files locally before transmitting them to third-party cloud storage environments. Automate your data privacy while maintaining complete control over your sensitive data and encryption keys.
             </p>
             
-            <p class="text-xs text-neutral-500 mono mt-6">Utilizes APIs from official cloud storage providers such as Google Drive and Dropbox.</p>
+            <p class="text-xs text-neutral-500 mono mt-6">Utilizes APIs from official cloud storage providers.</p>
         </div>
     </section>
 
     <section class="bg-[#070707] border-b border-premium py-12 px-6">
         <div class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-8 text-center sm:text-left">
             <div class="border-l sm:border-l-0 sm:border-r border-premium pl-4 sm:pl-0 sm:pr-4">
-                <div class="text-xs uppercase tracking-widest text-neutral-500 font-medium mono mb-1">Encryption Framework</div>
-                <div class="text-2xl font-light text-white tracking-tight mono">AES-256 GCM</div>
+                <div class="text-xs uppercase tracking-widest text-neutral-500 font-medium mono mb-1">Encryption Standard</div>
+                <div class="text-2xl font-light text-white tracking-tight mono">AES-128 / AES-256</div>
             </div>
             <div class="border-l sm:border-r border-premium pl-4 sm:pl-6 sm:pr-4">
                 <div class="text-xs uppercase tracking-widest text-neutral-500 font-medium mono mb-1">Architecture</div>
@@ -215,7 +216,7 @@
                 <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// AI Security Layer Module</div>
                 <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Local AI Privacy Scanner</h2>
                 <p class="text-neutral-400 font-light text-sm leading-relaxed mb-6">
-                    In compliance with PDPA/GDPR mandates, all document processing checks happen strictly within the local client application before data transits across the network.
+                    In compliance with privacy standards, all document processing checks happen strictly within the local client application before data transits across the network.
                 </p>
                 
                 <ul class="space-y-4 text-sm font-light text-neutral-300">
@@ -229,7 +230,7 @@
                     </li>
                     <li class="flex items-start gap-3">
                         <i data-lucide="fingerprint" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Authenticated Integrity Checks:</strong> Implements AES-256 GCM authentication tags to isolate and block unauthorized payload tampering.</span>
+                        <span><strong>Authenticated Integrity Checks:</strong> Implements authenticated encryption tags to isolate and block unauthorized payload tampering.</span>
                     </li>
                 </ul>
             </div>
@@ -256,7 +257,7 @@
                         </div>
                         <div class="w-12 h-12 rounded-lg border border-premium bg-neutral-950 flex flex-col items-center justify-center animate-pulse [animation-delay:0.5s]">
                             <i data-lucide="lock" class="w-4 h-4 text-neutral-500 mb-0.5"></i>
-                            <span class="text-[8px] mono text-neutral-600">GCM</span>
+                            <span class="text-[8px] mono text-neutral-600">AES</span>
                         </div>
                     </div>
 
@@ -269,30 +270,32 @@
         </div>
     </section>
 
-    <section id="token-security" class="py-24 bg-[#050505] border-b border-premium px-6">
+    <section id="key-portability" class="py-24 bg-[#050505] border-b border-premium px-6">
         <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
             <div class="w-full max-w-md mx-auto aspect-square rounded-2xl border border-premium bg-[#0A0A0A] p-8 flex flex-col justify-between relative overflow-hidden group order-2 md:order-1">
                 <div class="absolute inset-0 bg-radial from-neutral-900 via-transparent to-transparent pointer-events-none"></div>
                 
                 <div class="flex justify-between items-center text-[10px] uppercase font-medium tracking-widest mono text-neutral-500">
-                    <span class="flex items-center gap-1.5"><i data-lucide="usb" class="w-3.5 h-3.5 text-[#C8F200]"></i> Hardware Layer</span>
+                    <span class="flex items-center gap-1.5"><i data-lucide="file-key" class="w-3.5 h-3.5 text-[#C8F200]"></i> Key Management</span>
                 </div>
 
                 <div class="my-auto flex flex-col items-center justify-center relative w-full h-40">
-                    <div class="w-16 h-32 bg-neutral-900 border-2 border-neutral-800 rounded-xl relative flex flex-col items-center justify-start p-2 group-hover:border-[#C8F200]/50 transition-colors duration-500 shadow-2xl">
-                        <div class="w-8 h-6 bg-neutral-800 border border-neutral-700 absolute -top-6 rounded-t-md flex justify-around items-center px-1">
-                            <div class="w-1.5 h-2 bg-black rounded-xs"></div>
-                            <div class="w-1.5 h-2 bg-black rounded-xs"></div>
+                    <div class="flex items-center gap-8 z-10">
+                        <div class="w-16 h-20 bg-neutral-900 border border-neutral-800 rounded-xl flex flex-col items-center justify-center gap-2 group-hover:border-[#C8F200]/50 transition-colors shadow-xl">
+                            <i data-lucide="laptop" class="w-6 h-6 text-neutral-400"></i>
+                            <span class="text-[9px] mono text-neutral-500">Device A</span>
                         </div>
-                        <div class="w-2 h-2 rounded-full bg-[#C8F200] animate-pulse shadow-[0_0_10px_#C8F200] mt-2"></div>
-                        <div class="w-4 h-4 rounded-full border border-neutral-700 bg-neutral-950 absolute bottom-3"></div>
-                        <div class="my-auto text-neutral-600 group-hover:text-[#C8F200]/70 transition-colors duration-500">
-                            <i data-lucide="cpu" class="w-6 h-6 animate-spin [animation-duration:20s]"></i>
+
+                        <div class="flex flex-col items-center gap-1">
+                            <i data-lucide="arrow-right-left" class="w-5 h-5 text-[#C8F200] animate-key-transfer"></i>
+                            <span class="text-[8px] mono text-neutral-500 uppercase">Package</span>
+                        </div>
+
+                        <div class="w-16 h-20 bg-neutral-900 border border-neutral-800 rounded-xl flex flex-col items-center justify-center gap-2 group-hover:border-[#C8F200]/50 transition-colors shadow-xl">
+                            <i data-lucide="smartphone" class="w-6 h-6 text-neutral-400"></i>
+                            <span class="text-[9px] mono text-neutral-500">Device B</span>
                         </div>
                     </div>
-                    
-                    <div class="absolute w-36 h-36 border border-dashed border-neutral-800 rounded-full animate-spin [animation-duration:30s] pointer-events-none"></div>
-                    <div class="absolute w-48 h-48 border border-neutral-900 rounded-full pointer-events-none"></div>
                 </div>
 
                 <div class="border-t border-premium pt-4 flex justify-between items-end text-neutral-400 mono">
@@ -302,24 +305,24 @@
             </div>
 
             <div class="order-1 md:order-2">
-                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Hardware Token Cryptography</div>
-                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Physical Token Authentication</h2>
+                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Mobility & Recovery</div>
+                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Cross-Device Key Mobility</h2>
                 <p class="text-neutral-400 font-light text-sm leading-relaxed mb-6">
-                    Enforce localized verification architectures through individual physical tokens to protect your cryptographic environment.
+                    Maintain seamless control over your cryptographic environment with comprehensive key lifecycle operations and portable configuration packages.
                 </p>
                 
                 <ul class="space-y-4 text-sm font-light text-neutral-300">
                     <li class="flex items-start gap-3">
+                        <i data-lucide="arrow-right-left" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
+                        <span><strong>Import & Export Key Packages:</strong> Safely package and transfer encryption keys to decrypt or encrypt files across multiple devices.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
                         <i data-lucide="key-round" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Hardware-Locked Cryptographic Key:</strong> Binds user registration workflows securely to a physical hardware token master key.</span>
+                        <span><strong>Complete Lifecycle Control:</strong> Create, view, update metadata for, and retire keys easily as your operational requirements evolve.</span>
                     </li>
                     <li class="flex items-start gap-3">
-                        <i data-lucide="shield-alert" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Malware Proofing:</strong> Blocks automated local processes from executing key actions or changing config states without a hardware challenge response.</span>
-                    </li>
-                    <li class="flex items-start gap-3">
-                        <i data-lucide="refresh-cw" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Secure State Transitions:</strong> Enforces mandatory token challenges for sensitive environment changes, including initializing critical account updates.</span>
+                        <i data-lucide="life-buoy" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
+                        <span><strong>Recovery Phrase Backup:</strong> Protect your vault against forgotten master credentials with zero-knowledge recovery seed generation.</span>
                     </li>
                 </ul>
             </div>
@@ -349,8 +352,9 @@
                     <hr class="border-premium my-6">
                     <ul class="space-y-3 text-sm font-light text-neutral-400">
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Link to 1 cloud storage provider</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Supports Google Drive, OneDrive, or Dropbox</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Files encrypted with AES-128</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Standard encryption key gen via user password</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Core Encryption Keys Management</li>
                     </ul>
                 </div>
             </div>
@@ -366,15 +370,16 @@
                         <span class="text-xs px-2 py-1 bg-[#C8F200]/10 rounded mono text-[#C8F200]">Premium</span>
                     </div>
                     <div class="my-6 flex items-baseline gap-1 text-white">
-                        <span class="text-4xl font-light tracking-tight mono">$7</span>
+                        <span class="text-4xl font-light tracking-tight mono">S$7</span>
                         <span class="text-neutral-400 text-sm font-light">/ monthly</span>
                     </div>
                     <hr class="border-premium my-6">
                     <ul class="space-y-3 text-sm font-light text-neutral-300">
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Link up to 5 cloud storage providers</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Files encrypted with AES-256</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Recovery phrase provided for forgotten passwords</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Add a physical hardware token as multi-factor auth</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Link up to 3 cloud storage providers</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Google Drive, OneDrive, and Dropbox supported</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Choice of AES-128 or AES-256 encryption</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Recovery Phrase provided for password recovery</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Import & Export Encryption Key Packages across devices</li>
                     </ul>
                 </div>
             </div>
