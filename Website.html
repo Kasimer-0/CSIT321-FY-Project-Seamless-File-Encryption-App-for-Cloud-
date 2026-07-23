@@ -99,8 +99,8 @@
             
             <nav class="hidden md:flex items-center gap-8 text-sm font-medium tracking-wide text-neutral-400">
                 <a href="#features" class="hover:text-white transition-colors">Explore</a>
-                <a href="#architecture" class="hover:text-white transition-colors">AI Security Layer</a>
-                <a href="#key-portability" class="hover:text-white transition-colors">Key Portability</a>
+                <a href="#architecture" class="hover:text-white transition-colors">Privacy Protection</a>
+                <a href="#key-portability" class="hover:text-white transition-colors">Multi-Device</a>
                 <a href="#pricing" class="hover:text-white transition-colors">Pricing</a>
             </nav>
         </div>
@@ -118,11 +118,11 @@
             
             <h1 class="text-4xl sm:text-6xl font-light tracking-tight text-white mb-6 leading-[1.15]">
                 Privacy by Default. <br>
-                <span class="font-normal text-transparent bg-clip-text bg-gradient-to-r from-white via-neutral-200 to-neutral-400">Automatic Cloud Protection.</span>
+                <span class="font-normal text-transparent bg-clip-text bg-gradient-to-r from-white via-neutral-200 to-neutral-400">Encrypted Cloud Protection.</span>
             </h1>
             
             <p class="text-neutral-400 text-base sm:text-lg max-w-2xl mx-auto mb-4 font-light leading-relaxed">
-                Encrypt files locally before transmitting them to third-party cloud storage environments. Automate your data privacy while maintaining complete control over your sensitive data and encryption keys.
+                Encrypt files locally before transmitting them to third-party cloud storage environments. Protect your data while keeping key passwords and plaintext files inside your browser.
             </p>
             
             <p class="text-xs text-neutral-500 mono mt-6">Utilizes APIs from official cloud storage providers.</p>
@@ -137,7 +137,7 @@
             </div>
             <div class="border-l sm:border-r border-premium pl-4 sm:pl-6 sm:pr-4">
                 <div class="text-xs uppercase tracking-widest text-neutral-500 font-medium mono mb-1">Architecture</div>
-                <div class="text-2xl font-light text-white tracking-tight mono">Zero-Knowledge</div>
+                <div class="text-2xl font-light text-white tracking-tight mono">Client-Side Crypto</div>
             </div>
             <div class="border-l pl-4 sm:pl-6">
                 <div class="text-xs uppercase tracking-widest text-neutral-500 font-medium mono mb-1">Integration Layer</div>
@@ -202,7 +202,7 @@
                     <div>
                         <h3 class="text-xl font-medium text-white mb-3 tracking-tight">Two-Click Drag & Drop</h3>
                         <p class="text-neutral-400 text-sm font-light leading-relaxed">
-                            Maintains simple user workflows. Dragging files to the application queues background automated local encryption or verification during downloads.
+                            Select a file and encryption key, then let the browser encrypt it locally before only ciphertext is uploaded to the selected cloud provider.
                         </p>
                     </div>
                 </div>
@@ -213,8 +213,8 @@
     <section id="architecture" class="py-24 bg-[#070707] border-b border-premium px-6">
         <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
             <div>
-                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// AI Security Layer Module</div>
-                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Local AI Privacy Scanner</h2>
+                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Local Privacy Protection</div>
+                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Rule-Based Privacy Warning</h2>
                 <p class="text-neutral-400 font-light text-sm leading-relaxed mb-6">
                     In compliance with privacy standards, all document processing checks happen strictly within the local client application before data transits across the network.
                 </p>
@@ -288,7 +288,7 @@
 
                         <div class="flex flex-col items-center gap-1">
                             <i data-lucide="arrow-right-left" class="w-5 h-5 text-[#C8F200] animate-key-transfer"></i>
-                            <span class="text-[8px] mono text-neutral-500 uppercase">Package</span>
+                            <span class="text-[8px] mono text-neutral-500 uppercase">Metadata</span>
                         </div>
 
                         <div class="w-16 h-20 bg-neutral-900 border border-neutral-800 rounded-xl flex flex-col items-center justify-center gap-2 group-hover:border-[#C8F200]/50 transition-colors shadow-xl">
@@ -305,16 +305,16 @@
             </div>
 
             <div class="order-1 md:order-2">
-                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Mobility & Recovery</div>
-                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Cross-Device Key Mobility</h2>
+                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Premium Multi-Device</div>
+                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Password-Derived Keys Across Devices</h2>
                 <p class="text-neutral-400 font-light text-sm leading-relaxed mb-6">
-                    Maintain seamless control over your cryptographic environment with comprehensive key lifecycle operations and portable configuration packages.
+                    Sign in on another approved device to retrieve the same non-secret key metadata. The same Key Password derives the same encryption key locally in each browser.
                 </p>
                 
                 <ul class="space-y-4 text-sm font-light text-neutral-300">
                     <li class="flex items-start gap-3">
                         <i data-lucide="arrow-right-left" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Import & Export Key Packages:</strong> Safely package and transfer encryption keys to decrypt or encrypt files across multiple devices.</span>
+                        <span><strong>No Key Package Required:</strong> Shared salt, algorithm and fingerprint metadata allow approved devices to derive keys without exporting raw key material.</span>
                     </li>
                     <li class="flex items-start gap-3">
                         <i data-lucide="key-round" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
@@ -322,7 +322,7 @@
                     </li>
                     <li class="flex items-start gap-3">
                         <i data-lucide="life-buoy" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Recovery Phrase Backup:</strong> Protect your vault against forgotten master credentials with zero-knowledge recovery seed generation.</span>
+                        <span><strong>Account Recovery:</strong> Premium recovery phrases support account login recovery; they do not expose or reconstruct file encryption keys.</span>
                     </li>
                 </ul>
             </div>
@@ -354,6 +354,7 @@
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Link to 1 cloud storage provider</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Supports Google Drive, OneDrive, or Dropbox</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Files encrypted with AES-128</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> 1 active browser device</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Core Encryption Keys Management</li>
                     </ul>
                 </div>
@@ -378,8 +379,9 @@
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Link up to 3 cloud storage providers</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Google Drive, OneDrive, and Dropbox supported</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Choice of AES-128 or AES-256 encryption</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Recovery Phrase provided for password recovery</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Import & Export Encryption Key Packages across devices</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Account login recovery phrase</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Up to 5 active browser devices</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Cross-device key derivation without key packages</li>
                     </ul>
                 </div>
             </div>
