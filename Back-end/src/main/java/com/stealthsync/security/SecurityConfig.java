@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletResponse;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final DeviceAccessFilter deviceAccessFilter;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -52,11 +53,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/subscriptions/purchase").hasRole("CUSTOMER")
                         .requestMatchers(
                                 "/account/**", "/cloud-storage/**", "/encryption-keys/**",
-                                "/physical-tokens/**", "/vault/**", "/privacy/**", "/files/**", "/api/file/**"
+                                "/devices/**", "/vault/**", "/files/**", "/api/file/**"
                         ).hasRole("CUSTOMER")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(deviceAccessFilter, JwtAuthenticationFilter.class)
                 .build();
     }
 }

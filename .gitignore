@@ -19,6 +19,7 @@ Front-end/tmp/
 ~$*.docx
 .codex/
 .stealthsync-run/
+.env.production
 
 # IDE and OS metadata
 .vscode/

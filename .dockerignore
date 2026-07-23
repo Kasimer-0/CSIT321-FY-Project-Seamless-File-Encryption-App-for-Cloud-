@@ -1,0 +1,11 @@
+.git
+.codex
+.stealthsync-run
+Back-end/target
+Front-end/dist
+Front-end/node_modules
+dist-desktop
+installer
+outputs
+*.log
+.env.production

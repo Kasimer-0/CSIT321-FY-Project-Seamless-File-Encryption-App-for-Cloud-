@@ -41,13 +41,12 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const [providerConfigured, setProviderConfigured] = useState<Record<string, boolean>>({})
     const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
     const [driveLoading, setDriveLoading] = useState(false)
-    const [lastSavedPath, setLastSavedPath] = useState("")
 
     const fetchLinks = async () => {
         try {
             setLoading(true)
 
-            const response = await apiFetch(`http://localhost:8080/cloud-storage/links`, {
+            const response = await apiFetch("/cloud-storage/links", {
                 credentials: "include"
             })
 
@@ -68,7 +67,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
     const fetchUsage = async () => {
         try {
-            const response = await apiFetch("http://localhost:8080/cloud-storage/usage", {
+            const response = await apiFetch("/cloud-storage/usage", {
                 credentials: "include"
             })
             if (response.ok) {
@@ -82,7 +81,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     // The backend owns the 1-provider free / 5-provider premium rule, so the UI reads the effective limit.
     const fetchProviderInfo = async () => {
         try {
-            const response = await apiFetch(`http://localhost:8080/cloud-storage/providers`, {
+            const response = await apiFetch("/cloud-storage/providers", {
                 credentials: "include"
             })
             if (response.ok) {
@@ -105,14 +104,15 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         try {
             setDriveLoading(true)
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/${providerPath(provider)}/files`,
+                `/cloud-storage/${providerPath(provider)}/files`,
                 { credentials: "include" }
             )
             if (!response.ok) {
                 const data = await response.json().catch(() => null)
                 throw new Error(data?.message ?? `Failed to load ${providerLabel(provider)} files`)
             }
-            setDriveFiles(await response.json())
+            const files = await response.json() as GoogleDriveFile[]
+            setDriveFiles(files.filter(file => file.envelopeVersion === 2))
         } catch (err) {
             toast.error(err instanceof Error ? err.message : `Failed to load ${providerLabel(provider)} files`)
         } finally {
@@ -126,12 +126,30 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         fetchProviderInfo()
     }, [user.userID, user.isSubscribed])
 
+    useEffect(() => {
+        const url = new URL(window.location.href)
+        const oauthStatus = url.searchParams.get("oauth")
+        if (!oauthStatus) return
+        const provider = url.searchParams.get("provider") ?? "cloud provider"
+        if (oauthStatus === "connected") {
+            toast.success(`${providerLabel(provider)} connected successfully`)
+        } else if (oauthStatus === "cancelled") {
+            toast.error(`${providerLabel(provider)} authorization was cancelled`)
+        } else {
+            toast.error(`${providerLabel(provider)} authorization failed`)
+        }
+        url.searchParams.delete("oauth")
+        url.searchParams.delete("provider")
+        url.searchParams.delete("account")
+        window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
+    }, [])
+
     const handleSetActive = async (linkID: number) => {
         const selectedLink = links.find(link => link.linkID === linkID)
         try {
             setChangingActiveLinkID(linkID)
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/links/${linkID}/activate`,
+                `/cloud-storage/links/${linkID}/activate`,
                 {
                     method: "POST",
                     credentials: "include"
@@ -161,7 +179,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         const removedLink = links.find(link => link.linkID === linkID)
         try {
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/links/${linkID}`,
+                `/cloud-storage/links/${linkID}`,
                 {
                     method: "DELETE",
                     credentials: "include"
@@ -189,7 +207,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         try {
             setChangingActiveLinkID(linkID)
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/links/${linkID}/deactivate`,
+                `/cloud-storage/links/${linkID}/deactivate`,
                 {
                     method: "POST",
                     credentials: "include"
@@ -213,34 +231,10 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    const fetchProviderStatus = async (provider: string) => {
-        const response = await apiFetch(
-            `http://localhost:8080/cloud-storage/${providerPath(provider)}/status`,
-            { credentials: "include" }
-        )
-        return response.ok ? await response.json() as { connected: boolean } : { connected: false }
-    }
-
-    // Poll the local callback result because OAuth completes in the system browser,
-    // outside the packaged JavaFX desktop window.
-    const waitForProviderConnection = async (provider: string) => {
-        for (let attempt = 0; attempt < 45; attempt += 1) {
-            await new Promise(resolve => window.setTimeout(resolve, 2000))
-            const status = await fetchProviderStatus(provider)
-            if (status.connected) {
-                await fetchLinks()
-                await fetchActiveProviderFiles(provider)
-                toast.success(`${providerLabels[provider]?.label ?? provider} connected successfully`)
-                return
-            }
-        }
-        toast.error(`${providerLabels[provider]?.label ?? provider} authorization was not completed. Try Connect again.`)
-    }
-
-    // Every provider starts OAuth; encrypted file transfer remains provider-neutral after linking.
+    // OAuth continues in the same browser tab and the backend callback redirects to the configured frontend URL.
     const beginProviderConnection = async (provider: string) => {
         const response = await apiFetch(
-            `http://localhost:8080/cloud-storage/${providerPath(provider)}/auth`,
+            `/cloud-storage/${providerPath(provider)}/auth`,
             { credentials: "include" }
         )
         if (!response.ok) {
@@ -249,11 +243,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
 
         const data = await response.json()
-        if (!data.openedExternal && data.authUrl) {
-            window.open(data.authUrl, "_blank", "noopener,noreferrer")
-        }
-        toast.success(data.message ?? `${providerLabels[provider]?.label ?? provider} authorization opened in your browser`)
-        void waitForProviderConnection(provider)
+        if (!data.authUrl) throw new Error("The OAuth authorization URL was not returned.")
+        window.location.assign(data.authUrl)
     }
 
     const handleReconnect = async (linkID: number) => {
@@ -277,32 +268,6 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    // JavaFX WebView cannot persist Blob downloads, so the backend saves the
-    // locally decrypted plaintext and returns its absolute Downloads path.
-    // Provider selection is resolved from the active link to avoid old ownerID/query-param flows.
-    const handleProviderDownload = async (file: GoogleDriveFile) => {
-        const provider = file.provider ?? activeCloudLink?.provider
-        if (!provider) {
-            toast.error("Activate a cloud provider before downloading files")
-            return
-        }
-        try {
-            const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/${providerPath(provider)}/files/${encodeURIComponent(file.fileId)}/decrypt-save`,
-                { method: "POST", credentials: "include" }
-            )
-            if (!response.ok) {
-                const data = await response.json().catch(() => null)
-                throw new Error(data?.message ?? `${providerLabel(provider)} download failed`)
-            }
-            const result = await response.json() as { savedPath: string }
-            setLastSavedPath(result.savedPath)
-            toast.success(`${file.originalName} saved to ${result.savedPath}`)
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Cloud file download failed")
-        }
-    }
-
     const handleProviderDelete = async (file: GoogleDriveFile) => {
         const provider = file.provider ?? activeCloudLink?.provider
         if (!provider) {
@@ -313,12 +278,12 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             // Hide the row only after the provider confirms deletion, so a failed API
             // request never makes a still-existing remote file disappear locally.
             const response = await apiFetch(
-                `http://localhost:8080/cloud-storage/${providerPath(provider)}/files/${encodeURIComponent(file.fileId)}`,
+                `/cloud-storage/${providerPath(provider)}/files/${encodeURIComponent(file.fileId)}`,
                 { method: "DELETE", credentials: "include" }
             )
             if (!response.ok) throw new Error(`${providerLabel(provider)} delete failed`)
             setDriveFiles(current => current.filter(item => item.fileId !== file.fileId))
-            toast.success(`${file.originalName} deleted from ${providerLabel(provider)}`)
+            toast.success(`Encrypted file deleted from ${providerLabel(provider)}`)
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Cloud file delete failed")
         }
@@ -337,7 +302,6 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             void fetchActiveProviderFiles(activeCloudLink.provider)
         } else {
             setDriveFiles([])
-            setLastSavedPath("")
         }
     }, [activeCloudLink?.linkID, activeCloudLink?.provider])
 
@@ -487,13 +451,6 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                     </div>
                 </div>
 
-                {lastSavedPath && (
-                    <div className="alert alert-success py-2" role="status">
-                        <div className="fw-semibold">Decrypted {activeProviderName} file saved successfully</div>
-                        <code style={{ overflowWrap: "anywhere" }}>{lastSavedPath}</code>
-                    </div>
-                )}
-
                 {!activeCloudLink ? (
                     <div className="alert alert-secondary py-2 mb-0" style={{ fontSize: 13 }}>
                         Activate a linked cloud provider above to view its encrypted files.
@@ -509,15 +466,14 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                         {driveFiles.map(file => (
                             <div key={file.fileId} className="list-group-item d-flex justify-content-between align-items-center gap-3">
                                 <div style={{ minWidth: 0 }}>
-                                    <div className="fw-medium text-truncate">{file.originalName}</div>
+                                    <div className="fw-medium text-truncate">{file.envelopeVersion === 2 ? "Encrypted file" : file.originalName}</div>
                                     <small className="text-muted">
-                                        {formatBytes(file.fileSize)}{file.modifiedAt ? ` | ${new Date(file.modifiedAt).toLocaleString()}` : ""}
+                                        {formatBytes(file.fileSize)} | {file.encMethod}
+                                        {file.modifiedAt ? ` | ${new Date(file.modifiedAt).toLocaleString()}` : ""}
                                     </small>
+                                    <div><small className="text-muted text-break">{file.fileName}</small></div>
                                 </div>
                                 <div className="d-flex gap-2 flex-shrink-0">
-                                    <button className="btn btn-outline-primary btn-sm" onClick={() => handleProviderDownload(file)}>
-                                        Decrypt & download
-                                    </button>
                                     <button className="btn btn-outline-danger btn-sm" onClick={() => handleProviderDelete(file)}>
                                         Delete
                                     </button>
@@ -538,7 +494,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                     <div className="card p-4" style={{ width: 380 }} onClick={e => e.stopPropagation()}>
                         <h6 className="mb-1">Link Cloud Storage Account</h6>
                         <p className="text-muted mb-3" style={{ fontSize: 13 }}>
-                            Select a provider then click Connect. A browser window will open for approval, and the newly connected account becomes active automatically.
+                            Select a provider then click Connect. This tab will continue to the provider and return after approval.
                         </p>
 
                         {providerLimitReached && (
@@ -571,7 +527,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
                         {selectedProvider && (
                             <div className="alert alert-info py-2 mt-2 mb-0" style={{ fontSize: 12 }}>
-                                Clicking Connect will open a browser window to log in to {providerLabels[selectedProvider]?.label}.
+                                Clicking Connect will continue to {providerLabels[selectedProvider]?.label} in this tab.
                             </div>
                         )}
 

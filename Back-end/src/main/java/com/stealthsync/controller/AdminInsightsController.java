@@ -8,9 +8,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
@@ -19,7 +19,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin")
-@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 /** Exposes administrator-only reports, CSV downloads, and security logs. */
@@ -48,13 +47,15 @@ public class AdminInsightsController {
     }
 
     @GetMapping("/logs")
-    public ResponseEntity<List<SystemLog>> logs() {
-        return ResponseEntity.ok(reportsService.logs());
+    public ResponseEntity<List<SystemLog>> logs(
+            @RequestParam(required = false) String riskLevel,
+            @RequestParam(defaultValue = "false") boolean flaggedOnly) {
+        return ResponseEntity.ok(reportsService.logs(riskLevel, flaggedOnly));
     }
 
     @GetMapping("/logs/flagged")
-    public ResponseEntity<List<SystemLog>> flaggedLogs() {
-        return ResponseEntity.ok(reportsService.flaggedLogs());
+    public ResponseEntity<List<SystemLog>> flaggedLogs(@RequestParam(required = false) String riskLevel) {
+        return ResponseEntity.ok(reportsService.logs(riskLevel, true));
     }
 
     @GetMapping("/logs/download")

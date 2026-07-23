@@ -16,14 +16,15 @@ function AdminReportsLogsPage() {
     const [financial, setFinancial] = useState<FinancialReport | null>(null)
     const [logs, setLogs] = useState<SystemLog[]>([])
     const [flaggedOnly, setFlaggedOnly] = useState(false)
+    const [riskLevel, setRiskLevel] = useState<"ALL" | "LOW" | "MEDIUM" | "HIGH">("ALL")
     const [loading, setLoading] = useState(true)
 
     const fetchReports = async () => {
         try {
             setLoading(true)
             const [performanceResponse, financialResponse] = await Promise.all([
-                apiFetch("http://localhost:8080/admin/reports/performance", { credentials: "include" }),
-                apiFetch("http://localhost:8080/admin/reports/financial", { credentials: "include" }),
+                apiFetch("/admin/reports/performance", { credentials: "include" }),
+                apiFetch("/admin/reports/financial", { credentials: "include" }),
             ])
             if (!performanceResponse.ok || !financialResponse.ok) {
                 toast.error("Failed to load reports")
@@ -41,8 +42,12 @@ function AdminReportsLogsPage() {
     const fetchLogs = async (flagged: boolean) => {
         try {
             setLoading(true)
-            const path = flagged ? "/admin/logs/flagged" : "/admin/logs"
-            const response = await apiFetch(`http://localhost:8080${path}`, { credentials: "include" })
+            const params = new URLSearchParams()
+            if (flagged) params.set("flaggedOnly", "true")
+            if (riskLevel !== "ALL") params.set("riskLevel", riskLevel)
+            const query = params.toString()
+            const path = `/admin/logs${query ? `?${query}` : ""}`
+            const response = await apiFetch(path, { credentials: "include" })
             if (!response.ok) {
                 toast.error("Failed to load system logs")
                 return
@@ -61,10 +66,23 @@ function AdminReportsLogsPage() {
         } else {
             fetchLogs(flaggedOnly)
         }
-    }, [view, flaggedOnly])
+    }, [view, flaggedOnly, riskLevel])
 
-    const download = (path: string) => {
-        window.location.href = `http://localhost:8080${path}`
+    const download = async (path: string) => {
+        const response = await apiFetch(path)
+        if (!response.ok) {
+            toast.error("Download failed")
+            return
+        }
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = path.includes("financial")
+            ? "financial-report.csv"
+            : path.includes("performance") ? "performance-report.csv" : "system-logs.csv"
+        link.click()
+        URL.revokeObjectURL(url)
     }
 
     return (
@@ -79,9 +97,22 @@ function AdminReportsLogsPage() {
                     </button>
                 </div>
                 {view === "logs" && (
-                    <button className={`btn btn-sm ${flaggedOnly ? "btn-warning" : "btn-outline-warning"}`} onClick={() => setFlaggedOnly(v => !v)}>
-                        {flaggedOnly ? "Showing Flagged" : "Show Flagged"}
-                    </button>
+                    <div className="d-flex gap-2">
+                        <select
+                            className="form-select form-select-sm"
+                            value={riskLevel}
+                            onChange={event => setRiskLevel(event.target.value as typeof riskLevel)}
+                            aria-label="Filter logs by risk level"
+                        >
+                            <option value="ALL">All risk levels</option>
+                            <option value="LOW">Low</option>
+                            <option value="MEDIUM">Medium</option>
+                            <option value="HIGH">High</option>
+                        </select>
+                        <button className={`btn btn-sm ${flaggedOnly ? "btn-warning" : "btn-outline-warning"}`} onClick={() => setFlaggedOnly(v => !v)}>
+                            {flaggedOnly ? "Showing Flagged" : "Show Flagged"}
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -161,6 +192,7 @@ function AdminReportsLogsPage() {
                                     <th>IP</th>
                                     <th>Time</th>
                                     <th>Risk</th>
+                                    <th>Reason</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -171,10 +203,11 @@ function AdminReportsLogsPage() {
                                         <td>{log.ipAddress}</td>
                                         <td>{new Date(log.timestamp).toLocaleString()}</td>
                                         <td>
-                                            <span className={`badge ${log.isSuspicious ? "bg-danger" : "bg-success"}`}>
-                                                {log.isSuspicious ? log.aiRiskReason : "Normal"}
+                                            <span className={`badge ${log.riskLevel === "HIGH" ? "bg-danger" : log.riskLevel === "MEDIUM" ? "bg-warning text-dark" : "bg-success"}`}>
+                                                {log.riskLevel ?? "LOW"} {log.riskScore ?? 0}
                                             </span>
                                         </td>
+                                        <td>{log.aiRiskReason}</td>
                                     </tr>
                                 ))}
                             </tbody>

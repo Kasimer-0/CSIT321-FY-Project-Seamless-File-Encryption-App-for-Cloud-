@@ -17,7 +17,7 @@ function App() {
             return
         }
 
-        apiFetch("http://localhost:8080/me")
+        apiFetch("/me")
             .then(response => {
                 if (!response.ok) throw new Error("Session expired")
                 return response.json()

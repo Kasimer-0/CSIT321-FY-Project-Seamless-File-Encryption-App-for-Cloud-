@@ -16,7 +16,7 @@ function AdminManageSubscription() {
             setLoading(true)
 
             const response = await apiFetch(
-                "http://localhost:8080/subscriptions",
+                "/subscriptions",
                 { credentials: "include" }
             )
 
@@ -37,7 +37,7 @@ function AdminManageSubscription() {
 
     const fetchAvailablePlans = async () => {
         try {
-            const response = await apiFetch("http://localhost:8080/plans", {
+            const response = await apiFetch("/plans", {
                 credentials: "include"
             })
 
@@ -76,7 +76,7 @@ function AdminManageSubscription() {
     const handleCancel = async (subscriptionID: number) => {
         try {
             const response = await apiFetch(
-                `http://localhost:8080/subscriptions/${subscriptionID}/cancel`,
+                `/subscriptions/${subscriptionID}/cancel`,
                 {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
@@ -108,7 +108,7 @@ function AdminManageSubscription() {
     const handleEdit = async (updated: SubscriptionDTO) => {
         try {
             const response = await apiFetch(
-                `http://localhost:8080/subscriptions/${updated.subscriptionID}`,
+                `/subscriptions/${updated.subscriptionID}`,
                 {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },

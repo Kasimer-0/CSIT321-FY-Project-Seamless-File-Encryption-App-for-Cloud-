@@ -2,14 +2,14 @@ package com.stealthsync.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stealthsync.model.entity.CloudStorageLink;
+import com.stealthsync.model.entity.CloudFileRecord;
 import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.EncryptionKeyRecord;
-import com.stealthsync.model.entity.PhysicalTokenRecord;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.CloudStorageLinkRepository;
+import com.stealthsync.repository.CloudFileRecordRepository;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
 import com.stealthsync.repository.EncryptionKeyRepository;
-import com.stealthsync.repository.PhysicalTokenRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import com.stealthsync.service.crypto.EncryptionKeyService;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,13 +69,13 @@ class OwnershipSecurityTest {
     private CloudStorageLinkRepository cloudStorageLinkRepository;
 
     @Autowired
+    private CloudFileRecordRepository cloudFileRecordRepository;
+
+    @Autowired
     private EncryptedFileRecordRepository encryptedFileRecordRepository;
 
     @Autowired
     private EncryptionKeyRepository encryptionKeyRepository;
-
-    @Autowired
-    private PhysicalTokenRepository physicalTokenRepository;
 
     @Autowired
     private EncryptionKeyService encryptionKeyService;
@@ -156,6 +156,8 @@ class OwnershipSecurityTest {
                 "test-salt",
                 "test-verifier",
                 "password-derived-v1",
+                null,
+                null,
                 now,
                 now
         ));
@@ -169,6 +171,7 @@ class OwnershipSecurityTest {
     @Test
     void loginReturnsTokenThatCanCallMe() throws Exception {
         String loginBody = mockMvc.perform(post("/login")
+                        .header("X-StealthSync-Device-ID", "ownership-login-device")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"usernameOrEmail":"testuser@stealthsync.com","password":"User@123"}
@@ -180,9 +183,41 @@ class OwnershipSecurityTest {
                 .getContentAsString();
 
         String token = objectMapper.readTree(loginBody).get("token").asText();
-        mockMvc.perform(get("/me").header(HttpHeaders.AUTHORIZATION, bearer(token)))
+        mockMvc.perform(get("/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .header("X-StealthSync-Device-ID", "ownership-login-device"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userID").value(customerA.getUserID()));
+    }
+
+    @Test
+    void customerCannotDownloadAnotherCustomersV2CiphertextByRemoteFileID() throws Exception {
+        Instant now = Instant.now();
+        cloudFileRecordRepository.save(new CloudFileRecord(
+                null,
+                customerB.getUserID(),
+                "google_drive",
+                "remote-file-owned-by-b",
+                "stealthsync-11111111-1111-4111-8111-111111111111.ssenc",
+                "AES-128",
+                "ABCDEFGHIJKLMNOP",
+                "encrypted-metadata",
+                2,
+                12,
+                128,
+                now,
+                now
+        ));
+
+        mockMvc.perform(get("/cloud-storage/google-drive/files/{fileId}/download-ciphertext",
+                        "remote-file-owned-by-b")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/cloud-storage/google-drive/files/{fileId}",
+                        "remote-file-owned-by-b")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -203,15 +238,15 @@ class OwnershipSecurityTest {
 
 
     @Test
-    void createEncryptionKeyRequiresPassword() throws Exception {
+    void createEncryptionKeyRejectsPasswordInRequest() throws Exception {
         mockMvc.perform(post("/encryption-keys")
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"keyName":"No password key","algorithm":"AES-256-GCM"}
+                                {"keyName":"Legacy request","algorithm":"AES-128","keyPassword":"must-not-leave-browser"}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Key password is required."));
+                .andExpect(jsonPath("$.message").value("Key passwords must remain in the browser and cannot be sent to the server."));
     }
 
     @Test
@@ -220,31 +255,52 @@ class OwnershipSecurityTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"keyName":"Blocked premium key","algorithm":"AES-256-GCM","keyPassword":"Master@12345"}
+                                {
+                                  "keyName":"Blocked premium key",
+                                  "algorithm":"AES-256-GCM",
+                                  "salt":"AAAAAAAAAAAAAAAAAAAAAA",
+                                  "fingerprint":"ABCDEFGHIJKLMNOP",
+                                  "passwordVerifier":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                                  "keyScheme":"webcrypto-pbkdf2-aes-gcm-v2",
+                                  "kdfIterations":310000,
+                                  "kdfVersion":2
+                                }
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("AES-256-GCM requires an active premium subscription."));
     }
 
     @Test
-    void createEncryptionKeyDoesNotReturnSensitiveMaterialAndCanBeListed() throws Exception {
+    void createEncryptionKeyReturnsOnlyClientKdfMetadataAndCanBeListed() throws Exception {
         mockMvc.perform(post("/encryption-keys")
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"keyName":"Demo key","algorithm":"AES-128","keyPassword":"Master@12345"}
+                                {
+                                  "keyName":"Demo key",
+                                  "algorithm":"AES-128",
+                                  "salt":"AAAAAAAAAAAAAAAAAAAAAA",
+                                  "fingerprint":"ABCDEFGHIJKLMNOP",
+                                  "passwordVerifier":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                                  "keyScheme":"webcrypto-pbkdf2-aes-gcm-v2",
+                                  "kdfIterations":310000,
+                                  "kdfVersion":2
+                                }
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.keyName").value("Demo key"))
-                .andExpect(jsonPath("$.salt").doesNotExist())
-                .andExpect(jsonPath("$.passwordVerifier").doesNotExist());
+                .andExpect(jsonPath("$.salt").value("AAAAAAAAAAAAAAAAAAAAAA"))
+                .andExpect(jsonPath("$.passwordVerifier").exists())
+                .andExpect(jsonPath("$.keyPassword").doesNotExist())
+                .andExpect(jsonPath("$.rawKey").doesNotExist());
 
         mockMvc.perform(get("/encryption-keys")
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].keyName").value("Demo key"))
-                .andExpect(jsonPath("$[0].salt").doesNotExist())
-                .andExpect(jsonPath("$[0].passwordVerifier").doesNotExist());
+                .andExpect(jsonPath("$[0].kdfIterations").value(310000))
+                .andExpect(jsonPath("$[0].keyPassword").doesNotExist())
+                .andExpect(jsonPath("$[0].rawKey").doesNotExist());
     }
 
     @Test
@@ -273,8 +329,8 @@ class OwnershipSecurityTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("retired"))
-                .andExpect(jsonPath("$.salt").doesNotExist())
-                .andExpect(jsonPath("$.passwordVerifier").doesNotExist());
+                .andExpect(jsonPath("$.keyPassword").doesNotExist())
+                .andExpect(jsonPath("$.rawKey").doesNotExist());
     }
 
     @Test
@@ -358,35 +414,6 @@ class OwnershipSecurityTest {
     }
 
     @Test
-    void premiumCustomerCannotReadAnotherCustomersPhysicalToken() throws Exception {
-        makeCustomerAPremium();
-        PhysicalTokenRecord token = createCustomerBToken("Other token", "TOKEN-B-READ");
-
-        mockMvc.perform(get("/physical-tokens/{id}", token.getTokenID())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void premiumCustomerCannotChangeAnotherCustomersPhysicalTokenLifecycle() throws Exception {
-        makeCustomerAPremium();
-        PhysicalTokenRecord token = createCustomerBToken("Other lifecycle token", "TOKEN-B-LIFE");
-
-        mockMvc.perform(patch("/physical-tokens/{id}/activate", token.getTokenID())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
-                .andExpect(status().isNotFound());
-        mockMvc.perform(patch("/physical-tokens/{id}/deactivate", token.getTokenID())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
-                .andExpect(status().isNotFound());
-        mockMvc.perform(delete("/physical-tokens/{id}", token.getTokenID())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
-                .andExpect(status().isNotFound());
-
-        PhysicalTokenRecord unchanged = physicalTokenRepository.findById(token.getTokenID()).orElseThrow();
-        assertEquals("inactive", unchanged.getStatus());
-    }
-
-    @Test
     void customerCannotEncryptLocalFileWithAnotherCustomersKeyID() throws Exception {
         EncryptionKeyRecord otherKey = createCustomerBKey("Other upload key");
         int fileCountBefore = encryptedFileRecordRepository
@@ -423,24 +450,6 @@ class OwnershipSecurityTest {
 
     private EncryptionKeyRecord createCustomerBKey(String keyName) {
         return encryptionKeyService.createKey(customerB.getUserID(), keyName, "AES-128", "OtherKey@12345");
-    }
-
-    private PhysicalTokenRecord createCustomerBToken(String tokenName, String serialNumber) {
-        return physicalTokenRepository.save(new PhysicalTokenRecord(
-                null,
-                customerB.getUserID(),
-                null,
-                tokenName,
-                serialNumber,
-                "inactive",
-                Instant.now(),
-                null
-        ));
-    }
-
-    private void makeCustomerAPremium() {
-        customerA.setSubscribed(true);
-        customerA = userAccountRepository.save(customerA);
     }
 
     private String bearer(String token) {

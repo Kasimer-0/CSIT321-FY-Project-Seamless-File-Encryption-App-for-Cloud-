@@ -19,7 +19,7 @@ public interface CloudStorageAdapter {
 
     boolean isConnected(Long ownerID);
 
-    String createAuthorizationUrl(Long ownerID) throws Exception;
+    String createAuthorizationUrl(Long ownerID, String deviceIdentifierHash) throws Exception;
 
     CloudStorageLink completeAuthorization(String code, String state) throws Exception;
 
@@ -28,6 +28,11 @@ public interface CloudStorageAdapter {
     CloudFileDTO uploadEncryptedForProvider(Long ownerID, CloudUploadMetadata metadata, InputStream encryptedContent) throws Exception;
 
     DownloadedCloudFile downloadEncryptedForProvider(Long ownerID, String fileId) throws Exception;
+
+    CloudFileDTO uploadCiphertextForProvider(Long ownerID, CiphertextUploadMetadata metadata, InputStream ciphertext)
+            throws Exception;
+
+    DownloadedCiphertext downloadCiphertextForProvider(Long ownerID, String fileId) throws Exception;
 
     void deleteEncryptedFileForProvider(Long ownerID, String fileId) throws Exception;
 
@@ -49,6 +54,22 @@ public interface CloudStorageAdapter {
             String keyName,
             String keyFingerprint,
             byte[] encryptedContent
+    ) {
+    }
+
+    record CiphertextUploadMetadata(
+            String objectName,
+            String algorithm,
+            String keyFingerprint,
+            String encryptedMetadata,
+            long plaintextSize,
+            int envelopeVersion
+    ) {
+    }
+
+    record DownloadedCiphertext(
+            String objectName,
+            byte[] ciphertext
     ) {
     }
 }

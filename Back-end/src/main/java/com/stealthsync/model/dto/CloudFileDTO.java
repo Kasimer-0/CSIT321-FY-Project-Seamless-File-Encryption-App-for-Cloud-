@@ -14,6 +14,23 @@ public record CloudFileDTO(
         String encMethod,
         Long keyID,
         String keyName,
-        String keyFingerprint
+        String keyFingerprint,
+        Integer envelopeVersion,
+        String encryptedMetadata
 ) {
+    public CloudFileDTO(
+            String provider,
+            String fileId,
+            String fileName,
+            String originalName,
+            long fileSize,
+            Instant createdAt,
+            Instant modifiedAt,
+            String encMethod,
+            Long keyID,
+            String keyName,
+            String keyFingerprint) {
+        this(provider, fileId, fileName, originalName, fileSize, createdAt, modifiedAt,
+                encMethod, keyID, keyName, keyFingerprint, 1, null);
+    }
 }

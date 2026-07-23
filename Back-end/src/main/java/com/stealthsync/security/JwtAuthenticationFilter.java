@@ -40,6 +40,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     null,
                     List.of(new SimpleGrantedAuthority(authority))
             );
+            authentication.setDetails(claims.deviceIdentifierHash());
             SecurityContextHolder.getContext().setAuthentication(authentication);
             chain.doFilter(request, response);
         } catch (IllegalArgumentException exception) {

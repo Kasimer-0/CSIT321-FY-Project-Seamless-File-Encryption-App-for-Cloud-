@@ -7,12 +7,15 @@ import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.security.JwtService;
 import com.stealthsync.service.security.RecoveryPhraseService;
 import com.stealthsync.service.security.RecoveryLoginAttemptService;
+import com.stealthsync.service.security.DeviceIdentifierService;
+import com.stealthsync.service.security.DeviceRegistrationService;
+import com.stealthsync.service.security.SecurityAuditService;
+import com.stealthsync.service.SubscriptionEntitlementService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,7 +26,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/account")
-@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 /** Exposes customer account-security actions that remain available after the dashboard split. */
 public class AccountSecurityController {
@@ -34,6 +36,9 @@ public class AccountSecurityController {
     private final JwtService jwtService;
     private final RecoveryPhraseService recoveryPhraseService;
     private final RecoveryLoginAttemptService recoveryLoginAttemptService;
+    private final DeviceRegistrationService deviceRegistrationService;
+    private final SecurityAuditService securityAuditService;
+    private final SubscriptionEntitlementService entitlementService;
 
     // Reset password now lives on the customer View Account page; the old
     // destructive account-wipe action is intentionally no longer exposed.
@@ -84,24 +89,33 @@ public class AccountSecurityController {
         String usernameOrEmail = asString(request.get("usernameOrEmail"), "");
         String remoteAddress = servletRequest.getRemoteAddr();
         recoveryLoginAttemptService.requireAllowed(usernameOrEmail, remoteAddress);
+        UserAccount user;
         try {
             String phrase = recoveryPhraseService.normalize(asString(request.get("recoveryPhrase"), ""));
-            UserAccount user = userAccountRepository.findByUsernameIgnoreCaseOrEmailIgnoreCase(usernameOrEmail, usernameOrEmail)
+            user = userAccountRepository.findByUsernameIgnoreCaseOrEmailIgnoreCase(usernameOrEmail, usernameOrEmail)
                     .filter(account -> account.getRecoveryPhraseHash() != null)
                     .filter(account -> passwordEncoder.matches(phrase, account.getRecoveryPhraseHash()))
                     .filter(account -> !account.isSuspended())
                     .filter(UserAccount::isSubscribed)
                     .orElseThrow(() -> new IllegalArgumentException("Invalid recovery phrase."));
             recoveryLoginAttemptService.recordSuccess(usernameOrEmail, remoteAddress);
-            return ResponseEntity.ok(new LoginResponse(user, jwtService.createToken(user)));
         } catch (Exception exception) {
             recoveryLoginAttemptService.recordFailure(usernameOrEmail, remoteAddress);
+            securityAuditService.recordLogin(usernameOrEmail, "LOGIN_FAILED");
             throw new IllegalArgumentException("Invalid recovery phrase.");
         }
+        var device = deviceRegistrationService.registerOrValidate(
+                user,
+                servletRequest.getHeader(DeviceIdentifierService.HEADER_NAME),
+                asString(request.get("deviceName"), null),
+                asString(request.get("platform"), null));
+        securityAuditService.recordForUser(user.getUserID(), "LOGIN_SUCCESS", null);
+        return ResponseEntity.ok(new LoginResponse(user, jwtService.createToken(
+                user, device == null ? null : device.getDeviceIdentifierHash())));
     }
 
     private void requirePremium(UserAccount user) {
-        if (!user.isSubscribed()) {
+        if (!entitlementService.hasActivePremium(user)) {
             throw new IllegalArgumentException("Premium subscription required.");
         }
     }

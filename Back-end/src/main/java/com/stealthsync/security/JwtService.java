@@ -36,12 +36,20 @@ public class JwtService {
     }
 
     public String createToken(UserAccount user) {
+        return createToken(user, null);
+    }
+
+    /** Creates a customer token bound to the hashed device registered at login. */
+    public String createToken(UserAccount user, String deviceIdentifierHash) {
         long issuedAt = Instant.now().getEpochSecond();
         Map<String, Object> claims = new LinkedHashMap<>();
         claims.put("sub", String.valueOf(user.getUserID()));
         claims.put("role", user.getRole());
         claims.put("iat", issuedAt);
         claims.put("exp", issuedAt + expirationSeconds);
+        if (deviceIdentifierHash != null && !deviceIdentifierHash.isBlank()) {
+            claims.put("device", deviceIdentifierHash);
+        }
 
         try {
             String header = encode(objectMapper.writeValueAsBytes(Map.of("alg", "HS256", "typ", "JWT")));
@@ -76,7 +84,8 @@ public class JwtService {
             return new JwtClaims(
                     Long.parseLong(String.valueOf(claims.get("sub"))),
                     String.valueOf(claims.get("role")),
-                    expiration
+                    expiration,
+                    claims.get("device") == null ? null : String.valueOf(claims.get("device"))
             );
         } catch (IllegalArgumentException exception) {
             throw exception;
@@ -104,5 +113,5 @@ public class JwtService {
         }
     }
 
-    public record JwtClaims(Long userID, String role, long expiresAt) { }
+    public record JwtClaims(Long userID, String role, long expiresAt, String deviceIdentifierHash) { }
 }

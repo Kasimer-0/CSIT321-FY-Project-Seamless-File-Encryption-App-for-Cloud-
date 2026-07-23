@@ -51,7 +51,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await apiFetch("http://localhost:8080/admin/dashboard-stats", {
+                const res = await apiFetch("/admin/dashboard-stats", {
                     credentials: "include"
                 })
 
@@ -68,7 +68,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
     const handleLogout = async () => {
         try {
-            await apiFetch("http://localhost:8080/logout", {
+            await apiFetch("/logout", {
                 method: "POST",
                 credentials: "include"
             })

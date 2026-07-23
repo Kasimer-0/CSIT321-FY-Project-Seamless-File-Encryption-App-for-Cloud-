@@ -7,6 +7,7 @@ import com.stealthsync.service.crypto.AesGcmService;
 import com.stealthsync.service.crypto.EncryptionKeyService;
 import com.stealthsync.service.crypto.EncryptionPolicyService;
 import com.stealthsync.service.crypto.UserVaultService;
+import com.stealthsync.service.security.SecurityAuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
@@ -27,7 +28,6 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true") // Allow cross-origin access to the Vite frontend via the default port.
 @Slf4j
 /** Provides local encryption/decryption downloads and the demo encrypted-file storage workflow. */
 public class FileController {
@@ -38,6 +38,7 @@ public class FileController {
     private final EncryptionKeyService encryptionKeyService;
     private final EncryptionPolicyService encryptionPolicyService;
     private final UserVaultService userVaultService;
+    private final SecurityAuditService securityAuditService;
 
     /**
      * Legacy direct-passphrase demo endpoint kept for manual local encryption tests.
@@ -123,11 +124,15 @@ public class FileController {
                         keyMaterial.key().getKeyID(),
                         encryptedStream.readAllBytes()
                 );
+                securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_SUCCESS", "local");
                 return ResponseEntity.ok(record);
             }
         } catch (IllegalArgumentException e) {
+            securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_FAILED", "local");
+            auditWrongKeyPassword(ownerID, e);
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
+            securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_FAILED", "local");
             log.error("Encrypt-upload API failed", e);
             return ResponseEntity.internalServerError().body(Map.of("message", "Unable to encrypt and store the file."));
         }
@@ -143,9 +148,12 @@ public class FileController {
     /** Removes a legacy encrypted record stored in StealthSync's local database. */
     @DeleteMapping("/files/{id}")
     public ResponseEntity<Void> deleteEncryptedFile(@PathVariable Long id) {
-        return dataStore.deleteEncryptedFile(id, currentUserService.requireUserID())
-                ? ResponseEntity.noContent().build()
-                : ResponseEntity.notFound().build();
+        Long ownerID = currentUserService.requireUserID();
+        if (!dataStore.deleteEncryptedFile(id, ownerID)) {
+            return ResponseEntity.notFound().build();
+        }
+        securityAuditService.recordForUser(ownerID, "FILE_DELETE", "local");
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -165,12 +173,14 @@ public class FileController {
     private ResponseEntity<InputStreamResource> downloadRecord(EncryptedFileRecord record, String keyPassword) {
         try {
             byte[] plaintext = decryptRecord(record, keyPassword);
+            securityAuditService.recordForUser(record.getOwnerID(), "FILE_DOWNLOAD_SUCCESS", "local");
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, attachmentHeader(record.getFileName()))
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .body(new InputStreamResource(new ByteArrayInputStream(plaintext)));
         } catch (Exception e) {
+            auditDecryptionFailure(record.getOwnerID(), e);
             log.error("Decrypt-download API failed", e);
             return ResponseEntity.badRequest().build();
         }
@@ -184,6 +194,7 @@ public class FileController {
             Files.createDirectories(downloads);
             Path destination = availableDestination(downloads, safeFilename(record.getFileName(), "decrypted-file"));
             Files.write(destination, plaintext);
+            securityAuditService.recordForUser(record.getOwnerID(), "FILE_DOWNLOAD_SUCCESS", "local");
 
             return ResponseEntity.ok(Map.of(
                     "fileName", destination.getFileName().toString(),
@@ -191,8 +202,10 @@ public class FileController {
                     "size", plaintext.length
             ));
         } catch (IllegalArgumentException e) {
+            auditDecryptionFailure(record.getOwnerID(), e);
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
+            auditDecryptionFailure(record.getOwnerID(), e);
             log.error("Decrypt-save API failed", e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "message", "Unable to save the decrypted file to Downloads."
@@ -233,6 +246,19 @@ public class FileController {
     }
     private String keyPassword(Map<String, String> request) {
         return request == null ? null : request.get("keyPassword");
+    }
+
+    private void auditDecryptionFailure(Long ownerID, Exception exception) {
+        securityAuditService.recordForUser(ownerID, "DECRYPTION_FAILED", "local");
+        auditWrongKeyPassword(ownerID, exception);
+    }
+
+    private void auditWrongKeyPassword(Long ownerID, Exception exception) {
+        if (exception instanceof IllegalArgumentException
+                && exception.getMessage() != null
+                && exception.getMessage().toLowerCase(java.util.Locale.ROOT).contains("wrong key password")) {
+            securityAuditService.recordForUser(ownerID, "WRONG_KEY_PASSWORD", "local");
+        }
     }
 
     /** Keeps existing downloads intact by selecting the first unused filename. */

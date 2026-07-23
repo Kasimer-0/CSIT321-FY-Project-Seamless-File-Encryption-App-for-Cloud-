@@ -26,7 +26,7 @@ function CustomerManageRecPhrase({ user }: Props) {
             setLoadingStatus(false)
             return
         }
-        apiFetch("http://localhost:8080/account/recovery-phrase/status", { credentials: "include" })
+        apiFetch("/account/recovery-phrase/status", { credentials: "include" })
             .then(async response => {
                 if (!response.ok) throw new Error("Unable to load recovery phrase status.")
                 const data: { configured: boolean } = await response.json()
@@ -47,7 +47,7 @@ function CustomerManageRecPhrase({ user }: Props) {
         try {
             // Recovery phrases must be generated and hashed by the backend; this
             // avoids storing a caller-supplied phrase through an unprotected route.
-            const response = await apiFetch("http://localhost:8080/account/recovery-phrase/generate", {
+            const response = await apiFetch("/account/recovery-phrase/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",

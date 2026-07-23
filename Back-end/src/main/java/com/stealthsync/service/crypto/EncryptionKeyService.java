@@ -1,8 +1,6 @@
 package com.stealthsync.service.crypto;
 
 import com.stealthsync.model.entity.EncryptionKeyRecord;
-import com.stealthsync.model.dto.TrustedKeyPackage;
-import com.stealthsync.model.dto.TrustedKeyPackageImportResponse;
 import com.stealthsync.repository.EncryptionKeyRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,7 +21,9 @@ import java.util.Optional;
 public class EncryptionKeyService {
 
     private static final String KEY_SCHEME = "password-derived-v1";
-    private static final String TRUSTED_DEVICE_PACKAGE_VERSION = "trusted-device-key-package-v1";
+    public static final String KEY_SCHEME_V2 = "webcrypto-pbkdf2-aes-gcm-v2";
+    public static final int KDF_ITERATIONS_V2 = 310_000;
+    public static final int KDF_VERSION_V2 = 2;
     private static final int SALT_LENGTH_BYTE = 16;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -87,48 +87,6 @@ public class EncryptionKeyService {
                 : encryptionKeyRepository.findByOwnerIDAndFingerprint(ownerID, fingerprint.trim());
     }
 
-    public TrustedKeyPackage exportTrustedKeyPackage(Long ownerID, Long keyID) {
-        EncryptionKeyRecord key = findKey(ownerID, keyID)
-                .orElseThrow(() -> new IllegalArgumentException("Encryption key was not found."));
-        return new TrustedKeyPackage(
-                TRUSTED_DEVICE_PACKAGE_VERSION,
-                Instant.now(),
-                key.getKeyID(),
-                key.getKeyName(),
-                key.getAlgorithm(),
-                key.getFingerprint(),
-                key.getSalt(),
-                key.getKeyScheme()
-        );
-    }
-
-    @Transactional
-    public TrustedKeyPackageImportResponse importTrustedKeyPackage(Long ownerID, TrustedKeyPackage keyPackage) {
-        validateTrustedKeyPackage(keyPackage);
-        Optional<EncryptionKeyRecord> existing =
-                encryptionKeyRepository.findByOwnerIDAndFingerprint(ownerID, keyPackage.fingerprint());
-        if (existing.isPresent()) {
-            return new TrustedKeyPackageImportResponse("existing", existing.get());
-        }
-
-        String normalizedAlgorithm = encryptionPolicyService.requireAlgorithmAllowedForUser(ownerID, keyPackage.algorithm()).algorithm();
-        Instant now = Instant.now();
-        EncryptionKeyRecord imported = new EncryptionKeyRecord(
-                null,
-                ownerID,
-                isBlank(keyPackage.keyName()) ? "Imported trusted-device key" : keyPackage.keyName().trim(),
-                normalizedAlgorithm,
-                "active",
-                keyPackage.fingerprint().trim(),
-                keyPackage.salt().trim(),
-                null,
-                isBlank(keyPackage.keyScheme()) ? KEY_SCHEME : keyPackage.keyScheme().trim(),
-                now,
-                now
-        );
-        return new TrustedKeyPackageImportResponse("imported", encryptionKeyRepository.save(imported));
-    }
-
     @Transactional
     public EncryptionKeyRecord createKey(Long ownerID, String keyName, String algorithm, String keyPassword) {
         requirePassword(keyPassword);
@@ -147,6 +105,8 @@ public class EncryptionKeyService {
                     encode(salt),
                     verifier(derivedBytes),
                     KEY_SCHEME,
+                    null,
+                    null,
                     now,
                     now
             );
@@ -155,6 +115,56 @@ public class EncryptionKeyService {
             Arrays.fill(salt, (byte) 0);
             Arrays.fill(derivedBytes, (byte) 0);
         }
+    }
+
+    @Transactional
+    public EncryptionKeyRecord createClientDerivedKey(
+            Long ownerID,
+            String keyName,
+            String algorithm,
+            String salt,
+            String fingerprint,
+            String passwordVerifier,
+            String keyScheme,
+            Integer kdfIterations,
+            Integer kdfVersion) {
+        String normalizedAlgorithm = encryptionPolicyService
+                .requireAlgorithmAllowedForUser(ownerID, algorithm)
+                .algorithm();
+        requireClientKeyMetadata(salt, fingerprint, passwordVerifier, keyScheme, kdfIterations, kdfVersion);
+        if (encryptionKeyRepository.findByOwnerIDAndFingerprint(ownerID, fingerprint.trim()).isPresent()) {
+            throw new IllegalArgumentException("An encryption key with this fingerprint already exists.");
+        }
+
+        Instant now = Instant.now();
+        return encryptionKeyRepository.save(new EncryptionKeyRecord(
+                null,
+                ownerID,
+                isBlank(keyName) ? "New Encryption Key" : keyName.trim(),
+                normalizedAlgorithm,
+                "active",
+                fingerprint.trim(),
+                salt.trim(),
+                passwordVerifier.trim(),
+                KEY_SCHEME_V2,
+                KDF_ITERATIONS_V2,
+                KDF_VERSION_V2,
+                now,
+                now
+        ));
+    }
+
+    public EncryptionKeyRecord requireActiveClientKeyForEncryption(Long ownerID, String fingerprint) {
+        EncryptionKeyRecord key = findKeyByFingerprint(ownerID, fingerprint)
+                .orElseThrow(() -> new IllegalArgumentException("Encryption key was not found."));
+        if (!"active".equalsIgnoreCase(key.getStatus())) {
+            throw new IllegalArgumentException("Encryption key is not active.");
+        }
+        if (!KEY_SCHEME_V2.equals(key.getKeyScheme())) {
+            throw new IllegalArgumentException("Legacy keys cannot be used for new browser-encrypted uploads.");
+        }
+        encryptionPolicyService.requireAlgorithmAllowedForUser(ownerID, key.getAlgorithm());
+        return key;
     }
 
     public DerivedKeyMaterial requireActiveKeyMaterial(Long ownerID, Long keyID, String keyPassword) {
@@ -189,7 +199,8 @@ public class EncryptionKeyService {
             Long keyID,
             String keyFingerprint,
             String keyPassword) {
-        // Trusted-device imports may create a new database keyID, so cloud decrypt can fall back to the portable fingerprint.
+        // Cloud metadata may reference an older database key ID, so decryption
+        // retains the owner-scoped fingerprint fallback for migrated records.
         EncryptionKeyRecord key = findKey(ownerID, keyID)
                 .or(() -> findKeyByFingerprint(ownerID, keyFingerprint))
                 .orElseThrow(() -> new IllegalArgumentException("Encryption key was not found."));
@@ -256,19 +267,6 @@ public class EncryptionKeyService {
         );
     }
 
-    private void validateTrustedKeyPackage(TrustedKeyPackage keyPackage) {
-        if (keyPackage == null) {
-            throw new IllegalArgumentException("Trusted-device key package is required.");
-        }
-        if (!TRUSTED_DEVICE_PACKAGE_VERSION.equals(keyPackage.version())) {
-            throw new IllegalArgumentException("Unsupported trusted-device key package version.");
-        }
-        if (isBlank(keyPackage.fingerprint()) || isBlank(keyPackage.salt())) {
-            throw new IllegalArgumentException("Trusted-device key package is missing key metadata.");
-        }
-        encryptionPolicyService.policyForAlgorithm(keyPackage.algorithm());
-    }
-
     private byte[] derivePasswordKey(String keyPassword, byte[] salt) {
         try {
             SecretKey secretKey = keyManagementService.deriveAesKey(keyPassword, salt, 256);
@@ -310,6 +308,42 @@ public class EncryptionKeyService {
     private void requirePassword(String keyPassword) {
         if (isBlank(keyPassword)) {
             throw new IllegalArgumentException("Key password is required.");
+        }
+    }
+
+    private void requireClientKeyMetadata(
+            String salt,
+            String fingerprint,
+            String passwordVerifier,
+            String keyScheme,
+            Integer kdfIterations,
+            Integer kdfVersion) {
+        if (!KEY_SCHEME_V2.equals(keyScheme)) {
+            throw new IllegalArgumentException("Unsupported encryption key scheme.");
+        }
+        if (!Integer.valueOf(KDF_ITERATIONS_V2).equals(kdfIterations)
+                || !Integer.valueOf(KDF_VERSION_V2).equals(kdfVersion)) {
+            throw new IllegalArgumentException("Unsupported key-derivation parameters.");
+        }
+        if (decodeMetadata(salt, "Encryption key salt").length != SALT_LENGTH_BYTE) {
+            throw new IllegalArgumentException("Encryption key salt must be 16 bytes.");
+        }
+        if (decodeMetadata(passwordVerifier, "Password verifier").length != 32) {
+            throw new IllegalArgumentException("Password verifier must be 32 bytes.");
+        }
+        if (isBlank(fingerprint) || !fingerprint.matches("[A-Za-z0-9_-]{16}")) {
+            throw new IllegalArgumentException("Encryption key fingerprint is invalid.");
+        }
+    }
+
+    private byte[] decodeMetadata(String value, String fieldName) {
+        if (isBlank(value)) {
+            throw new IllegalArgumentException(fieldName + " is required.");
+        }
+        try {
+            return decode(value.trim());
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(fieldName + " is not valid base64url.");
         }
     }
 

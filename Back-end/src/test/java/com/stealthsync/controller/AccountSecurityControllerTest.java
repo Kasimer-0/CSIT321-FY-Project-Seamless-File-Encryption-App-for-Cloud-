@@ -227,6 +227,7 @@ class AccountSecurityControllerTest {
                 "recoveryPhrase", phrase
         ));
         return post("/account/recovery-phrase/login")
+                .header("X-StealthSync-Device-ID", "account-recovery-device")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsBytes(body));
     }

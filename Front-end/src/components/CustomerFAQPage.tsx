@@ -20,8 +20,8 @@ const faqItems = [
         answer: "Premium customers can generate a recovery phrase from Security. Store it offline and never share it with another person."
     },
     {
-        question: "How do I get support or create a ticket?",
-        answer: "This version provides FAQ and support guidance only. A full support ticket lifecycle is planned as Future Work and should not be described as implemented in the final demo."
+        question: "How do I get help using StealthSync?",
+        answer: "Review these FAQs and the user manual for account, encryption-key, and cloud connection guidance."
     }
 ]
 
@@ -30,7 +30,7 @@ function CustomerFAQPage() {
     return (
         <section aria-labelledby="faq-heading">
             <h4 id="faq-heading" className="mb-2">Frequently Asked Questions</h4>
-            <p className="text-muted mb-4">Quick answers about encryption, cloud links, account recovery, and support scope.</p>
+            <p className="text-muted mb-4">Quick answers about encryption, cloud links, account recovery, and application use.</p>
 
             <div className="border-top">
                 {faqItems.map((item) => (

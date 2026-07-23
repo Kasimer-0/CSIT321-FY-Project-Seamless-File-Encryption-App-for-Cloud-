@@ -65,7 +65,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         setSaveError(null)
 
         try {
-            const response = await apiFetch("http://localhost:8080/me", {
+            const response = await apiFetch("/me", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -92,7 +92,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         setSuspending(true)
 
         try {
-            const response = await apiFetch("http://localhost:8080/me/suspend", {
+            const response = await apiFetch("/me/suspend", {
                 method: "POST",
                 credentials: "include"
             })
@@ -118,7 +118,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
 
         try {
             const response = await apiFetch(
-                "http://localhost:8080/me/subscription/cancel",
+                "/me/subscription/cancel",
                 { method: "PATCH", credentials: "include" }
             )
 
@@ -150,7 +150,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         try {
             // Password reset moved from the removed Security Center into View Account.
             // apiFetch keeps the request on the logged-in customer instead of using a userID parameter.
-            const response = await apiFetch("http://localhost:8080/account/reset-password", {
+            const response = await apiFetch("/account/reset-password", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -219,7 +219,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
 
         setLoadingSub(true)
 
-        apiFetch("http://localhost:8080/me/subscription", { credentials: "include" })
+        apiFetch("/me/subscription", { credentials: "include" })
             .then(r => r.json())
             .then((data: SubscriptionDTO) => setSubscription(data))
             .catch(err => console.error("Failed to fetch subscription", err))
@@ -232,7 +232,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
         if (availablePlans.length > 0) return
         setLoadingPlans(true)
 
-        apiFetch("http://localhost:8080/plans", { credentials: "include" })
+        apiFetch("/plans", { credentials: "include" })
             .then(r => r.json())
             .then((data: Plan[]) => setAvailablePlans(data.filter(p => p.planStatus === "active")))
             .catch(err => console.error("Failed to fetch plans", err))

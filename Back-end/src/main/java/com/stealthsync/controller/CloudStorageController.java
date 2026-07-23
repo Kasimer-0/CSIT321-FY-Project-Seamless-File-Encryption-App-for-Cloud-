@@ -1,24 +1,28 @@
 package com.stealthsync.controller;
 
-import com.stealthsync.config.DesktopWindowLauncher;
-import com.stealthsync.config.SystemBrowserLauncher;
 import com.stealthsync.model.dto.CloudFileDTO;
 import com.stealthsync.model.entity.CloudStorageLink;
+import com.stealthsync.model.entity.CloudFileRecord;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.service.AppDataService;
 import com.stealthsync.service.cloud.CloudStorageAdapter;
+import com.stealthsync.service.cloud.CloudCiphertextService;
+import com.stealthsync.service.cloud.EncryptedEnvelopeV2Inspector;
 import com.stealthsync.service.crypto.AesGcmService;
 import com.stealthsync.service.crypto.EncryptionKeyService;
 import com.stealthsync.service.crypto.EncryptionPolicyService;
 import com.stealthsync.service.crypto.UserVaultService;
+import com.stealthsync.service.security.SecurityAuditService;
+import com.stealthsync.service.security.DeviceIdentifierService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -31,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -39,13 +44,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/cloud-storage")
-@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
 /** Coordinates cloud-link management and provider-neutral encrypted cloud file operations. */
@@ -60,6 +65,13 @@ public class CloudStorageController {
     private final UserVaultService userVaultService;
     private final EncryptionPolicyService encryptionPolicyService;
     private final EncryptionKeyService encryptionKeyService;
+    private final SecurityAuditService securityAuditService;
+    private final DeviceIdentifierService deviceIdentifierService;
+    private final EncryptedEnvelopeV2Inspector envelopeInspector;
+    private final CloudCiphertextService cloudCiphertextService;
+
+    @Value("${stealthsync.frontend-url}")
+    private String frontendUrl;
 
     @GetMapping("/links")
     public ResponseEntity<List<CloudStorageLink>> getLinks() {
@@ -138,37 +150,46 @@ public class CloudStorageController {
     }
 
     @GetMapping({"/auth/{provider}", "/{provider}/auth"})
-    public ResponseEntity<Map<String, Object>> startOAuth(@PathVariable String provider) throws Exception {
+    public ResponseEntity<Map<String, Object>> startOAuth(
+            @PathVariable String provider,
+            @RequestHeader(DeviceIdentifierService.HEADER_NAME) String rawDeviceID) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        CloudStorageAdapter adapter = adapterFor(provider);
-        String authUrl = adapter.createAuthorizationUrl(ownerID);
-        boolean opened = SystemBrowserLauncher.open(URI.create(authUrl));
-        return ResponseEntity.ok(Map.<String, Object>of(
-                "mode", "oauth",
-                "provider", adapter.providerKey(),
-                "authUrl", authUrl,
-                "openedExternal", opened,
-                "configured", adapter.isConfigured(),
-                "message", adapter.providerLabel() + " authorization opened in your browser."
-        ));
+        try {
+            CloudStorageAdapter adapter = adapterFor(provider);
+            String authUrl = adapter.createAuthorizationUrl(
+                    ownerID,
+                    deviceIdentifierService.requireHash(rawDeviceID));
+            return ResponseEntity.ok(Map.<String, Object>of(
+                    "mode", "oauth",
+                    "provider", adapter.providerKey(),
+                    "authUrl", authUrl,
+                    "configured", adapter.isConfigured(),
+                    "message", "Continue on the official " + adapter.providerLabel() + " authorization page."
+            ));
+        } catch (Exception exception) {
+            securityAuditService.recordForUser(ownerID, "OAUTH_FAILED", normalizeProvider(provider));
+            throw exception;
+        }
     }
 
     @GetMapping({"/oauth/{provider}/callback", "/{provider}/callback"})
-    public ResponseEntity<String> completeCloudOAuth(
+    public ResponseEntity<Void> completeCloudOAuth(
             @PathVariable String provider,
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String error) throws Exception {
         CloudStorageAdapter adapter = adapterFor(provider);
         if (error != null) {
-            return htmlResponse(adapter.providerLabel() + " connection cancelled", adapter.providerLabel() + " returned: " + error);
+            return oauthRedirect(adapter.providerKey(), "cancelled", null);
         }
-        CloudStorageLink link = adapter.completeAuthorization(code, state);
-        DesktopWindowLauncher.focusPrimaryWindow();
-        return htmlResponse(
-                adapter.providerLabel() + " connected",
-                "Connected " + link.getAccountEmail() + ". You can close this browser tab and return to StealthSync."
-        );
+        try {
+            CloudStorageLink link = adapter.completeAuthorization(code, state);
+            securityAuditService.recordForUser(link.getOwnerID(), "OAUTH_CONNECTED", adapter.providerKey());
+            return oauthRedirect(adapter.providerKey(), "connected", link.getAccountEmail());
+        } catch (Exception exception) {
+            log.warn("{} OAuth callback rejected: {}", adapter.providerLabel(), exception.getMessage());
+            return oauthRedirect(adapter.providerKey(), "error", null);
+        }
     }
 
     @GetMapping("/{provider}/status")
@@ -185,7 +206,91 @@ public class CloudStorageController {
     @GetMapping("/{provider}/files")
     public ResponseEntity<List<CloudFileDTO>> providerFiles(@PathVariable String provider) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        return ResponseEntity.ok(adapterFor(provider).listEncryptedFilesForProvider(ownerID));
+        CloudStorageAdapter adapter = adapterFor(provider);
+        Map<String, CloudFileRecord> ownedV2 = new HashMap<>();
+        cloudCiphertextService.listOwned(ownerID, adapter.providerKey())
+                .forEach(record -> ownedV2.put(record.getRemoteFileID(), record));
+        List<CloudFileDTO> files = adapter.listEncryptedFilesForProvider(ownerID).stream()
+                .filter(file -> file.envelopeVersion() == null
+                        || file.envelopeVersion() != EncryptedEnvelopeV2Inspector.VERSION
+                        || ownedV2.containsKey(file.fileId()))
+                .map(file -> file.envelopeVersion() != null
+                        && file.envelopeVersion() == EncryptedEnvelopeV2Inspector.VERSION
+                        ? v2FileDTO(file, ownedV2.get(file.fileId()))
+                        : file)
+                .toList();
+        return ResponseEntity.ok(files);
+    }
+
+    @PostMapping(value = "/{provider}/files/upload-ciphertext", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CloudFileDTO> uploadCiphertext(
+            @PathVariable String provider,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam Map<String, String> requestParams) throws Exception {
+        Long ownerID = currentUserService.requireUserID();
+        String normalizedProvider = normalizeProvider(provider);
+        if (requestParams.containsKey("keyPassword")) {
+            throw new IllegalArgumentException("Key passwords must remain in the browser.");
+        }
+        String objectName = requireOpaqueObjectName(requestParams.get("objectName"));
+        long plaintextSize = requireNonNegativeLong(requestParams.get("plaintextSize"), "Plaintext size");
+        byte[] ciphertext = file.getBytes();
+        EncryptedEnvelopeV2Inspector.EnvelopeHeader header = envelopeInspector.inspect(ciphertext);
+        var key = encryptionKeyService.requireActiveClientKeyForEncryption(ownerID, header.keyFingerprint());
+        if (!key.getAlgorithm().equals(header.algorithm())) {
+            throw new IllegalArgumentException("Encrypted envelope algorithm does not match the selected key.");
+        }
+
+        CloudStorageAdapter adapter = adapterFor(provider);
+        requireActiveProvider(ownerID, adapter);
+        try {
+            CloudStorageAdapter.CiphertextUploadMetadata metadata =
+                    new CloudStorageAdapter.CiphertextUploadMetadata(
+                            objectName,
+                            header.algorithm(),
+                            header.keyFingerprint(),
+                            header.encryptedMetadata(),
+                            plaintextSize,
+                            header.version());
+            CloudFileDTO uploaded = adapter.uploadCiphertextForProvider(
+                    ownerID, metadata, new ByteArrayInputStream(ciphertext));
+            CloudFileRecord record = cloudCiphertextService.register(
+                    ownerID,
+                    adapter.providerKey(),
+                    uploaded.fileId(),
+                    uploaded.fileName(),
+                    header,
+                    plaintextSize,
+                    ciphertext.length);
+            securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_SUCCESS", normalizedProvider);
+            return ResponseEntity.ok(v2FileDTO(uploaded, record));
+        } catch (Exception exception) {
+            securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_FAILED", normalizedProvider);
+            throw exception;
+        }
+    }
+
+    @GetMapping("/{provider}/files/{fileId}/download-ciphertext")
+    public ResponseEntity<byte[]> downloadCiphertext(
+            @PathVariable String provider,
+            @PathVariable String fileId) throws Exception {
+        Long ownerID = currentUserService.requireUserID();
+        CloudStorageAdapter adapter = adapterFor(provider);
+        CloudFileRecord record = cloudCiphertextService.requireOwned(ownerID, adapter.providerKey(), fileId);
+        CloudStorageAdapter.DownloadedCiphertext downloaded =
+                adapter.downloadCiphertextForProvider(ownerID, fileId);
+        EncryptedEnvelopeV2Inspector.EnvelopeHeader header = envelopeInspector.inspect(downloaded.ciphertext());
+        if (!record.getKeyFingerprint().equals(header.keyFingerprint())
+                || !record.getAlgorithm().equals(header.algorithm())) {
+            throw new IllegalArgumentException("Cloud ciphertext metadata no longer matches its owner record.");
+        }
+        securityAuditService.recordForUser(ownerID, "FILE_DOWNLOAD_SUCCESS", adapter.providerKey());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(record.getObjectName(), StandardCharsets.UTF_8)
+                        .build().toString())
+                .contentType(MediaType.parseMediaType("application/vnd.stealthsync.encrypted"))
+                .body(downloaded.ciphertext());
     }
 
     @PostMapping(value = "/{provider}/files/encrypt-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -195,21 +300,30 @@ public class CloudStorageController {
             @RequestParam("keyID") Long keyID,
             @RequestParam("keyPassword") String keyPassword) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        CloudStorageAdapter adapter = adapterFor(provider);
-        requireActiveProvider(ownerID, adapter);
-        String originalName = safeFilename(file.getOriginalFilename(), "uploaded-file");
-        EncryptionKeyService.DerivedKeyMaterial keyMaterial =
-                encryptionKeyService.requireActiveKeyMaterialForEncryption(ownerID, keyID, keyPassword);
-        EncryptionPolicyService.EncryptionPolicy policy =
-                encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
-        try (InputStream encrypted = aesGcmService.encryptStream(
-                file.getInputStream(),
-                keyMaterial.passphrase(),
-                policy.keyLengthBits())) {
-            return ResponseEntity.ok(adapter.uploadEncryptedForProvider(
-                    ownerID,
-                    uploadMetadata(originalName, policy.algorithm(), keyMaterial),
-                    encrypted));
+        String normalizedProvider = normalizeProvider(provider);
+        try {
+            CloudStorageAdapter adapter = adapterFor(provider);
+            requireActiveProvider(ownerID, adapter);
+            String originalName = safeFilename(file.getOriginalFilename(), "uploaded-file");
+            EncryptionKeyService.DerivedKeyMaterial keyMaterial =
+                    encryptionKeyService.requireActiveKeyMaterialForEncryption(ownerID, keyID, keyPassword);
+            EncryptionPolicyService.EncryptionPolicy policy =
+                    encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
+            try (InputStream encrypted = aesGcmService.encryptStream(
+                    file.getInputStream(),
+                    keyMaterial.passphrase(),
+                    policy.keyLengthBits())) {
+                CloudFileDTO uploaded = adapter.uploadEncryptedForProvider(
+                        ownerID,
+                        uploadMetadata(originalName, policy.algorithm(), keyMaterial),
+                        encrypted);
+                securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_SUCCESS", normalizedProvider);
+                return ResponseEntity.ok(uploaded);
+            }
+        } catch (Exception exception) {
+            securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_FAILED", normalizedProvider);
+            auditWrongKeyPassword(ownerID, normalizedProvider, exception);
+            throw exception;
         }
     }
 
@@ -219,16 +333,23 @@ public class CloudStorageController {
             @PathVariable String fileId,
             @RequestHeader(value = "X-Key-Password", required = false) String keyPassword) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        CloudStorageAdapter.DownloadedCloudFile cloudFile =
-                adapterFor(provider).downloadEncryptedForProvider(ownerID, fileId);
-        InputStream decrypted = decryptCloudContent(ownerID, cloudFile, keyPassword);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
-                        .filename(cloudFile.originalName(), StandardCharsets.UTF_8)
-                        .build()
-                        .toString())
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(new InputStreamResource(decrypted));
+        String normalizedProvider = normalizeProvider(provider);
+        try {
+            CloudStorageAdapter.DownloadedCloudFile cloudFile =
+                    adapterFor(provider).downloadEncryptedForProvider(ownerID, fileId);
+            InputStream decrypted = decryptCloudContent(ownerID, cloudFile, keyPassword);
+            securityAuditService.recordForUser(ownerID, "FILE_DOWNLOAD_SUCCESS", normalizedProvider);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                            .filename(cloudFile.originalName(), StandardCharsets.UTF_8)
+                            .build()
+                            .toString())
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(new InputStreamResource(decrypted));
+        } catch (Exception exception) {
+            auditDecryptionFailure(ownerID, normalizedProvider, exception);
+            throw exception;
+        }
     }
 
     @DeleteMapping("/{provider}/files/{fileId}")
@@ -236,7 +357,12 @@ public class CloudStorageController {
             @PathVariable String provider,
             @PathVariable String fileId) throws Exception {
         Long ownerID = currentUserService.requireUserID();
-        adapterFor(provider).deleteEncryptedFileForProvider(ownerID, fileId);
+        String normalizedProvider = normalizeProvider(provider);
+        CloudStorageAdapter adapter = adapterFor(provider);
+        CloudFileRecord v2Record = cloudCiphertextService.requireOwned(ownerID, adapter.providerKey(), fileId);
+        adapter.deleteEncryptedFileForProvider(ownerID, fileId);
+        cloudCiphertextService.deleteOwned(ownerID, adapter.providerKey(), v2Record.getRemoteFileID());
+        securityAuditService.recordForUser(ownerID, "FILE_DELETE", normalizedProvider);
         return ResponseEntity.noContent().build();
     }
 
@@ -262,14 +388,17 @@ public class CloudStorageController {
             );
             Files.write(destination, plaintext);
 
+            securityAuditService.recordForUser(ownerID, "FILE_DOWNLOAD_SUCCESS", normalizeProvider(provider));
             return ResponseEntity.ok(Map.of(
                     "fileName", destination.getFileName().toString(),
                     "savedPath", destination.toAbsolutePath().toString(),
                     "size", plaintext.length
             ));
         } catch (IllegalArgumentException e) {
+            auditDecryptionFailure(ownerID, normalizeProvider(provider), e);
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
+            auditDecryptionFailure(ownerID, normalizeProvider(provider), e);
             log.error("Cloud decrypt-save failed for provider {}", provider, e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "message", "Unable to decrypt and save the cloud file."
@@ -311,15 +440,20 @@ public class CloudStorageController {
                     encryptionPolicyService.policyForAlgorithm(keyMaterial.key().getAlgorithm());
             try (InputStream input = Files.newInputStream(path);
                  InputStream encrypted = aesGcmService.encryptStream(input, keyMaterial.passphrase(), policy.keyLengthBits())) {
-                return ResponseEntity.ok(adapter.uploadEncryptedForProvider(
+                CloudFileDTO uploaded = adapter.uploadEncryptedForProvider(
                         ownerID,
                         uploadMetadata(safeFilename(path.getFileName().toString(), "uploaded-file"), policy.algorithm(), keyMaterial),
                         encrypted
-                ));
+                );
+                securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_SUCCESS", normalizeProvider(provider));
+                return ResponseEntity.ok(uploaded);
             }
         } catch (IllegalArgumentException e) {
+            securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_FAILED", normalizeProvider(provider));
+            auditWrongKeyPassword(ownerID, normalizeProvider(provider), e);
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
+            securityAuditService.recordForUser(ownerID, "FILE_UPLOAD_FAILED", normalizeProvider(provider));
             log.error("Encrypt-upload from local drag path failed", e);
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "The dropped local file could not be encrypted and uploaded."
@@ -413,6 +547,19 @@ public class CloudStorageController {
         return request == null ? null : request.get("keyPassword");
     }
 
+    private void auditDecryptionFailure(Long ownerID, String provider, Exception exception) {
+        securityAuditService.recordForUser(ownerID, "DECRYPTION_FAILED", provider);
+        auditWrongKeyPassword(ownerID, provider, exception);
+    }
+
+    private void auditWrongKeyPassword(Long ownerID, String provider, Exception exception) {
+        if (exception instanceof IllegalArgumentException
+                && exception.getMessage() != null
+                && exception.getMessage().toLowerCase(Locale.ROOT).contains("wrong key password")) {
+            securityAuditService.recordForUser(ownerID, "WRONG_KEY_PASSWORD", provider);
+        }
+    }
+
     private Long asLong(Object value) {
         if (value instanceof Number number) {
             return number.longValue();
@@ -427,17 +574,57 @@ public class CloudStorageController {
         return value instanceof String text ? text : null;
     }
 
-    private ResponseEntity<String> htmlResponse(String title, String message) {
-        String html = """
-                <!doctype html>
-                <html lang="en">
-                <head><meta charset="utf-8"><title>%s</title></head>
-                <body style="font-family:system-ui;padding:48px;max-width:680px;margin:auto">
-                  <h1>%s</h1><p>%s</p>
-                </body>
-                </html>
-                """.formatted(escapeHtml(title), escapeHtml(title), escapeHtml(message));
-        return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);
+    private ResponseEntity<Void> oauthRedirect(String provider, String status, String accountEmail) {
+        UriComponentsBuilder redirect = UriComponentsBuilder.fromUriString(frontendUrl)
+                .queryParam("oauth", status)
+                .queryParam("provider", provider);
+        if (accountEmail != null && !accountEmail.isBlank()) {
+            redirect.queryParam("account", accountEmail);
+        }
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(redirect.build().encode().toUri())
+                .build();
+    }
+
+    private CloudFileDTO v2FileDTO(CloudFileDTO providerFile, CloudFileRecord record) {
+        if (record == null) {
+            throw new IllegalArgumentException("Encrypted cloud file ownership record is missing.");
+        }
+        return new CloudFileDTO(
+                providerFile.provider(),
+                providerFile.fileId(),
+                providerFile.fileName(),
+                null,
+                record.getCiphertextSize(),
+                providerFile.createdAt() == null ? record.getCreatedAt() : providerFile.createdAt(),
+                providerFile.modifiedAt() == null ? record.getUpdatedAt() : providerFile.modifiedAt(),
+                record.getAlgorithm(),
+                null,
+                null,
+                record.getKeyFingerprint(),
+                record.getEnvelopeVersion(),
+                record.getEncryptedMetadata()
+        );
+    }
+
+    private String requireOpaqueObjectName(String objectName) {
+        if (objectName == null
+                || !objectName.matches("(?i)stealthsync-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.ssenc")) {
+            throw new IllegalArgumentException("Cloud object name must be an opaque StealthSync UUID.");
+        }
+        return objectName.toLowerCase(Locale.ROOT);
+    }
+
+    private long requireNonNegativeLong(String value, String fieldName) {
+        try {
+            long parsed = Long.parseLong(value);
+            if (parsed < 0) {
+                throw new NumberFormatException();
+            }
+            return parsed;
+        } catch (Exception exception) {
+            throw new IllegalArgumentException(fieldName + " is invalid.");
+        }
     }
 
     private String safeFilename(String filename, String fallback) {
@@ -481,12 +668,4 @@ public class CloudStorageController {
         return file;
     }
 
-    private String escapeHtml(String value) {
-        return value == null ? "" : value
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#39;");
-    }
 }

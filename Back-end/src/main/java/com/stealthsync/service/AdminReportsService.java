@@ -96,15 +96,29 @@ public class AdminReportsService {
         return logs().stream().filter(anomalyDetectorService::isSuspicious).toList();
     }
 
+    public List<SystemLog> logs(String riskLevel, boolean flaggedOnly) {
+        String normalizedLevel = riskLevel == null ? "" : riskLevel.trim().toUpperCase(Locale.ROOT);
+        return (flaggedOnly ? flaggedLogs() : logs()).stream()
+                .filter(log -> normalizedLevel.isBlank() || normalizedLevel.equalsIgnoreCase(log.getRiskLevel()))
+                .toList();
+    }
+
     public String logsCsv() {
-        StringBuilder csv = new StringBuilder("Log ID,Username,Action,IP Address,Timestamp,Suspicious,Risk Reason\n");
+        StringBuilder csv = new StringBuilder(
+                "Log ID,User ID,Username,Action,IP Address,Timestamp,Suspicious,Risk Score,Risk Level,Risk Reason,Detector Version,Device Hash,Provider\n");
         logs().forEach(log -> csv.append(log.getLogId()).append(',')
+                .append(log.getUserID() == null ? "" : log.getUserID()).append(',')
                 .append(escape(log.getUsername())).append(',')
                 .append(escape(log.getAction())).append(',')
                 .append(escape(log.getIpAddress())).append(',')
                 .append(log.getTimestamp()).append(',')
                 .append(log.isSuspicious()).append(',')
-                .append(escape(log.getAiRiskReason())).append('\n'));
+                .append(log.getRiskScore() == null ? 0 : log.getRiskScore()).append(',')
+                .append(escape(log.getRiskLevel())).append(',')
+                .append(escape(log.getAiRiskReason())).append(',')
+                .append(escape(log.getDetectorVersion())).append(',')
+                .append(escape(log.getDeviceIdentifierHash())).append(',')
+                .append(escape(log.getProvider())).append('\n'));
         return csv.toString();
     }
 

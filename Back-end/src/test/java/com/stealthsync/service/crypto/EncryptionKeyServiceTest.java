@@ -1,8 +1,6 @@
 package com.stealthsync.service.crypto;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stealthsync.model.dto.TrustedKeyPackage;
-import com.stealthsync.model.dto.TrustedKeyPackageImportResponse;
 import com.stealthsync.model.entity.EncryptionKeyRecord;
 import com.stealthsync.model.entity.Plan;
 import com.stealthsync.model.entity.Subscription;
@@ -47,8 +45,6 @@ class EncryptionKeyServiceTest {
 
     private Long ownerID;
     private Long importOwnerID;
-    private Long importFingerprintOwnerID;
-    private Long importExistingOwnerID;
     private Long freeOwnerID;
     private Long downgradedOwnerID;
 
@@ -85,8 +81,6 @@ class EncryptionKeyServiceTest {
         ));
         ownerID = seedOwner("key-owner", premiumPlan).getUserID();
         importOwnerID = seedOwner("import-owner", premiumPlan).getUserID();
-        importFingerprintOwnerID = seedOwner("import-fingerprint-owner", premiumPlan).getUserID();
-        importExistingOwnerID = seedOwner("import-existing-owner", premiumPlan).getUserID();
         downgradedOwnerID = seedOwner("downgraded-owner", premiumPlan).getUserID();
         freeOwnerID = seedOwner("free-key-owner", null).getUserID();
     }
@@ -111,6 +105,53 @@ class EncryptionKeyServiceTest {
         EncryptionKeyRecord key = encryptionKeyService.createKey(ownerID, "Premium tier key", "AES-256-GCM", PASSWORD);
 
         assertEquals("AES-256-GCM", key.getAlgorithm());
+    }
+
+    @Test
+    void browserDerivedMetadataPreservesFreeAndPremiumTierPolicy() {
+        EncryptionKeyRecord freeKey = encryptionKeyService.createClientDerivedKey(
+                freeOwnerID, "Browser free key", "AES-128",
+                "AAAAAAAAAAAAAAAAAAAAAA", "ABCDEFGHIJKLMNOP",
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                EncryptionKeyService.KEY_SCHEME_V2,
+                EncryptionKeyService.KDF_ITERATIONS_V2,
+                EncryptionKeyService.KDF_VERSION_V2);
+        EncryptionKeyRecord premiumKey = encryptionKeyService.createClientDerivedKey(
+                ownerID, "Browser premium key", "AES-256-GCM",
+                "AAAAAAAAAAAAAAAAAAAAAA", "QRSTUVWXYZabcdef",
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                EncryptionKeyService.KEY_SCHEME_V2,
+                EncryptionKeyService.KDF_ITERATIONS_V2,
+                EncryptionKeyService.KDF_VERSION_V2);
+
+        assertEquals("AES-128", freeKey.getAlgorithm());
+        assertEquals("AES-256-GCM", premiumKey.getAlgorithm());
+        assertEquals(310_000, premiumKey.getKdfIterations());
+        assertEquals(2, premiumKey.getKdfVersion());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> encryptionKeyService.createClientDerivedKey(
+                        freeOwnerID, "Blocked browser key", "AES-256-GCM",
+                        "AAAAAAAAAAAAAAAAAAAAAA", "ghijklmnopQRSTUV",
+                        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                        EncryptionKeyService.KEY_SCHEME_V2,
+                        EncryptionKeyService.KDF_ITERATIONS_V2,
+                        EncryptionKeyService.KDF_VERSION_V2));
+        assertEquals("AES-256-GCM requires an active premium subscription.", error.getMessage());
+    }
+
+    @Test
+    void browserDerivedKeyRejectsChangedKdfParameters() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> encryptionKeyService.createClientDerivedKey(
+                        ownerID, "Weak KDF key", "AES-256-GCM",
+                        "AAAAAAAAAAAAAAAAAAAAAA", "abcdefghijklmnop",
+                        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                        EncryptionKeyService.KEY_SCHEME_V2,
+                        1_000,
+                        EncryptionKeyService.KDF_VERSION_V2));
+
+        assertEquals("Unsupported key-derivation parameters.", error.getMessage());
     }
 
     @Test
@@ -297,86 +338,16 @@ class EncryptionKeyServiceTest {
     }
 
     @Test
-    void serializedKeyDoesNotExposeSaltOrPasswordVerifier() throws Exception {
+    void serializedKeyExposesOnlyDerivationMetadataAndNeverPasswordOrRawKey() throws Exception {
         EncryptionKeyRecord key = encryptionKeyService.createKey(ownerID, "Serialized key", "AES-256-GCM", PASSWORD);
 
         String json = objectMapper.writeValueAsString(key);
 
-        assertFalse(json.contains("salt"));
-        assertFalse(json.contains("passwordVerifier"));
-        assertFalse(json.contains(key.getSalt()));
-        assertFalse(json.contains(key.getPasswordVerifier()));
-    }
-
-    @Test
-    void trustedDevicePackageDoesNotExposeVerifierOrRawKeyMaterial() throws Exception {
-        EncryptionKeyRecord key = encryptionKeyService.createKey(ownerID, "Transfer key", "AES-256-GCM", PASSWORD);
-
-        TrustedKeyPackage keyPackage = encryptionKeyService.exportTrustedKeyPackage(ownerID, key.getKeyID());
-        String json = objectMapper.writeValueAsString(keyPackage);
-
-        assertEquals("trusted-device-key-package-v1", keyPackage.version());
-        assertEquals(key.getFingerprint(), keyPackage.fingerprint());
-        assertEquals(key.getSalt(), keyPackage.salt());
-        assertFalse(json.contains("passwordVerifier"));
-        assertFalse(json.contains(key.getPasswordVerifier()));
+        assertTrue(json.contains("salt"));
+        assertTrue(json.contains("passwordVerifier"));
         assertFalse(json.contains(PASSWORD));
-    }
-
-    @Test
-    void importedTrustedDevicePackageDerivesSamePassphraseWithSamePassword() {
-        EncryptionKeyRecord sourceKey = encryptionKeyService.createKey(ownerID, "Demo transfer key", "AES-256-GCM", PASSWORD);
-        TrustedKeyPackage keyPackage = encryptionKeyService.exportTrustedKeyPackage(ownerID, sourceKey.getKeyID());
-
-        TrustedKeyPackageImportResponse response = encryptionKeyService.importTrustedKeyPackage(importOwnerID, keyPackage);
-
-        assertEquals("imported", response.status());
-        assertEquals(sourceKey.getFingerprint(), response.key().getFingerprint());
-        assertEquals(sourceKey.getSalt(), response.key().getSalt());
-        assertEquals(null, response.key().getPasswordVerifier());
-
-        String sourcePassphrase = encryptionKeyService
-                .requireActiveKeyMaterial(ownerID, sourceKey.getKeyID(), PASSWORD)
-                .passphrase();
-        String importedPassphrase = encryptionKeyService
-                .requireActiveKeyMaterial(importOwnerID, response.key().getKeyID(), PASSWORD)
-                .passphrase();
-
-        assertEquals(sourcePassphrase, importedPassphrase);
-        assertThrows(IllegalArgumentException.class, () -> encryptionKeyService
-                .requireActiveKeyMaterial(importOwnerID, response.key().getKeyID(), "Wrong@12345"));
-    }
-
-    @Test
-    void importedTrustedDevicePackageCanResolveCloudFileByFingerprintWhenOriginalKeyIdDiffers() {
-        EncryptionKeyRecord sourceKey = encryptionKeyService.createKey(ownerID, "Portable transfer key", "AES-256-GCM", PASSWORD);
-        TrustedKeyPackage keyPackage = encryptionKeyService.exportTrustedKeyPackage(ownerID, sourceKey.getKeyID());
-        TrustedKeyPackageImportResponse response = encryptionKeyService.importTrustedKeyPackage(importFingerprintOwnerID, keyPackage);
-
-        String sourcePassphrase = encryptionKeyService
-                .requireActiveKeyMaterial(ownerID, sourceKey.getKeyID(), PASSWORD)
-                .passphrase();
-        String importedPassphrase = encryptionKeyService
-                .requireActiveKeyMaterial(importFingerprintOwnerID, sourceKey.getKeyID(), sourceKey.getFingerprint(), PASSWORD)
-                .passphrase();
-
-        assertNotEquals(sourceKey.getKeyID(), response.key().getKeyID());
-        assertEquals(sourcePassphrase, importedPassphrase);
-        assertThrows(IllegalArgumentException.class, () -> encryptionKeyService
-                .requireActiveKeyMaterial(importFingerprintOwnerID, sourceKey.getKeyID(), sourceKey.getFingerprint(), "Wrong@12345"));
-    }
-
-    @Test
-    void importingSameTrustedDevicePackageReturnsExistingKey() {
-        EncryptionKeyRecord sourceKey = encryptionKeyService.createKey(ownerID, "Existing transfer key", "AES-256-GCM", PASSWORD);
-        TrustedKeyPackage keyPackage = encryptionKeyService.exportTrustedKeyPackage(ownerID, sourceKey.getKeyID());
-
-        TrustedKeyPackageImportResponse first = encryptionKeyService.importTrustedKeyPackage(importExistingOwnerID, keyPackage);
-        TrustedKeyPackageImportResponse second = encryptionKeyService.importTrustedKeyPackage(importExistingOwnerID, keyPackage);
-
-        assertEquals("imported", first.status());
-        assertEquals("existing", second.status());
-        assertEquals(first.key().getKeyID(), second.key().getKeyID());
+        assertFalse(json.contains("keyPassword"));
+        assertFalse(json.contains("rawKey"));
     }
 
     private UserAccount seedOwner(String username, Plan premiumPlan) {

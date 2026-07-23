@@ -5,8 +5,8 @@ import CustomerDecryptFile from "./CustomerDecryptFilePage"
 import CustomerManageCloudAccLinks from "./CustomerManageCloudAccLinksPage"
 import CustomerViewAccount from "./CustomerViewAccountPage"
 import CustomerManageEncryptionKeysPage from "./CustomerManageEncryptionKeysPage"
-import CustomerManagePTokens from "./CustomerManagePTokensPage"
 import CustomerManageRecPhrase from "./CustomerManageRecPhrasePage"
+import CustomerDevicesPage from "./CustomerDevicesPage"
 import CustomerFAQPage from "./CustomerFAQPage"
 import { apiFetch } from "../lib/api"
 
@@ -16,7 +16,7 @@ type CustomerDashboardProps = {
     onUserUpdate: (updatedUser: UserAccount) => void
 }
 
-type CustomerTab = "encrypt-file" | "decrypt-file" | "encryption-keys" | "cloud-storage" | "recovery-phrase" | "physical-tokens" | "faq" | "view-account"
+type CustomerTab = "encrypt-file" | "decrypt-file" | "encryption-keys" | "cloud-storage" | "recovery-phrase" | "devices" | "faq" | "view-account"
 
 const pageTitles: Record<CustomerTab, string> = {
     "encrypt-file": "Encrypt File",
@@ -24,7 +24,7 @@ const pageTitles: Record<CustomerTab, string> = {
     "encryption-keys": "Manage Encryption Keys",
     "cloud-storage": "Cloud Storage Links",
     "recovery-phrase": "Recovery Phrase",
-    "physical-tokens": "Physical Tokens",
+    "devices": "Devices",
     "faq": "Frequently Asked Questions",
     "view-account": "Manage Account"
 }
@@ -68,11 +68,11 @@ const tabIcons: Record<CustomerTab | "file-ops", (active: boolean) => ReactNode>
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
         </svg>
     ),
-    "physical-tokens": active => (
+    "devices": active => (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? "#06b6d4" : "#a1a1aa"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="7.5" cy="15.5" r="5.5"></circle>
-            <path d="M21 2l-9.6 9.6"></path>
-            <path d="M15.5 7.5l3 3L22 7"></path>
+            <rect x="3" y="4" width="18" height="14" rx="2"></rect>
+            <path d="M8 22h8"></path>
+            <path d="M12 18v4"></path>
         </svg>
     ),
     "faq": active => (
@@ -91,7 +91,8 @@ const tabIcons: Record<CustomerTab | "file-ops", (active: boolean) => ReactNode>
 }
 
 function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardProps) {
-    const [activeTab, setActiveTab] = useState<CustomerTab>("encrypt-file")
+    const [activeTab, setActiveTab] = useState<CustomerTab>(() =>
+        new URLSearchParams(window.location.search).has("oauth") ? "cloud-storage" : "encrypt-file")
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
     const [fileOpsExpanded, setFileOpsExpanded] = useState(true)
     const initials = user.username.slice(0, 2).toUpperCase()
@@ -103,9 +104,9 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
     }, [activeTab])
 
     useEffect(() => {
-        // Recovery phrase and physical token pages are premium-only modules; if a
-        // downgrade happens while the tab is open, return the user to account details.
-        if (!user.isSubscribed && (activeTab === "recovery-phrase" || activeTab === "physical-tokens")) {
+        // Recovery phrase remains premium-only; device history stays visible so
+        // free users can see their primary device and the upgrade entitlement.
+        if (!user.isSubscribed && activeTab === "recovery-phrase") {
             setActiveTab("view-account")
         }
     }, [activeTab, user.isSubscribed])
@@ -114,7 +115,7 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
     // account view only changes how the action is presented.
     const handlePurchasePlan = async (plan: Plan) => {
         const request: PurchasePlanRequest = { planID: plan.planID }
-        const response = await apiFetch("http://localhost:8080/subscriptions/purchase", {
+        const response = await apiFetch("/subscriptions/purchase", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
@@ -145,8 +146,8 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
                 return <CustomerManageCloudAccLinks user={user} />
             case "recovery-phrase":
                 return <CustomerManageRecPhrase user={user} />
-            case "physical-tokens":
-                return <CustomerManagePTokens user={user} />
+            case "devices":
+                return <CustomerDevicesPage user={user} />
             case "faq":
                 return <CustomerFAQPage />
             case "view-account":
@@ -228,27 +229,25 @@ function CustomerDashboard({ user, onLogout, onUserUpdate }: CustomerDashboardPr
                             Cloud Storage Links
                         </button>
 
-                        {/* Premium-only security modules are split from the old Security Center page. */}
-                        {user.isSubscribed && (
-                            <>
-                                <button
-                                    className={`sidebar-nav-item ${activeTab === "recovery-phrase" ? "active" : ""}`}
-                                    type="button"
-                                    onClick={() => setActiveTab("recovery-phrase")}
-                                >
-                                    <span className="sidebar-nav-icon">{tabIcons["recovery-phrase"](activeTab === "recovery-phrase")}</span>
-                                    Recovery Phrase
-                                </button>
+                        <button
+                            className={`sidebar-nav-item ${activeTab === "devices" ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setActiveTab("devices")}
+                        >
+                            <span className="sidebar-nav-icon">{tabIcons.devices(activeTab === "devices")}</span>
+                            Devices
+                        </button>
 
-                                <button
-                                    className={`sidebar-nav-item ${activeTab === "physical-tokens" ? "active" : ""}`}
-                                    type="button"
-                                    onClick={() => setActiveTab("physical-tokens")}
-                                >
-                                    <span className="sidebar-nav-icon">{tabIcons["physical-tokens"](activeTab === "physical-tokens")}</span>
-                                    Physical Tokens
-                                </button>
-                            </>
+                        {/* Account recovery is available only with an active premium plan. */}
+                        {user.isSubscribed && (
+                            <button
+                                className={`sidebar-nav-item ${activeTab === "recovery-phrase" ? "active" : ""}`}
+                                type="button"
+                                onClick={() => setActiveTab("recovery-phrase")}
+                            >
+                                <span className="sidebar-nav-icon">{tabIcons["recovery-phrase"](activeTab === "recovery-phrase")}</span>
+                                Recovery Phrase
+                            </button>
                         )}
                     </nav>
                 </div>

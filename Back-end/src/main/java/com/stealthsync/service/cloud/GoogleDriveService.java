@@ -8,6 +8,7 @@ import com.stealthsync.model.dto.GoogleDriveFileDTO;
 import com.stealthsync.model.entity.CloudStorageLink;
 import com.stealthsync.model.entity.GoogleDriveCredential;
 import com.stealthsync.repository.GoogleDriveCredentialRepository;
+import com.stealthsync.security.OAuthStateService;
 import com.stealthsync.service.crypto.AesGcmService;
 import com.stealthsync.service.crypto.UserVaultService;
 import com.stealthsync.service.AppDataService;
@@ -35,7 +36,6 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -55,7 +55,6 @@ public class GoogleDriveService implements CloudStorageAdapter {
     // accessible to this app, so broader full-Drive authorization is unnecessary.
     private static final String DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
     private static final String USER_EMAIL_SCOPE = "openid https://www.googleapis.com/auth/userinfo.email";
-    private static final Duration STATE_LIFETIME = Duration.ofMinutes(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final String METADATA_DESCRIPTION_PREFIX = "stealthsync-metadata:";
@@ -66,11 +65,11 @@ public class GoogleDriveService implements CloudStorageAdapter {
     private final UserVaultService userVaultService;
     private final AesGcmService aesGcmService;
     private final ObjectMapper objectMapper;
+    private final OAuthStateService oauthStateService;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
-    private final Map<String, PendingAuthorization> pendingAuthorizations = new ConcurrentHashMap<>();
 
     @Value("${stealthsync.google-drive.client-id:}")
     private String clientId;
@@ -121,15 +120,13 @@ public class GoogleDriveService implements CloudStorageAdapter {
 
     @Override
     /** Creates a short-lived state token that binds the OAuth callback to one local customer. */
-    public String createAuthorizationUrl(Long ownerID) {
+    public String createAuthorizationUrl(Long ownerID, String deviceIdentifierHash) {
         requireConfigured();
         if (ownerID == null) {
             throw new IllegalArgumentException("A user is required to link Google Drive.");
         }
 
-        pendingAuthorizations.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
-        String state = newState();
-        pendingAuthorizations.put(state, new PendingAuthorization(ownerID, Instant.now().plus(STATE_LIFETIME)));
+        String state = oauthStateService.issue(ownerID, providerKey(), deviceIdentifierHash);
 
         String authorizationUrl = AUTHORIZATION_ENDPOINT
                 + "?client_id=" + encode(clientId)
@@ -152,13 +149,7 @@ public class GoogleDriveService implements CloudStorageAdapter {
     /** Exchanges Google's callback code, records the account email, and stores encrypted tokens. */
     public CloudStorageLink completeAuthorization(String code, String state) throws IOException, InterruptedException {
         requireConfigured();
-        if (isBlank(state)) {
-            throw new IllegalArgumentException("Google Drive authorization did not return a state value.");
-        }
-        PendingAuthorization pending = pendingAuthorizations.remove(state);
-        if (pending == null || pending.expiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("Google Drive authorization expired or has an invalid state value.");
-        }
+        OAuthStateService.OAuthState oauthState = oauthStateService.consume(state, providerKey());
         if (isBlank(code)) {
             throw new IllegalArgumentException("Google Drive did not return an authorization code.");
         }
@@ -174,7 +165,7 @@ public class GoogleDriveService implements CloudStorageAdapter {
         String returnedRefreshToken = textOrNull(tokenResponse, "refresh_token");
         long expiresIn = tokenResponse.path("expires_in").asLong(3600);
 
-        GoogleDriveCredential credential = credentialRepository.findByOwnerID(pending.ownerID())
+        GoogleDriveCredential credential = credentialRepository.findByOwnerID(oauthState.ownerID())
                 .orElseGet(GoogleDriveCredential::new);
         String refreshToken = isBlank(returnedRefreshToken)
                 ? decryptToken(credential, credential.getRefreshToken())
@@ -184,7 +175,7 @@ public class GoogleDriveService implements CloudStorageAdapter {
         }
 
         String accountEmail = fetchAccountEmail(accessToken);
-        credential.setOwnerID(pending.ownerID());
+        credential.setOwnerID(oauthState.ownerID());
         credential.setAccountEmail(accountEmail);
         if (isBlank(credential.getTokenSalt())) {
             credential.setTokenSalt(KeyGenerators.string().generateKey());
@@ -194,13 +185,15 @@ public class GoogleDriveService implements CloudStorageAdapter {
         credential.setExpiresAt(Instant.now().plusSeconds(expiresIn));
         credentialRepository.save(credential);
 
-        return dataStore.linkCloudProvider("google_drive", pending.ownerID(), accountEmail);
+        return dataStore.linkCloudProvider(providerKey(), oauthState.ownerID(), accountEmail);
     }
 
     @Override
     public List<CloudFileDTO> listEncryptedFilesForProvider(Long ownerID) throws IOException, InterruptedException {
-        return listEncryptedFiles(ownerID).stream()
-                .map(this::toCloudFileDTO)
+        JsonNode response = listFilesResponse(ownerID);
+        return response.path("files").findValuesAsText("id").stream()
+                .map(id -> findFileNode(response.path("files"), id))
+                .map(file -> toProviderFileDTO(ownerID, file))
                 .toList();
     }
 
@@ -233,11 +226,71 @@ public class GoogleDriveService implements CloudStorageAdapter {
     }
 
     @Override
+    public CloudFileDTO uploadCiphertextForProvider(
+            Long ownerID,
+            CiphertextUploadMetadata metadata,
+            InputStream ciphertext) throws IOException, InterruptedException {
+        byte[] ciphertextBytes = ciphertext.readAllBytes();
+        String boundary = "stealthsync-" + newState();
+        ObjectNode properties = objectMapper.createObjectNode()
+                .put("stealthsync", "encrypted")
+                .put("metadataVersion", Integer.toString(metadata.envelopeVersion()))
+                .put("encMethod", metadata.algorithm())
+                .put("keyFingerprint", metadata.keyFingerprint());
+        ObjectNode fileMetadata = objectMapper.createObjectNode()
+                .put("name", metadata.objectName())
+                .put("mimeType", "application/vnd.stealthsync.encrypted");
+        fileMetadata.set("appProperties", properties);
+        if (!isBlank(folderId)) {
+            fileMetadata.putArray("parents").add(folderId);
+        }
+
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        writeUtf8(body, "--" + boundary + "\r\n");
+        writeUtf8(body, "Content-Type: application/json; charset=UTF-8\r\n\r\n");
+        writeUtf8(body, objectMapper.writeValueAsString(fileMetadata) + "\r\n");
+        writeUtf8(body, "--" + boundary + "\r\n");
+        writeUtf8(body, "Content-Type: application/vnd.stealthsync.encrypted\r\n\r\n");
+        body.write(ciphertextBytes);
+        writeUtf8(body, "\r\n--" + boundary + "--\r\n");
+
+        JsonNode uploaded = sendJson(ownerID, HttpRequest.newBuilder(URI.create(DRIVE_UPLOAD_ENDPOINT
+                        + "?uploadType=multipart&fields="
+                        + encode("id,name,size,createdTime,modifiedTime,description,appProperties")))
+                .header("Content-Type", "multipart/related; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())));
+        return v2FileDTO(uploaded, metadata.encryptedMetadata());
+    }
+
+    @Override
+    public DownloadedCiphertext downloadCiphertextForProvider(Long ownerID, String fileId)
+            throws IOException, InterruptedException {
+        JsonNode metadata = fileMetadata(ownerID, fileId);
+        if (metadata.path("appProperties").path("metadataVersion").asInt(0) != 2) {
+            throw new IllegalArgumentException("The selected cloud object is not a V2 encrypted file.");
+        }
+        HttpResponse<byte[]> response = send(ownerID,
+                HttpRequest.newBuilder(URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId) + "?alt=media")).GET(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        return new DownloadedCiphertext(metadata.path("name").asText("encrypted.ssenc"), response.body());
+    }
+
+    @Override
     public void deleteEncryptedFileForProvider(Long ownerID, String fileId) throws IOException, InterruptedException {
         deleteEncryptedFile(ownerID, fileId);
     }
 
     public List<GoogleDriveFileDTO> listEncryptedFiles(Long ownerID) throws IOException, InterruptedException {
+        JsonNode response = listFilesResponse(ownerID);
+
+        return response.path("files").findValuesAsText("id").stream()
+                .map(id -> findFileNode(response.path("files"), id))
+                .filter(file -> file.path("appProperties").path("metadataVersion").asInt(1) != 2)
+                .map(file -> toFileDTO(ownerID, file))
+                .toList();
+    }
+
+    private JsonNode listFilesResponse(Long ownerID) throws IOException, InterruptedException {
         String query = "trashed = false and appProperties has { key='stealthsync' and value='encrypted' }";
         if (!isBlank(folderId)) {
             // Drive query syntax requires a quoted parent folder ID.
@@ -248,12 +301,7 @@ public class GoogleDriveService implements CloudStorageAdapter {
                 + "&orderBy=modifiedTime%20desc"
                 + "&pageSize=100"
                 + "&fields=" + encode("files(id,name,size,createdTime,modifiedTime,description,appProperties)"));
-        JsonNode response = sendJson(ownerID, HttpRequest.newBuilder(uri).GET());
-
-        return response.path("files").findValuesAsText("id").stream()
-                .map(id -> findFileNode(response.path("files"), id))
-                .map(file -> toFileDTO(ownerID, file))
-                .toList();
+        return sendJson(ownerID, HttpRequest.newBuilder(uri).GET());
     }
 
     public GoogleDriveFileDTO uploadEncrypted(Long ownerID, String originalName, String encMethod, Long keyID, String keyName, String keyFingerprint, InputStream encryptedContent)
@@ -338,6 +386,32 @@ public class GoogleDriveService implements CloudStorageAdapter {
         );
     }
 
+    private CloudFileDTO toProviderFileDTO(Long ownerID, JsonNode file) {
+        if (file.path("appProperties").path("metadataVersion").asInt(1) == 2) {
+            return v2FileDTO(file, null);
+        }
+        return toCloudFileDTO(toFileDTO(ownerID, file));
+    }
+
+    private CloudFileDTO v2FileDTO(JsonNode file, String encryptedMetadata) {
+        JsonNode properties = file.path("appProperties");
+        return new CloudFileDTO(
+                providerKey(),
+                file.path("id").asText(),
+                file.path("name").asText("encrypted.ssenc"),
+                null,
+                file.path("size").asLong(0),
+                parseInstant(file.path("createdTime").asText(null)),
+                parseInstant(file.path("modifiedTime").asText(null)),
+                properties.path("encMethod").asText(""),
+                null,
+                null,
+                properties.path("keyFingerprint").asText(""),
+                2,
+                encryptedMetadata
+        );
+    }
+
     private JsonNode fileMetadata(Long ownerID, String fileId) throws IOException, InterruptedException {
         URI uri = URI.create(DRIVE_FILES_ENDPOINT + "/" + encodePath(fileId)
                 + "?fields=" + encode("id,name,size,createdTime,modifiedTime,description,appProperties"));
@@ -395,7 +469,11 @@ public class GoogleDriveService implements CloudStorageAdapter {
                 "grant_type", "refresh_token"
         ));
         String accessToken = requiredText(response, "access_token");
+        String rotatedRefreshToken = textOrNull(response, "refresh_token");
         credential.setAccessToken(encryptToken(credential, accessToken));
+        if (!isBlank(rotatedRefreshToken)) {
+            credential.setRefreshToken(encryptToken(credential, rotatedRefreshToken));
+        }
         credential.setExpiresAt(Instant.now().plusSeconds(response.path("expires_in").asLong(3600)));
         credentialRepository.save(credential);
         return accessToken;
@@ -649,9 +727,6 @@ public class GoogleDriveService implements CloudStorageAdapter {
             return encryptedToken;
         }
         return Encryptors.text(clientSecret, credential.getTokenSalt()).decrypt(encryptedToken);
-    }
-
-    private record PendingAuthorization(Long ownerID, Instant expiresAt) {
     }
 
     private record DriveFileMetadata(String originalName, String encMethod, Long keyID, String keyName, String keyFingerprint) {

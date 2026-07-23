@@ -53,8 +53,8 @@ class StaticFrontendSmokeTest {
         assertTrue(script.contains("Activate Cloud Account?"));
         assertTrue(script.contains("Deactivate Cloud Account?"));
         assertTrue(script.contains("Yes, Reset Password"));
-        assertTrue(script.contains("Physical Token Registration Prototype"));
-        assertTrue(script.contains("Remove Physical Token Registration"));
+        assertTrue(script.contains("Upgrade to Premium to use StealthSync on multiple devices."));
+        assertTrue(script.contains("All risk levels"));
     }
 
     private String requiredMatch(Pattern pattern, String value) {

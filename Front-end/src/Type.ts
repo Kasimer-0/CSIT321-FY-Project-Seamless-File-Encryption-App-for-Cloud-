@@ -45,36 +45,13 @@ export type EncryptionKeyRecord = {
     algorithm: string
     status: "active" | "inactive" | "retired"
     fingerprint: string
+    salt: string | null
+    passwordVerifier: string | null
     keyScheme: string | null
+    kdfIterations: number | null
+    kdfVersion: number | null
     createdAt: Date
     updatedAt: Date
-}
-
-export type TrustedKeyPackage = {
-    version: string
-    exportedAt: string
-    keyID: number
-    keyName: string
-    algorithm: string
-    fingerprint: string
-    salt: string
-    keyScheme: string
-}
-
-export type TrustedKeyPackageImportResponse = {
-    status: "existing" | "imported"
-    key: EncryptionKeyRecord
-}
-
-export type PhysicalTokenRecord = {
-    tokenID: number
-    ownerID: number
-    encryptionKeyID: number | null
-    tokenName: string
-    serialNumber: string
-    status: "active" | "inactive"
-    registeredAt: Date
-    lastUsedAt: Date | null
 }
 
 export type CloudStorageUsage = {
@@ -108,12 +85,31 @@ export type FinancialReport = {
 
 export type SystemLog = {
     logId: number
+    userID: number | null
     username: string
     action: string
     ipAddress: string
     timestamp: string
     isSuspicious: boolean
     aiRiskReason: string
+    riskScore: number
+    riskLevel: "LOW" | "MEDIUM" | "HIGH"
+    detectorVersion: string
+    provider: string | null
+    deviceIdentifierHash: string | null
+}
+
+export type UserDevice = {
+    deviceID: number
+    ownerID: number
+    deviceName: string
+    platform: string
+    firstSeenAt: string
+    lastSeenAt: string
+    primaryDevice: boolean
+    active: boolean
+    revokedAt: string | null
+    currentDevice: boolean
 }
 
 export type UserAccountDTO = {
@@ -155,7 +151,7 @@ export type GoogleDriveFile = {
     provider?: string
     fileId: string
     fileName: string
-    originalName: string
+    originalName: string | null
     fileSize: number
     createdAt: string | null
     modifiedAt: string | null
@@ -163,4 +159,6 @@ export type GoogleDriveFile = {
     keyID: number | null
     keyName: string | null
     keyFingerprint: string | null
+    envelopeVersion: number | null
+    encryptedMetadata: string | null
 }

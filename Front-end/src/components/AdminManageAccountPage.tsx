@@ -20,7 +20,7 @@ function AdminManageAccount() {
             if (search) params.append("search", search)
 
             const response = await apiFetch(
-                `http://localhost:8080/users?${params.toString()}`,
+                `/users?${params.toString()}`,
                 { credentials: "include" }
             )
 
@@ -62,7 +62,7 @@ function AdminManageAccount() {
 
         try {
             const response = await apiFetch(
-                `http://localhost:8080/users/${selectedUser.userID}/suspend`,
+                `/users/${selectedUser.userID}/suspend`,
                 {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },

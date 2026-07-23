@@ -1,4 +1,4 @@
-import { apiFetch, setAuthToken } from "../lib/api"
+import { apiFetch, getDeviceName, setAuthToken } from "../lib/api"
 import { useRef, useState, type KeyboardEvent } from "react"
 import type { UserAccount } from "../Type"
 
@@ -38,11 +38,16 @@ function LoginForm({ onLogin }: LoginFormProps) {
         setLoading(true)
 
         try {
-            const response = await apiFetch("http://localhost:8080/login", {
+            const response = await apiFetch("/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ usernameOrEmail, password })
+                body: JSON.stringify({
+                    usernameOrEmail,
+                    password,
+                    deviceName: getDeviceName(),
+                    platform: navigator.platform || "Windows"
+                })
             })
 
             const data = await response.json()
@@ -75,13 +80,18 @@ function LoginForm({ onLogin }: LoginFormProps) {
 
         setLoading(true)
         try {
-            const response = await apiFetch("http://localhost:8080/account/recovery-phrase/login", {
+            const response = await apiFetch("/account/recovery-phrase/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
                 // The backend accepts spaces or hyphens, while this canonical form
                 // matches the phrase returned by the generation endpoint.
-                body: JSON.stringify({ usernameOrEmail, recoveryPhrase: recoveryWords.join("-") })
+                body: JSON.stringify({
+                    usernameOrEmail,
+                    recoveryPhrase: recoveryWords.join("-"),
+                    deviceName: getDeviceName(),
+                    platform: navigator.platform || "Windows"
+                })
             })
 
             const data = await response.json()

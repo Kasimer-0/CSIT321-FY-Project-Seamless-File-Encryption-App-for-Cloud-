@@ -4,13 +4,11 @@ import com.stealthsync.model.entity.CloudStorageLink;
 import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.Plan;
 import com.stealthsync.model.entity.Subscription;
-import com.stealthsync.model.entity.SystemLog;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.CloudStorageLinkRepository;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
 import com.stealthsync.repository.PlanRepository;
 import com.stealthsync.repository.SubscriptionRepository;
-import com.stealthsync.repository.SystemLogRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
@@ -20,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
@@ -35,7 +32,6 @@ public class DataSeeder implements CommandLineRunner {
     private final SubscriptionRepository subscriptionRepository;
     private final CloudStorageLinkRepository cloudStorageLinkRepository;
     private final EncryptedFileRecordRepository encryptedFileRecordRepository;
-    private final SystemLogRepository systemLogRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -56,7 +52,7 @@ public class DataSeeder implements CommandLineRunner {
                         null,
                         "Premium Corporate Tier",
                         15.0,
-                        "AES-256 GCM Stream Encryption with Hardware Token Support",
+                        "AES-256 GCM encryption with premium multi-device access",
                         "active",
                         "AES-256-GCM"
                 )));
@@ -138,24 +134,6 @@ public class DataSeeder implements CommandLineRunner {
                     encryptedFileRecordRepository.save(record);
                 });
 
-        if (systemLogRepository.count() == 0) {
-            systemLogRepository.save(log("admin", "LOGIN_SUCCESS", "127.0.0.1", false, "Normal admin login."));
-            systemLogRepository.save(log("PremiumUser", "FILE_UPLOAD_ENCRYPTED", "127.0.0.1", false, "Encrypted file upload completed."));
-            systemLogRepository.save(log("PremiumUser", "BULK_DOWNLOAD_SPIKE", "203.0.113.25", true, "Bulk download spike detected by anomaly rules."));
-            systemLogRepository.save(log("unknown", "LOGIN_ATTEMPT_UNUSUAL_LOCATION", "198.51.100.8", true, "Unusual login location for a customer account."));
-        }
-
-    }
-
-    private SystemLog log(String username, String action, String ipAddress, boolean suspicious, String reason) {
-        SystemLog log = new SystemLog();
-        log.setUsername(username);
-        log.setAction(action);
-        log.setIpAddress(ipAddress);
-        log.setTimestamp(LocalDateTime.now().minusHours(systemLogRepository.count() + 1));
-        log.setSuspicious(suspicious);
-        log.setAiRiskReason(reason);
-        return log;
     }
 
     private UserAccount seedUser(String username, String email, String password,

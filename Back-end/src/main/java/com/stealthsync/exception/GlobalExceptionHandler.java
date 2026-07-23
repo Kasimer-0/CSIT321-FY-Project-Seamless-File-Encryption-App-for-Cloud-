@@ -18,6 +18,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(new ErrorResponse(exception.getMessage()));
     }
 
+    @ExceptionHandler(DeviceAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleDeviceAccessDenied(DeviceAccessDeniedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(exception.getMessage()));
+    }
+
+    @ExceptionHandler(CloudCiphertextNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleCloudCiphertextNotFound(CloudCiphertextNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(exception.getMessage()));
+    }
+
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingRequestParameter(MissingServletRequestParameterException exception) {

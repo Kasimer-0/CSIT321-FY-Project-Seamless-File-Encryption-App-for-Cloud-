@@ -34,19 +34,13 @@ export type EncryptionKeyRecord = {
     algorithm: string
     status: "active" | "inactive" | "retired"
     fingerprint: string
+    salt: string | null
+    passwordVerifier: string | null
+    keyScheme: string | null
+    kdfIterations: number | null
+    kdfVersion: number | null
     createdAt: Date
     updatedAt: Date
-}
-
-export type PhysicalTokenRecord = {
-    tokenID: number
-    ownerID: number
-    encryptionKeyID: number | null
-    tokenName: string
-    serialNumber: string
-    status: "active" | "inactive"
-    registeredAt: Date
-    lastUsedAt: Date | null
 }
 
 export type CloudStorageUsage = {
@@ -67,12 +61,31 @@ export type GoogleDriveFile = {
 
 export type SystemLog = {
     logId: number
+    userID: number | null
     username: string
     action: string
     ipAddress: string
     timestamp: string
     isSuspicious: boolean
     aiRiskReason: string
+    riskScore: number
+    riskLevel: "LOW" | "MEDIUM" | "HIGH"
+    detectorVersion: string
+    provider: string | null
+    deviceIdentifierHash: string | null
+}
+
+export type UserDevice = {
+    deviceID: number
+    ownerID: number
+    deviceName: string
+    platform: string
+    firstSeenAt: string
+    lastSeenAt: string
+    primaryDevice: boolean
+    active: boolean
+    revokedAt: string | null
+    currentDevice: boolean
 }
 
 export type PurchasePlanRequest = {

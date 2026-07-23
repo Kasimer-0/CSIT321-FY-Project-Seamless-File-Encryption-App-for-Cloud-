@@ -63,7 +63,13 @@ public class EncryptionPolicyService {
     }
 
     private boolean isActive(Subscription subscription) {
-        return subscription != null && "active".equalsIgnoreCase(subscription.getSubcriptionStatus());
+        return subscription != null
+                && "active".equalsIgnoreCase(subscription.getSubcriptionStatus())
+                && subscription.getPlan() != null
+                && subscription.getPlan().getPlanPrice() > 0
+                && "active".equalsIgnoreCase(subscription.getPlan().getPlanStatus())
+                && (subscription.getSubscriptionEndDate() == null
+                || !subscription.getSubscriptionEndDate().isBefore(java.time.LocalDate.now()));
     }
 
     private String normalize(String encMethod) {

@@ -10,11 +10,14 @@ import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.security.CurrentUserService;
 import com.stealthsync.security.JwtService;
 import com.stealthsync.service.AppDataService;
+import com.stealthsync.service.security.DeviceIdentifierService;
+import com.stealthsync.service.security.DeviceRegistrationService;
+import com.stealthsync.service.security.SecurityAuditService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -25,10 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/")
-@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
 /** Handles public authentication and current-account operations. */
@@ -37,15 +40,28 @@ public class AuthController {
     private final AppDataService dataStore;
     private final JwtService jwtService;
     private final CurrentUserService currentUserService;
+    private final DeviceRegistrationService deviceRegistrationService;
+    private final SecurityAuditService securityAuditService;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest, HttpServletRequest request) {
         log.info("StealthSync login attempt for user/email: {}", loginRequest.getUsernameOrEmail());
-        return dataStore.authenticate(loginRequest.getUsernameOrEmail(), loginRequest.getPassword())
-                .<ResponseEntity<?>>map(user -> ResponseEntity.ok(
-                        new LoginResponse(user, jwtService.createToken(user))))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(new ErrorResponse("Invalid credentials. Please check your username/email or password.")));
+        Optional<UserAccount> authenticated = dataStore.authenticate(
+                loginRequest.getUsernameOrEmail(), loginRequest.getPassword());
+        if (authenticated.isEmpty()) {
+            securityAuditService.recordLogin(loginRequest.getUsernameOrEmail(), "LOGIN_FAILED");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse("Invalid credentials. Please check your username/email or password."));
+        }
+        UserAccount user = authenticated.get();
+        var device = deviceRegistrationService.registerOrValidate(
+                user,
+                request.getHeader(DeviceIdentifierService.HEADER_NAME),
+                loginRequest.getDeviceName(),
+                loginRequest.getPlatform());
+        securityAuditService.recordForUser(user.getUserID(), "LOGIN_SUCCESS", null);
+        return ResponseEntity.ok(new LoginResponse(user, jwtService.createToken(
+                user, device == null ? null : device.getDeviceIdentifierHash())));
     }
 
     @PostMapping("/signup")

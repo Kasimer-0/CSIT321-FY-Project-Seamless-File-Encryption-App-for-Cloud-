@@ -7,6 +7,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,7 +18,13 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "cloud_storage_links")
+@Table(
+        name = "cloud_storage_links",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_cloud_storage_link_owner_provider",
+                columnNames = {"owner_id", "provider"}
+        )
+)
 /** Persisted link between one customer and a supported cloud provider account. */
 public class CloudStorageLink {
     @Id

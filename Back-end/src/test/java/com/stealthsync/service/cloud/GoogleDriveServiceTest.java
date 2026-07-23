@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stealthsync.repository.GoogleDriveCredentialRepository;
+import com.stealthsync.security.OAuthStateService;
 import com.stealthsync.service.AppDataService;
 import com.stealthsync.service.crypto.AesGcmService;
 import com.stealthsync.service.crypto.KeyManagementService;
@@ -32,7 +33,7 @@ class GoogleDriveServiceTest {
         // Verify that an optional account hint is encoded without changing OAuth security.
         ReflectionTestUtils.setField(service, "loginHint", "demo@example.com");
 
-        URI authorizationUri = URI.create(service.createAuthorizationUrl(7L));
+        URI authorizationUri = URI.create(service.createAuthorizationUrl(7L, "device-hash"));
         String query = authorizationUri.getRawQuery();
 
         assertEquals("accounts.google.com", authorizationUri.getHost());
@@ -47,7 +48,7 @@ class GoogleDriveServiceTest {
     void rejectsAuthorizationWhenOAuthCredentialsAreMissing() {
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
-                () -> service().createAuthorizationUrl(7L)
+                () -> service().createAuthorizationUrl(7L, "device-hash")
         );
 
         assertTrue(error.getMessage().contains("GOOGLE_DRIVE_CLIENT_ID"));
@@ -177,12 +178,15 @@ class GoogleDriveServiceTest {
     }
 
     private GoogleDriveService service(UserVaultService userVaultService, AesGcmService aesGcmService, ObjectMapper objectMapper) {
+        OAuthStateService oauthStateService = mock(OAuthStateService.class);
+        when(oauthStateService.issue(7L, "google_drive", "device-hash")).thenReturn("signed-state");
         return new GoogleDriveService(
                 mock(GoogleDriveCredentialRepository.class),
                 mock(AppDataService.class),
                 userVaultService,
                 aesGcmService,
-                objectMapper
+                objectMapper,
+                oauthStateService
         );
     }
 }

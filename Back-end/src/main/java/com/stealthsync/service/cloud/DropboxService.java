@@ -6,6 +6,7 @@ import com.stealthsync.model.dto.CloudFileDTO;
 import com.stealthsync.model.entity.CloudProviderCredential;
 import com.stealthsync.model.entity.CloudStorageLink;
 import com.stealthsync.repository.CloudProviderCredentialRepository;
+import com.stealthsync.security.OAuthStateService;
 import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +30,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -46,7 +46,6 @@ public class DropboxService implements CloudStorageAdapter {
     private static final String DOWNLOAD_ENDPOINT = "https://content.dropboxapi.com/2/files/download";
     private static final String DELETE_ENDPOINT = "https://api.dropboxapi.com/2/files/delete_v2";
     private static final String APP_FOLDER = "/StealthSync";
-    private static final Duration STATE_LIFETIME = Duration.ofMinutes(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -54,11 +53,12 @@ public class DropboxService implements CloudStorageAdapter {
     private final AppDataService dataStore;
     private final ObjectMapper objectMapper;
     private final CloudFileMetadataCodec metadataCodec;
+    private final EncryptedEnvelopeV2Inspector envelopeInspector;
+    private final OAuthStateService oauthStateService;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
-    private final Map<String, PendingAuthorization> pendingAuthorizations = new ConcurrentHashMap<>();
 
     @Value("${stealthsync.dropbox.client-id:}")
     private String clientId;
@@ -99,14 +99,12 @@ public class DropboxService implements CloudStorageAdapter {
     }
 
     @Override
-    public String createAuthorizationUrl(Long ownerID) {
+    public String createAuthorizationUrl(Long ownerID, String deviceIdentifierHash) {
         requireConfigured();
         if (ownerID == null) {
             throw new IllegalArgumentException("A user is required to link Dropbox.");
         }
-        pendingAuthorizations.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
-        String state = newState();
-        pendingAuthorizations.put(state, new PendingAuthorization(ownerID, Instant.now().plus(STATE_LIFETIME)));
+        String state = oauthStateService.issue(ownerID, providerKey(), deviceIdentifierHash);
         return AUTHORIZATION_ENDPOINT
                 + "?client_id=" + encode(clientId)
                 + "&redirect_uri=" + encode(redirectUri)
@@ -119,7 +117,7 @@ public class DropboxService implements CloudStorageAdapter {
     @Transactional
     public CloudStorageLink completeAuthorization(String code, String state) throws Exception {
         requireConfigured();
-        PendingAuthorization pending = pendingAuthorization(state, "Dropbox");
+        OAuthStateService.OAuthState oauthState = oauthStateService.consume(state, providerKey());
         if (isBlank(code)) {
             throw new IllegalArgumentException("Dropbox did not return an authorization code.");
         }
@@ -137,10 +135,10 @@ public class DropboxService implements CloudStorageAdapter {
 
         String accountEmail = fetchAccountEmail(accessToken);
         CloudProviderCredential credential = credentialRepository
-                .findByProviderIgnoreCaseAndOwnerID(providerKey(), pending.ownerID())
+                .findByProviderIgnoreCaseAndOwnerID(providerKey(), oauthState.ownerID())
                 .orElseGet(CloudProviderCredential::new);
         credential.setProvider(providerKey());
-        credential.setOwnerID(pending.ownerID());
+        credential.setOwnerID(oauthState.ownerID());
         credential.setAccountEmail(accountEmail);
         if (isBlank(credential.getTokenSalt())) {
             credential.setTokenSalt(KeyGenerators.string().generateKey());
@@ -152,7 +150,7 @@ public class DropboxService implements CloudStorageAdapter {
         credential.setExpiresAt(Instant.now().plusSeconds(expiresIn));
         credentialRepository.save(credential);
 
-        return dataStore.linkCloudProvider(providerKey(), pending.ownerID(), accountEmail);
+        return dataStore.linkCloudProvider(providerKey(), oauthState.ownerID(), accountEmail);
     }
 
     @Override
@@ -160,12 +158,19 @@ public class DropboxService implements CloudStorageAdapter {
         JsonNode response = listFolder(ownerID);
         List<CloudFileDTO> files = new ArrayList<>();
         for (JsonNode entry : response.path("entries")) {
-            if (!"file".equals(entry.path(".tag").asText()) || !entry.path("name").asText("").endsWith(".stealthsync.enc")) {
+            String entryName = entry.path("name").asText("");
+            if (!"file".equals(entry.path(".tag").asText())
+                    || (!entryName.endsWith(".stealthsync.enc") && !entryName.endsWith(".ssenc"))) {
                 continue;
             }
             String fileId = entry.path("id").asText(entry.path("path_lower").asText());
             try {
                 byte[] packagedBytes = downloadRaw(ownerID, fileId);
+                if (entryName.endsWith(".ssenc")) {
+                    EncryptedEnvelopeV2Inspector.EnvelopeHeader header = envelopeInspector.inspect(packagedBytes);
+                    files.add(toV2FileDTO(entry, header, packagedBytes.length));
+                    continue;
+                }
                 CloudFileMetadataCodec.PackagedCloudFile packaged =
                         metadataCodec.unpack(ownerID, entry.path("name").asText("encrypted-file.stealthsync.enc"), packagedBytes);
                 files.add(toFileDTO(entry, packaged.metadata(), packaged.encryptedContent().length));
@@ -230,6 +235,38 @@ public class DropboxService implements CloudStorageAdapter {
     }
 
     @Override
+    public CloudFileDTO uploadCiphertextForProvider(
+            Long ownerID,
+            CiphertextUploadMetadata metadata,
+            InputStream ciphertext) throws Exception {
+        ensureAppFolder(ownerID);
+        byte[] ciphertextBytes = ciphertext.readAllBytes();
+        JsonNode uploaded = uploadRaw(ownerID, APP_FOLDER + "/" + metadata.objectName(), ciphertextBytes);
+        return new CloudFileDTO(
+                providerKey(),
+                uploaded.path("id").asText(uploaded.path("path_lower").asText()),
+                uploaded.path("name").asText(metadata.objectName()),
+                null,
+                ciphertextBytes.length,
+                parseInstant(uploaded.path("client_modified").asText(null)),
+                parseInstant(uploaded.path("server_modified").asText(null)),
+                metadata.algorithm(),
+                null,
+                null,
+                metadata.keyFingerprint(),
+                metadata.envelopeVersion(),
+                metadata.encryptedMetadata()
+        );
+    }
+
+    @Override
+    public DownloadedCiphertext downloadCiphertextForProvider(Long ownerID, String fileId) throws Exception {
+        byte[] ciphertext = downloadRaw(ownerID, fileId);
+        envelopeInspector.inspect(ciphertext);
+        return new DownloadedCiphertext("encrypted.ssenc", ciphertext);
+    }
+
+    @Override
     public void deleteEncryptedFileForProvider(Long ownerID, String fileId) throws Exception {
         sendJson(ownerID, DELETE_ENDPOINT, objectMapper.createObjectNode().put("path", fileId), "Dropbox delete");
     }
@@ -272,6 +309,35 @@ public class DropboxService implements CloudStorageAdapter {
         HttpResponse<String> response = sendRaw(ownerID, endpoint, body);
         ensureSuccess(response.statusCode(), response.body(), operation);
         return objectMapper.readTree(response.body());
+    }
+
+    private JsonNode uploadRaw(Long ownerID, String remotePath, byte[] content) throws Exception {
+        String args = objectMapper.writeValueAsString(Map.of(
+                "path", remotePath,
+                "mode", "add",
+                "autorename", true,
+                "mute", false,
+                "strict_conflict", false
+        ));
+        CloudProviderCredential credential = credential(ownerID);
+        HttpRequest request = uploadRequest(validAccessToken(credential, false), args, content);
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() == 401) {
+            request = uploadRequest(validAccessToken(credential, true), args, content);
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        }
+        ensureSuccess(response.statusCode(), response.body(), "Dropbox upload");
+        return objectMapper.readTree(response.body());
+    }
+
+    private HttpRequest uploadRequest(String token, String args, byte[] content) {
+        return HttpRequest.newBuilder(URI.create(UPLOAD_ENDPOINT))
+                .timeout(REQUEST_TIMEOUT)
+                .header("Authorization", "Bearer " + token)
+                .header("Content-Type", "application/octet-stream")
+                .header("Dropbox-API-Arg", args)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(content))
+                .build();
     }
 
     private HttpResponse<String> sendRaw(Long ownerID, String endpoint, JsonNode body) throws Exception {
@@ -343,7 +409,11 @@ public class DropboxService implements CloudStorageAdapter {
                 "grant_type", "refresh_token"
         ));
         String accessToken = requiredText(response, "access_token");
+        String rotatedRefreshToken = textOrNull(response, "refresh_token");
         credential.setAccessToken(encryptToken(credential, accessToken));
+        if (!isBlank(rotatedRefreshToken)) {
+            credential.setRefreshToken(encryptToken(credential, rotatedRefreshToken));
+        }
         credential.setExpiresAt(Instant.now().plusSeconds(response.path("expires_in").asLong(14400)));
         credentialRepository.save(credential);
         return accessToken;
@@ -370,17 +440,6 @@ public class DropboxService implements CloudStorageAdapter {
                 .orElseThrow(() -> new IllegalArgumentException("Dropbox is not connected for this user."));
     }
 
-    private PendingAuthorization pendingAuthorization(String state, String providerLabel) {
-        if (isBlank(state)) {
-            throw new IllegalArgumentException(providerLabel + " authorization did not return a state value.");
-        }
-        PendingAuthorization pending = pendingAuthorizations.remove(state);
-        if (pending == null || pending.expiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException(providerLabel + " authorization expired or has an invalid state value.");
-        }
-        return pending;
-    }
-
     private CloudFileDTO toFileDTO(JsonNode entry, CloudUploadMetadata metadata, long encryptedSize) {
         return new CloudFileDTO(
                 providerKey(),
@@ -394,6 +453,27 @@ public class DropboxService implements CloudStorageAdapter {
                 metadata.keyID(),
                 metadata.keyName(),
                 metadata.keyFingerprint()
+        );
+    }
+
+    private CloudFileDTO toV2FileDTO(
+            JsonNode entry,
+            EncryptedEnvelopeV2Inspector.EnvelopeHeader header,
+            long ciphertextSize) {
+        return new CloudFileDTO(
+                providerKey(),
+                entry.path("id").asText(entry.path("path_lower").asText()),
+                entry.path("name").asText("encrypted.ssenc"),
+                null,
+                ciphertextSize,
+                parseInstant(entry.path("client_modified").asText(null)),
+                parseInstant(entry.path("server_modified").asText(null)),
+                header.algorithm(),
+                null,
+                null,
+                header.keyFingerprint(),
+                header.version(),
+                header.encryptedMetadata()
         );
     }
 
@@ -453,6 +533,4 @@ public class DropboxService implements CloudStorageAdapter {
         return value == null || value.isBlank();
     }
 
-    private record PendingAuthorization(Long ownerID, Instant expiresAt) {
-    }
 }

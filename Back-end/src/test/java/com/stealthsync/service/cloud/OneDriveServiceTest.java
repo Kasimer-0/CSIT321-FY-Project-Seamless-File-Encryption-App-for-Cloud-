@@ -2,6 +2,7 @@ package com.stealthsync.service.cloud;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stealthsync.repository.CloudProviderCredentialRepository;
+import com.stealthsync.security.OAuthStateService;
 import com.stealthsync.service.AppDataService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -12,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class OneDriveServiceTest {
 
@@ -23,7 +25,7 @@ class OneDriveServiceTest {
         ReflectionTestUtils.setField(service, "redirectUri", "http://localhost:8080/cloud-storage/onedrive/callback");
         ReflectionTestUtils.setField(service, "tenant", "common");
 
-        URI authorizationUri = URI.create(service.createAuthorizationUrl(7L));
+        URI authorizationUri = URI.create(service.createAuthorizationUrl(7L, "device-hash"));
         String query = authorizationUri.getRawQuery();
 
         assertEquals("login.microsoftonline.com", authorizationUri.getHost());
@@ -41,7 +43,7 @@ class OneDriveServiceTest {
     void rejectsAuthorizationWhenOneDriveCredentialsAreMissing() {
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
-                () -> service().createAuthorizationUrl(7L)
+                () -> service().createAuthorizationUrl(7L, "device-hash")
         );
 
         assertTrue(error.getMessage().contains("OneDrive integration is not configured"));
@@ -58,11 +60,15 @@ class OneDriveServiceTest {
     }
 
     private OneDriveService service() {
+        OAuthStateService oauthStateService = mock(OAuthStateService.class);
+        when(oauthStateService.issue(7L, "onedrive", "device-hash")).thenReturn("signed-state");
         return new OneDriveService(
                 mock(CloudProviderCredentialRepository.class),
                 mock(AppDataService.class),
                 new ObjectMapper(),
-                mock(CloudFileMetadataCodec.class)
+                mock(CloudFileMetadataCodec.class),
+                new EncryptedEnvelopeV2Inspector(new ObjectMapper()),
+                oauthStateService
         );
     }
 }

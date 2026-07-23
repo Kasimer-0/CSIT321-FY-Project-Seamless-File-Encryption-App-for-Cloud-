@@ -1,6 +1,5 @@
 package com.stealthsync.model.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -40,16 +39,20 @@ public class EncryptionKeyRecord {
     @Column(nullable = false)
     private String fingerprint;
 
-    @JsonIgnore
-    @Column
+    @Column(length = 128)
     private String salt;
 
-    @JsonIgnore
-    @Column
+    @Column(length = 128)
     private String passwordVerifier;
 
-    @Column
+    @Column(length = 80)
     private String keyScheme;
+
+    @Column(name = "kdf_iterations")
+    private Integer kdfIterations;
+
+    @Column(name = "kdf_version")
+    private Integer kdfVersion;
 
     @Column(nullable = false)
     private Instant createdAt;

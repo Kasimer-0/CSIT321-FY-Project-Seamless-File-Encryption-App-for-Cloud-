@@ -15,7 +15,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/")
 // Matches frontend credentials: "include"
-@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"}, allowCredentials = "true")
 @RequiredArgsConstructor
 @Slf4j
 @PreAuthorize("hasRole('ADMIN')")
