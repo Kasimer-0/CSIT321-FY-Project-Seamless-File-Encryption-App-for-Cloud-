@@ -20,6 +20,31 @@ $logDir = Join-Path $runDir "logs"
 $backendPidFile = Join-Path $runDir "backend.pid"
 $frontendPidFile = Join-Path $runDir "frontend.pid"
 
+# OAuth setup scripts save credentials at User scope, but a terminal opened
+# before setup does not automatically receive them. Import only missing values
+# for the child backend process and never print their contents.
+$userEnvironmentNames = @(
+    "GOOGLE_DRIVE_CLIENT_ID",
+    "GOOGLE_DRIVE_CLIENT_SECRET",
+    "GOOGLE_DRIVE_REDIRECT_URI",
+    "DROPBOX_CLIENT_ID",
+    "DROPBOX_CLIENT_SECRET",
+    "DROPBOX_REDIRECT_URI",
+    "ONEDRIVE_CLIENT_ID",
+    "ONEDRIVE_CLIENT_SECRET",
+    "ONEDRIVE_REDIRECT_URI",
+    "ONEDRIVE_TENANT"
+)
+foreach ($name in $userEnvironmentNames) {
+    $processValue = [Environment]::GetEnvironmentVariable($name, "Process")
+    if ([string]::IsNullOrWhiteSpace($processValue)) {
+        $userValue = [Environment]::GetEnvironmentVariable($name, "User")
+        if (-not [string]::IsNullOrWhiteSpace($userValue)) {
+            [Environment]::SetEnvironmentVariable($name, $userValue, "Process")
+        }
+    }
+}
+
 function Test-Port {
     param([int]$Port)
     $client = New-Object Net.Sockets.TcpClient

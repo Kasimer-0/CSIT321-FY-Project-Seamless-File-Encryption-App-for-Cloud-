@@ -11,6 +11,31 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $backendDir = Join-Path $repoRoot "Back-end"
 
+# Environment variables saved at User scope are not added to terminals that
+# were already open when the OAuth setup scripts ran. Import only missing
+# values so an explicit process-level override still takes precedence.
+$userEnvironmentNames = @(
+    "GOOGLE_DRIVE_CLIENT_ID",
+    "GOOGLE_DRIVE_CLIENT_SECRET",
+    "GOOGLE_DRIVE_REDIRECT_URI",
+    "DROPBOX_CLIENT_ID",
+    "DROPBOX_CLIENT_SECRET",
+    "DROPBOX_REDIRECT_URI",
+    "ONEDRIVE_CLIENT_ID",
+    "ONEDRIVE_CLIENT_SECRET",
+    "ONEDRIVE_REDIRECT_URI",
+    "ONEDRIVE_TENANT"
+)
+foreach ($name in $userEnvironmentNames) {
+    $processValue = [Environment]::GetEnvironmentVariable($name, "Process")
+    if ([string]::IsNullOrWhiteSpace($processValue)) {
+        $userValue = [Environment]::GetEnvironmentVariable($name, "User")
+        if (-not [string]::IsNullOrWhiteSpace($userValue)) {
+            [Environment]::SetEnvironmentVariable($name, $userValue, "Process")
+        }
+    }
+}
+
 # Preserve the caller's environment so this helper only affects the Maven
 # process it starts. This prevents stale DB settings from leaking into later
 # terminal commands.
