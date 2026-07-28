@@ -1,235 +1,168 @@
 # StealthSync
 
-Seamless file encryption app for cloud storage workflows.
+StealthSync is a web-based client-side file encryption application for Google Drive, Dropbox, and OneDrive. Files are encrypted in the browser before upload and decrypted in the browser after download, so the cloud providers and StealthSync backend handle ciphertext rather than plaintext file contents.
+
+## Current FYP Baseline
+
+- Real OAuth connections for Google Drive, Dropbox, and OneDrive.
+- Browser-side AES-GCM encryption and decryption.
+- AES-128 for Free customers and AES-256-GCM for customers with an active Premium subscription.
+- Password-derived encryption keys using PBKDF2-HMAC-SHA256 with 310,000 iterations and a per-key 16-byte salt.
+- Versioned, provider-neutral `SSENCV2` encrypted envelopes with encrypted file metadata and random `.ssenc` cloud object names.
+- Premium multi-device access for up to five active devices; Free accounts are limited to one active device.
+- Account recovery phrases for account login recovery only. They do not recover an encryption-key password or decrypt files.
+- A browser-local rule-based privacy warning and explainable rule-based anomaly scoring for administrator security logs.
+
+The web application is the current validation target. Legacy server-side encryption and desktop packaging code remains only for compatibility and is not the primary FYP workflow.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Windows Device A\nBrowser Web Crypto"]
+    B["Windows Device B\nBrowser Web Crypto"]
+    API["Shared Spring Boot API\nJWT, device policy, ciphertext routing"]
+    DB["Shared PostgreSQL\naccounts, key metadata, device and file records"]
+    G["Google Drive"]
+    D["Dropbox"]
+    O["OneDrive"]
+
+    A -->|"ciphertext and non-secret metadata"| API
+    B -->|"ciphertext and non-secret metadata"| API
+    API --> DB
+    API --> G
+    API --> D
+    API --> O
+```
+
+The Key Password, derived raw key, plaintext file, original filename, and decrypted result are kept on the active browser device during the V2 workflow. The backend stores synchronized non-secret key metadata, including the salt, algorithm, KDF version, fingerprint, and password verifier. OAuth access and refresh tokens are encrypted before database storage.
+
+## Multi-device Workflow
+
+1. Device A opens the shared StealthSync URL and signs in to a Premium account.
+2. Device A connects a cloud provider through that provider's official OAuth page, creates an encryption key, and uploads an encrypted file.
+3. Device B opens the same StealthSync URL and signs in to the same account.
+4. Device B automatically sees the synchronized cloud link, encryption-key metadata, and encrypted file list.
+5. Device B enters the same Key Password to derive the key locally and decrypt the downloaded ciphertext.
+
+Device B does not need Java, Node.js, PostgreSQL, OAuth application credentials, environment variables, or an exported key package. OAuth application registration and server secrets are one-time deployment responsibilities, not end-user setup.
 
 ## Project Layout
 
-- `Back-end/` - Spring Boot backend using the Maven standard layout under `src/main/java` and `src/main/resources`.
-- `Front-end/` - React/Vite frontend for customer and admin dashboards.
-- `Code structure (MavenGradle standard).docx` - backend package structure reference used by the team.
+- `Back-end/` — Spring Boot 3.2.5 API, provider adapters, authentication, subscriptions, device enforcement, persistence, and security logs.
+- `Front-end/` — React 19 and Vite 8 web client, Web Crypto V2, customer pages, and administrator pages.
+- `scripts/` — local startup, database initialization, and packaging helpers.
+- `Dockerfile`, `docker-compose.production.yml`, `.env.production.example` — shared deployment template without real secrets.
 
-## Encryption
+## Development Prerequisites
 
-The backend applies the subscription tier on the server: free customers create
-AES-128 keys, while customers with an active Premium subscription may create
-AES-256-GCM keys. New encrypted files use a versioned `STLH` header:
+| Component | Project version |
+| --- | --- |
+| Java | 21 |
+| Spring Boot | 3.2.5 |
+| Maven | 3.9.x |
+| PostgreSQL | 16 recommended |
+| Node.js | 24.x recommended |
 
-```text
-STLH | version | salt | IV | ciphertext + auth tag
-```
+## Local Development
 
-The backend also keeps compatibility with the earlier IV-only file format so previously uploaded demo files can still be decrypted.
-
-## Vault
-
-The backend exposes vault endpoints under `/vault`:
-
-- `GET /vault/status`
-- `POST /vault/create`
-- `POST /vault/unlock`
-- `POST /vault/lock`
-
-The vault stores a random master key in `vault.dat`, encrypted with a key derived from the user's master password.
-
-## Local Checks
-
-From `Back-end/`:
-
-```powershell
-mvn test
-```
-
-From `Front-end/`:
-
-```powershell
-npm run build
-```
-
-## Local PostgreSQL Setup
-
-Backend development uses PostgreSQL by default:
-
-```properties
-jdbc:postgresql://localhost:5432/CSIT321-FYP
-```
-
-Spring JPA `ddl-auto=update` creates and updates tables after the application
-connects, but PostgreSQL must already have the `CSIT321-FYP` database. Create it
-once before starting the backend:
+Create the PostgreSQL database once:
 
 ```powershell
 psql -U postgres -d postgres -f scripts/create_stealthsync_database.sql
 ```
 
-Start the backend with the local helper so the database password is requested
-securely instead of being committed to the repository:
-
-```powershell
-.\scripts\start-backend-local.ps1
-```
-
-If you prefer to run Maven directly, set the database environment variables in
-the same PowerShell session first:
-
-```powershell
-$env:DB_URL="jdbc:postgresql://localhost:5432/CSIT321-FYP"
-$env:DB_USERNAME="postgres"
-$env:DB_PASSWORD="your PostgreSQL password"
-cd Back-end
-mvn spring-boot:run
-```
-
-The app seeds demo accounts automatically on startup. To reset the core test
-accounts manually, run:
-
-```powershell
-psql -U postgres -d "CSIT321-FYP" -f scripts/init_data.sql
-```
-
-## Web Validation Target
-
-The web application is the current FYP validation target. Start both services
-from the repository root with:
+Start the backend and Vite frontend from the repository root:
 
 ```powershell
 .\scripts\start-web-demo.ps1
 ```
 
-Stop them with `scripts\stop-web-demo.cmd`. Google Drive, Dropbox, and OneDrive
-OAuth credentials must be supplied through user environment variables; never
-commit credential values.
+The script securely prompts for the local PostgreSQL password when `DB_PASSWORD` is not already set. It also imports existing Google Drive, Dropbox, and OneDrive OAuth settings from Windows User environment variables without printing secret values.
 
-## Desktop App Packaging (Known Issue)
-
-The source still contains a Windows packaging prototype, but the final web E2E
-and multi-device evidence must be completed before treating the desktop build as
-submission-ready. Do not describe the desktop package as a verified final
-product until its startup and OAuth callbacks have been retested.
-
-`dist-desktop/` is a generated Windows desktop app image, so it is intentionally not committed to GitHub. It is large, platform-specific, and can be rebuilt from source.
-
-To rebuild the desktop app image on Windows:
+Open `http://localhost:5173/`. Stop the local services with:
 
 ```powershell
-.\scripts\build-desktop.ps1
+.\scripts\start-web-demo.ps1 -Stop
 ```
 
-The script:
+## One-time OAuth Developer Configuration
 
-- builds the React frontend
-- copies the frontend build into `Back-end/src/main/resources/static`
-- packages the Spring Boot backend JAR
-- runs `jpackage` to create `dist-desktop/StealthSync/StealthSync.exe`
+Register these local callback URLs in the corresponding provider developer consoles:
 
-The intended packaged application opens the React interface inside its own
-JavaFX desktop window. This packaging path is retained for investigation and is
-not the current validation baseline.
+```text
+http://localhost:8080/cloud-storage/google-drive/callback
+http://localhost:8080/cloud-storage/dropbox/callback
+http://localhost:8080/cloud-storage/onedrive/callback
+```
 
-Desktop packages use a local H2 database stored under the current user's
-`.stealthsync` directory. They do not require PostgreSQL or a `DB_PASSWORD`
-environment variable. Normal backend development continues to use PostgreSQL.
+Configure the matching environment variables on the backend host:
 
-To create a Windows `.exe` or `.msi` installer instead of an app image, install WiX Toolset first, then run:
+```text
+GOOGLE_DRIVE_CLIENT_ID
+GOOGLE_DRIVE_CLIENT_SECRET
+GOOGLE_DRIVE_REDIRECT_URI
+DROPBOX_CLIENT_ID
+DROPBOX_CLIENT_SECRET
+DROPBOX_REDIRECT_URI
+ONEDRIVE_CLIENT_ID
+ONEDRIVE_CLIENT_SECRET
+ONEDRIVE_REDIRECT_URI
+ONEDRIVE_TENANT
+```
+
+Never commit OAuth secrets, database passwords, JWT secrets, OAuth state secrets, access tokens, refresh tokens, Key Passwords, or a real `.env.production` file.
+
+## Shared Deployment
+
+For a true two-Windows-device demonstration, both devices must use the same deployed StealthSync backend and database. Copy `.env.production.example` to `.env.production` on the server, replace every placeholder, register the production HTTPS callback URLs with all three providers, and start the deployment with:
 
 ```powershell
-.\scripts\build-desktop.ps1 -PackageType exe
+docker compose -f docker-compose.production.yml up --build -d
 ```
 
-The EXE output is named `StealthSync-Setup-<version>.exe` to distinguish the
-installer from the installed application. After installation, launch
-StealthSync from its desktop or Start Menu shortcut. Reopening the setup file
-only enters the Windows installer flow.
-
-Use a standard Temurin/OpenJDK 21 installation for packaging. Full JDK builds
-that enable both client and server JVMs are rejected because they can generate
-a Windows launcher that reports `Failed to launch JVM`.
+The deployment must use HTTPS and strong independent values for `DB_PASSWORD`, `JWT_SECRET`, `OAUTH_STATE_SECRET`, and `VAULT_SERVER_SECRET`. The `.env.production` file is ignored by Git.
 
 ## Test Accounts
 
-The backend checks and creates these accounts whenever it starts with a new or
-existing database:
+These accounts are seeded for local course-project testing only:
 
-| Permission | Username | Email | Password |
+| Role | Username | Email | Password |
 | --- | --- | --- | --- |
 | Administrator | `admin` | `admin@stealthsync.com` | `Admin@123` |
-| Normal customer | `testuser` | `testuser@stealthsync.com` | `User@123` |
-| Premium demo customer | `PremiumUser` | `user@stealthsync.com` | `User@1234` |
+| Free customer | `testuser` | `testuser@stealthsync.com` | `User@123` |
+| Premium customer | `PremiumUser` | `user@stealthsync.com` | `User@1234` |
 
-Desktop installations use the local H2 database and seed these accounts on
-first launch automatically. For a PostgreSQL development database, automatic
-seeding also runs when the backend starts. The same two required test accounts
-can be created or reset manually with:
+Do not reuse these credentials in a public deployment.
 
-```powershell
-psql -U postgres -d "CSIT321-FYP" -f scripts/init_data.sql
-```
+## Automated Verification
 
-The SQL script is idempotent and stores BCrypt password hashes rather than
-plain-text passwords.
-
-## Development Prerequisites
-
-Use these versions in the user manual:
-
-| Component | Project version |
-| --- | --- |
-| Java | `21` (the current local and desktop build uses `21.0.2`) |
-| Spring Boot | `3.2.5` |
-| Apache Maven | `3.9.16` |
-| PostgreSQL server | `16` recommended for backend development |
-| PostgreSQL JDBC driver | `42.6.2` |
-
-The PostgreSQL server version is not controlled by Maven; the project pins the
-JDBC driver version. The packaged desktop application uses its bundled H2
-database and does not require PostgreSQL or Maven on the end user's computer.
-
-## Google Drive Integration
-
-StealthSync uses Google OAuth 2.0 and the Google Drive API to link a user's
-account. Files uploaded through the Google Drive section are encrypted with the
-server-approved AES tier (AES-128 for free accounts or AES-256-GCM for active
-Premium accounts) before cloud upload. Downloads are retrieved as ciphertext
-and decrypted by the local StealthSync backend before being saved by the user.
-
-Google Drive setup:
-
-Reference: [Google OAuth 2.0 web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server)
-and [Google Drive API upload guide](https://developers.google.com/drive/api/guides/manage-uploads).
-
-1. Create or select a project in Google Cloud Console.
-2. Enable the Google Drive API.
-3. Configure an OAuth consent screen and add the test users who will use the
-   course-project build.
-4. Create an OAuth client with application type `Web application`.
-5. Add this authorized redirect URI exactly:
-
-```text
-http://localhost:8080/cloud-storage/oauth/google/callback
-```
-
-6. Set these environment variables before starting the backend/web app. The
-   desktop path must be retested separately:
+Run the backend tests:
 
 ```powershell
-[Environment]::SetEnvironmentVariable(
-    "GOOGLE_DRIVE_CLIENT_ID",
-    "your-client-id.apps.googleusercontent.com",
-    "User"
-)
-[Environment]::SetEnvironmentVariable(
-    "GOOGLE_DRIVE_CLIENT_SECRET",
-    "your-client-secret",
-    "User"
-)
+cd Back-end
+mvn test
 ```
 
-Restart StealthSync after changing these user environment variables.
+Run the frontend security tests and production build:
 
-If a different server port is used, set `GOOGLE_DRIVE_REDIRECT_URI` to the
-matching callback URL and add the same URI to the Google OAuth client.
+```powershell
+cd Front-end
+npm test
+npm run build
+```
 
-The integration requests the least-privilege `drive.file` scope, so it lists
-and manages files created by StealthSync instead of requesting access to every
-file in the user's Drive. OAuth access and refresh tokens are encrypted before
-being stored in the application database. Never commit the Google client secret
-or export it into a public installer or GitHub Actions log.
+Current verified baseline on 28 July 2026:
+
+- Backend: 121 tests passed.
+- Frontend crypto/privacy/network-boundary tests: 7 passed.
+- TypeScript and Vite production build: passed.
+- Real Google Drive, Dropbox, and OneDrive OAuth/upload/list/wrong-password/correct-decrypt/delete flow: passed locally.
+- Premium multi-device flow: passed with two independent browser profiles; final evidence on two physical Windows devices is still required.
+
+## Security Terminology
+
+- Describe the main workflow as **client-side encryption** or a **zero-knowledge-style architecture**, not as formally proven absolute zero knowledge.
+- Describe the Privacy Scanner and administrator anomaly detector as **explainable rule-based detection**, not as a trained machine-learning model.
+- Describe Recovery Phrase as **account login recovery only**.
+- Describe Premium multi-device as synchronized non-secret key metadata plus local key derivation from the same Key Password; no key-package export/import is used.
