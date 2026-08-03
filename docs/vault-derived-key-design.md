@@ -53,7 +53,7 @@ The teammate proposal is accepted for the demo file-encryption path with a small
 5. Existing local records that were created before password-protected keys can still fall back to the owner-scoped `UserVaultService` path when their key record no longer exists.
 6. New Google Drive objects keep randomized object names, and original file metadata is stored in encrypted Drive description metadata rather than plaintext `appProperties`.
 
-Physical token binding remains prototype/future work. The current project must not claim real USB, FIDO2, WebAuthn, or automatic hardware unlock until actual hardware verification and secure key-release logic are implemented. A future prototype may add a `boundKeyID` on token records, but password entry remains required in the current sprint baseline.
+Password entry remains required before deriving file-encryption material. No raw encryption key or key password is persisted or transferred between clients.
 
 ## 2026-06-30 Three-Provider Cloud Flow
 
