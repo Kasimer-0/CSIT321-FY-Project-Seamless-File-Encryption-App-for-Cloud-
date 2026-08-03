@@ -12,7 +12,7 @@ import { apiFetch } from "../lib/api"
 
 type CustomerDashboardProps = {
     user: UserAccount
-    onLogout: () => void
+    onLogout: () => Promise<void> | void
     onUserUpdate: (updatedUser: UserAccount) => void
 }
 

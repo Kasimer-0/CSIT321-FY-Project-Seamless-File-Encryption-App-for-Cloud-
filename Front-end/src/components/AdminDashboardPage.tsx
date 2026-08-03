@@ -15,7 +15,7 @@ type DashboardStats = {
 
 type AdminDashboardProps = {
     user: UserAccount
-    onLogout: () => void
+    onLogout: () => Promise<void> | void
 }
 
 // The reports tab follows the existing dashboard layout pattern.
@@ -67,16 +67,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     }, [])
 
     const handleLogout = async () => {
-        try {
-            await apiFetch("/logout", {
-                method: "POST",
-                credentials: "include"
-            })
-        } catch (err) {
-            console.error("Logout failed")
-        }
-
-        onLogout()
+        await onLogout()
     }
 
     const initials = user.username.slice(0, 2).toUpperCase()

@@ -31,9 +31,14 @@ function App() {
         setUser(authenticatedUser)
     }
 
-    const handleLogout = () => {
-        clearAuthToken()
-        setUser(null)
+    const handleLogout = async () => {
+        try {
+            // The server releases this device's active slot before local credentials are removed.
+            await apiFetch("/logout", { method: "POST" })
+        } finally {
+            clearAuthToken()
+            setUser(null)
+        }
     }
 
     const handleUserUpdate = (updatedUser: UserAccount) => {

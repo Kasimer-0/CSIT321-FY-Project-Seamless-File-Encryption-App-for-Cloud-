@@ -2,6 +2,7 @@ import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
 import type { UserAccount, SubscriptionDTO, Plan } from "../Type"
 import toast from "react-hot-toast"
+import { isStrongPassword, passwordPolicyMessage } from "../lib/passwordPolicy"
 
 type Props = {
     user: UserAccount
@@ -29,7 +30,9 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
     const [saving, setSaving] = useState(false)
     const [saveError, setSaveError] = useState<string | null>(null)
 
+    const [currentPassword, setCurrentPassword] = useState("")
     const [newPassword, setNewPassword] = useState("")
+    const [confirmPassword, setConfirmPassword] = useState("")
     const [resettingPassword, setResettingPassword] = useState(false)
     const [passwordError, setPasswordError] = useState<string | null>(null)
     const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -139,8 +142,16 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
     }
 
     const handleResetPassword = async () => {
-        if (newPassword.length < 8) {
-            setPasswordError("Password must contain at least 8 characters.")
+        if (!currentPassword) {
+            setPasswordError("Current password is required.")
+            return
+        }
+        if (!isStrongPassword(newPassword)) {
+            setPasswordError(passwordPolicyMessage)
+            return
+        }
+        if (newPassword !== confirmPassword) {
+            setPasswordError("New password and confirmation do not match.")
             return
         }
 
@@ -154,7 +165,7 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ newPassword })
+                body: JSON.stringify({ currentPassword, newPassword, confirmPassword })
             })
 
             if (!response.ok) {
@@ -163,7 +174,9 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                 return
             }
 
+            setCurrentPassword("")
             setNewPassword("")
+            setConfirmPassword("")
             setShowResetConfirm(false)
             toast.success("Password reset successfully")
         } catch {
@@ -309,29 +322,57 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                     Reset Password
                 </h6>
                 <div className="row g-2 align-items-end">
-                    <div className="col-12 col-md-8">
+                    <div className="col-12 col-md-4">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Current Password</label>
+                        <input
+                            className="form-control"
+                            type="password"
+                            autoComplete="current-password"
+                            value={currentPassword}
+                            onChange={event => {
+                                setCurrentPassword(event.target.value)
+                                setPasswordError(null)
+                            }}
+                        />
+                    </div>
+                    <div className="col-12 col-md-4">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>New Password</label>
                         <input
                             className="form-control"
                             type="password"
+                            autoComplete="new-password"
                             value={newPassword}
                             onChange={event => {
                                 setNewPassword(event.target.value)
                                 setPasswordError(null)
                             }}
-                            placeholder="At least 8 characters"
+                            placeholder="Upper, lower, number, symbol"
                         />
                     </div>
                     <div className="col-12 col-md-4">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Confirm New Password</label>
+                        <input
+                            className="form-control"
+                            type="password"
+                            autoComplete="new-password"
+                            value={confirmPassword}
+                            onChange={event => {
+                                setConfirmPassword(event.target.value)
+                                setPasswordError(null)
+                            }}
+                        />
+                    </div>
+                    <div className="col-12">
                         <button
-                            className="btn btn-primary w-100"
+                            className="btn btn-primary"
                             onClick={() => setShowResetConfirm(true)}
-                            disabled={resettingPassword || newPassword.length < 8}
+                            disabled={resettingPassword || !currentPassword || !isStrongPassword(newPassword) || newPassword !== confirmPassword}
                         >
                             {resettingPassword ? "Resetting..." : "Reset Password"}
                         </button>
                     </div>
                 </div>
+                <div className="text-muted mt-2" style={{ fontSize: 12 }}>{passwordPolicyMessage}</div>
                 {passwordError && <div className="text-danger mt-2" style={{ fontSize: 13 }}>{passwordError}</div>}
             </div>
 

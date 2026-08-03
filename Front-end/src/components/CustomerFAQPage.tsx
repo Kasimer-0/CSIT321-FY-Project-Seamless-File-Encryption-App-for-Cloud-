@@ -9,7 +9,7 @@ const faqItems = [
     },
     {
         question: "Which cloud providers can I link?",
-        answer: "StealthSync supports Google Drive, Dropbox, and OneDrive when their OAuth credentials are configured. Free accounts can link one provider; premium accounts can link up to five, with one active account at a time."
+        answer: "StealthSync supports Google Drive, Dropbox, and OneDrive when their OAuth credentials are configured. Free accounts can link one provider; premium accounts can link all three, with one active account at a time."
     },
     {
         question: "What should I do if decryption fails?",

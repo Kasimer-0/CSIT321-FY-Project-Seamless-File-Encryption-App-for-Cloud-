@@ -147,6 +147,14 @@ export type CloudStorageLink = {
     ownerID: number
 }
 
+export type CloudProviderStatus = {
+    provider: string
+    configured: boolean
+    connected: boolean
+    reconnectRequired: boolean
+    ownedEncryptedFileCount: number
+}
+
 export type GoogleDriveFile = {
     provider?: string
     fileId: string

@@ -201,11 +201,6 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                                 AES-256-GCM{canUseAes256 ? "" : " (Premium only)"}
                             </option>
                         </select>
-                        {!canUseAes256 && (
-                            <small className="text-muted d-block mt-1">
-                                Free tier creates AES-128 keys. AES-256-GCM requires an active premium subscription.
-                            </small>
-                        )}
                     </div>
                     <div className="col-12 col-md-3">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Password</label>

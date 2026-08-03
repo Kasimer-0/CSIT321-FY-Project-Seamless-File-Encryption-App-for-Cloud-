@@ -1,5 +1,6 @@
 import { apiFetch } from "../lib/api"
 import { useState } from "react"
+import { isStrongPassword, passwordPolicyMessage } from "../lib/passwordPolicy"
 
 function SignUpForm() {
     const [username, setUsername] = useState("")
@@ -27,9 +28,8 @@ function SignUpForm() {
             return
         }
 
-        const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
-        if (!strongPassword.test(password)) {
-            setMessage("Password must contain uppercase, lowercase, number, and at least 8 characters")
+        if (!isStrongPassword(password)) {
+            setMessage(passwordPolicyMessage)
             setMessageType("error")
             return
         }

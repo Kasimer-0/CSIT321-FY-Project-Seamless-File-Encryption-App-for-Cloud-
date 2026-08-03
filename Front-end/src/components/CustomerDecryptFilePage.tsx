@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import toast from "react-hot-toast"
-import type { CloudStorageLink, EncryptionKeyRecord, GoogleDriveFile, UserAccount } from "../Type"
+import type { CloudProviderStatus, CloudStorageLink, EncryptionKeyRecord, GoogleDriveFile, UserAccount } from "../Type"
 import { apiFetch } from "../lib/api"
 import { decryptFileInBrowser, saveDecryptedFile } from "../crypto/fileEncryption"
 import { deriveAndVerifyClientKey, requireClientKeyMetadata } from "../crypto/keyDerivation"
+import { formatCloudFileUploadTime, sortCloudFilesNewestFirst } from "../lib/cloudFiles"
+import { cloudProviderKeys, reconnectRequiredProviders } from "../lib/cloudProviderStatus"
 
 type Props = { user: UserAccount }
 type ProviderFile = GoogleDriveFile & { provider: string; providerLabel: string }
@@ -26,6 +28,7 @@ function CustomerDecryptFile({ user }: Props) {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
     const [downloading, setDownloading] = useState("")
+    const [providersNeedingReconnect, setProvidersNeedingReconnect] = useState<CloudProviderStatus[]>([])
     const keyByFingerprint = useMemo(
         () => new Map(keys.map(key => [key.fingerprint, key])),
         [keys]
@@ -43,6 +46,18 @@ function CustomerDecryptFile({ user }: Props) {
                 if (!linksResponse.ok || !keysResponse.ok) throw new Error("Cloud files could not be loaded.")
                 const links = await linksResponse.json() as CloudStorageLink[]
                 const loadedKeys = await keysResponse.json() as EncryptionKeyRecord[]
+                const statusResults = await Promise.all(cloudProviderKeys.map(async provider => {
+                    try {
+                        const response = await apiFetch(`/cloud-storage/${providerPath(provider)}/status`)
+                        return response.ok ? await response.json() as CloudProviderStatus : null
+                    } catch {
+                        return null
+                    }
+                }))
+                const statuses = Object.fromEntries(
+                    statusResults.filter((status): status is CloudProviderStatus => status !== null)
+                        .map(status => [status.provider, status])
+                )
                 const providers = [...new Set(links.filter(link => link.status === "connected").map(link => link.provider))]
                 const results = await Promise.all(providers.map(async provider => {
                     const response = await apiFetch(`/cloud-storage/${providerPath(provider)}/files`)
@@ -53,8 +68,9 @@ function CustomerDecryptFile({ user }: Props) {
                         .map(file => ({ ...file, provider, providerLabel: providerLabel(provider) }))
                 }))
                 if (cancelled) return
-                setFiles(results.flat())
+                setFiles(sortCloudFilesNewestFirst(results.flat()))
                 setKeys(loadedKeys)
+                setProvidersNeedingReconnect(reconnectRequiredProviders(statuses))
                 setError("")
             } catch (caught) {
                 if (!cancelled) setError(caught instanceof Error ? caught.message : "Cloud files could not be loaded.")
@@ -109,6 +125,13 @@ function CustomerDecryptFile({ user }: Props) {
         <p className="text-muted mb-3" style={{ fontSize: 13 }}>
             Ciphertext is downloaded from your cloud account and decrypted inside this browser.
         </p>
+        {providersNeedingReconnect.map(status => (
+            <div key={status.provider} className="alert alert-warning py-2">
+                {providerLabel(status.provider)} is disconnected, but StealthSync still has {status.ownedEncryptedFileCount}{" "}
+                encrypted file record{status.ownedEncryptedFileCount === 1 ? "" : "s"} for this account.
+                Reconnect the same account under Cloud Storage Links before downloading.
+            </div>
+        ))}
         {loading ? <p className="text-muted">Loading encrypted files...</p>
             : error ? <div className="alert alert-warning py-2">{error}</div>
                 : files.length === 0 ? <p className="text-muted">No browser-encrypted V2 cloud files found.</p>
@@ -125,6 +148,7 @@ function CustomerDecryptFile({ user }: Props) {
                                             <small className="text-muted">
                                                 {formatSize(file.fileSize)} | {file.encMethod} | Fingerprint {file.keyFingerprint ?? "unknown"}
                                             </small>
+                                            <div><small className="text-info">{formatCloudFileUploadTime(file)}</small></div>
                                             <div><small className="text-muted text-break">Cloud object: {file.fileName}</small></div>
                                         </div>
                                     </div>

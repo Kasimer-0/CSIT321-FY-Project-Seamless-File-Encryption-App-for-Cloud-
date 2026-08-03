@@ -9,6 +9,7 @@ type CustomerDevicesPageProps = {
 
 /** Shows owner-scoped device registrations while the backend enforces plan limits. */
 function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
+    const deviceLimit = user.isSubscribed ? 5 : 1
     const [devices, setDevices] = useState<UserDevice[]>([])
     const [loading, setLoading] = useState(true)
     const [editingID, setEditingID] = useState<number | null>(null)
@@ -75,17 +76,19 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
         }
     }
 
+    const activeDeviceCount = devices.filter(device => device.active && !device.revokedAt).length
+
     return (
         <>
             <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
                 <div>
                     <h5 className="mb-1">Registered Devices</h5>
                     <p className="text-muted mb-0" style={{ fontSize: 13 }}>
-                        Free accounts use one active device. Active Premium accounts can use up to five.
+                        Review the browsers authorized to use this account.
                     </p>
                 </div>
                 <span className={`badge ${user.isSubscribed ? "bg-info text-dark" : "bg-secondary"}`}>
-                    {user.isSubscribed ? "Premium: up to 5" : "Free: 1 device"}
+                    {activeDeviceCount}/{deviceLimit} active devices
                 </span>
             </div>
 
@@ -111,7 +114,7 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
                                         />
                                     ) : (
                                         <div className="fw-semibold">
-                                            {device.deviceName}{device.currentDevice ? " (Current)" : ""}
+                                            {device.deviceName}
                                         </div>
                                     )}
                                     <small className="text-muted d-block">
@@ -119,6 +122,7 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
                                     </small>
                                     <div className="d-flex gap-2 mt-2">
                                         {device.primaryDevice && <span className="badge bg-primary">Primary</span>}
+                                        {device.currentDevice && <span className="badge bg-info text-dark">This device</span>}
                                         <span className={`badge ${device.active && !device.revokedAt ? "bg-success" : "bg-secondary"}`}>
                                             {device.revokedAt ? "Revoked" : device.active ? "Active" : "Inactive"}
                                         </span>

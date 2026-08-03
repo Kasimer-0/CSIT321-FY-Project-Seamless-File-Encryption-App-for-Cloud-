@@ -1,5 +1,6 @@
 const TOKEN_STORAGE_KEY = "stealthsync.auth.token"
 const DEVICE_STORAGE_KEY = "stealthsync.device.id"
+const DEVICE_LABEL_STORAGE_KEY = "stealthsync.device.label"
 
 const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.trim()
 
@@ -26,8 +27,31 @@ export function getDeviceID() {
 }
 
 export function getDeviceName() {
-    const platform = navigator.platform || "Windows"
-    return `${platform} web client`
+    const userAgent = navigator.userAgent
+    const platform = /Windows/i.test(userAgent)
+        ? "Windows"
+        : /Macintosh|Mac OS/i.test(userAgent)
+            ? "macOS"
+            : /Linux/i.test(userAgent)
+                ? "Linux"
+                : navigator.platform || "Device"
+    const browser = /Edg\//i.test(userAgent)
+        ? "Edge"
+        : /Firefox\//i.test(userAgent)
+            ? "Firefox"
+            : /Chrome\//i.test(userAgent)
+                ? "Chrome"
+                : /Safari\//i.test(userAgent)
+                    ? "Safari"
+                    : "Browser"
+
+    let label = window.localStorage.getItem(DEVICE_LABEL_STORAGE_KEY)
+    if (!label) {
+        // This display-only alias is independent from the device UUID sent for authentication.
+        label = window.crypto.randomUUID().replaceAll("-", "").slice(0, 4).toUpperCase()
+        window.localStorage.setItem(DEVICE_LABEL_STORAGE_KEY, label)
+    }
+    return `${platform} ${browser} (${label})`
 }
 
 export function getAuthToken() {

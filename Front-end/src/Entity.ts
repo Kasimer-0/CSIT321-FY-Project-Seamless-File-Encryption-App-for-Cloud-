@@ -50,6 +50,14 @@ export type CloudStorageUsage = {
     fileCount: number
 }
 
+export type CloudProviderStatus = {
+    provider: string
+    configured: boolean
+    connected: boolean
+    reconnectRequired: boolean
+    ownedEncryptedFileCount: number
+}
+
 export type GoogleDriveFile = {
     fileId: string
     fileName: string

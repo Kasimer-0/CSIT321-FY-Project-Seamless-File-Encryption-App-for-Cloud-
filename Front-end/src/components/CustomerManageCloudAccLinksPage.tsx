@@ -1,7 +1,9 @@
 import { apiFetch } from "../lib/api"
 import { useState, useEffect } from "react"
-import type { CloudStorageLink, CloudStorageUsage, GoogleDriveFile, UserAccount } from "../Type"
+import type { CloudProviderStatus, CloudStorageLink, CloudStorageUsage, GoogleDriveFile, UserAccount } from "../Type"
 import toast from "react-hot-toast"
+import { formatCloudFileUploadTime, formatCloudLinkedDate, sortCloudFilesNewestFirst } from "../lib/cloudFiles"
+import { cloudProviderKeys, reconnectRequiredProviders } from "../lib/cloudProviderStatus"
 
 import googleDriveIcon from "../assets/googledrive.png"
 import dropboxIcon from "../assets/dropbox.png"
@@ -37,14 +39,15 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const [changingActiveLinkID, setChangingActiveLinkID] = useState<number | null>(null)
     const [selectedProvider, setSelectedProvider] = useState("")
     const [usage, setUsage] = useState<CloudStorageUsage | null>(null)
-    const [providerLimit, setProviderLimit] = useState(user.isSubscribed ? 5 : 1)
+    const [providerLimit, setProviderLimit] = useState(user.isSubscribed ? 3 : 1)
     const [providerConfigured, setProviderConfigured] = useState<Record<string, boolean>>({})
+    const [providerStatuses, setProviderStatuses] = useState<Record<string, CloudProviderStatus>>({})
     const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
     const [driveLoading, setDriveLoading] = useState(false)
 
-    const fetchLinks = async () => {
+    const fetchLinks = async (showLoading = true) => {
         try {
-            setLoading(true)
+            if (showLoading) setLoading(true)
 
             const response = await apiFetch("/cloud-storage/links", {
                 credentials: "include"
@@ -61,7 +64,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         } catch (err) {
             console.error("Server connection failed")
         } finally {
-            setLoading(false)
+            if (showLoading) setLoading(false)
         }
     }
 
@@ -78,7 +81,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    // The backend owns the 1-provider free / 5-provider premium rule, so the UI reads the effective limit.
+    // The backend owns the 1-provider free / 3-provider premium rule, so the UI reads the effective limit.
     const fetchProviderInfo = async () => {
         try {
             const response = await apiFetch("/cloud-storage/providers", {
@@ -86,7 +89,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             })
             if (response.ok) {
                 const data = await response.json()
-                setProviderLimit(Number(data.providerLimit ?? (user.isSubscribed ? 5 : 1)))
+                setProviderLimit(Number(data.providerLimit ?? (user.isSubscribed ? 3 : 1)))
                 setProviderConfigured(data.configured ?? {})
             }
         } catch (err) {
@@ -112,18 +115,58 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                 throw new Error(data?.message ?? `Failed to load ${providerLabel(provider)} files`)
             }
             const files = await response.json() as GoogleDriveFile[]
-            setDriveFiles(files.filter(file => file.envelopeVersion === 2))
+            setDriveFiles(sortCloudFilesNewestFirst(files.filter(file => file.envelopeVersion === 2)))
         } catch (err) {
             toast.error(err instanceof Error ? err.message : `Failed to load ${providerLabel(provider)} files`)
+            // OAuth failures can expire the shared link on the backend; refresh both views immediately.
+            await Promise.all([fetchLinks(false), fetchProviderStatuses()])
         } finally {
             setDriveLoading(false)
         }
     }
 
+    const fetchProviderStatuses = async () => {
+        const statuses = await Promise.all(cloudProviderKeys.map(async provider => {
+            try {
+                const response = await apiFetch(`/cloud-storage/${providerPath(provider)}/status`)
+                return response.ok ? await response.json() as CloudProviderStatus : null
+            } catch {
+                return null
+            }
+        }))
+        setProviderStatuses(current => {
+            const next = { ...current }
+            statuses.forEach(status => {
+                if (status) next[status.provider] = status
+            })
+            return next
+        })
+    }
+
     useEffect(() => {
-        fetchLinks()
-        fetchUsage()
-        fetchProviderInfo()
+        void fetchLinks()
+        void fetchUsage()
+        void fetchProviderInfo()
+        void fetchProviderStatuses()
+    }, [user.userID, user.isSubscribed])
+
+    useEffect(() => {
+        const refreshSharedAccountState = () => {
+            void fetchLinks(false)
+            void fetchProviderInfo()
+            void fetchProviderStatuses()
+        }
+        const refreshWhenVisible = () => {
+            if (document.visibilityState === "visible") refreshSharedAccountState()
+        }
+
+        // Another registered device may replace or remove an OAuth link while this page stays open.
+        window.addEventListener("focus", refreshSharedAccountState)
+        document.addEventListener("visibilitychange", refreshWhenVisible)
+        return () => {
+            window.removeEventListener("focus", refreshSharedAccountState)
+            document.removeEventListener("visibilitychange", refreshWhenVisible)
+        }
     }, [user.userID, user.isSubscribed])
 
     useEffect(() => {
@@ -131,8 +174,12 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         const oauthStatus = url.searchParams.get("oauth")
         if (!oauthStatus) return
         const provider = url.searchParams.get("provider") ?? "cloud provider"
+        const account = url.searchParams.get("account")
         if (oauthStatus === "connected") {
-            toast.success(`${providerLabel(provider)} connected successfully`)
+            toast.success(`${providerLabel(provider)} connected${account ? ` as ${account}` : ""}`)
+            // OAuth can replace an existing provider account, so reload the shared link identity immediately.
+            void fetchLinks(false)
+            void fetchProviderStatuses()
         } else if (oauthStatus === "cancelled") {
             toast.error(`${providerLabel(provider)} authorization was cancelled`)
         } else {
@@ -294,6 +341,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const providerLimitReached = linkedProviders.length >= providerLimit
     const activeCloudLink = links.find(link => link.isActive && link.status === "connected") ?? null
     const activeProviderName = providerLabel(activeCloudLink?.provider)
+    const providersNeedingReconnect = reconnectRequiredProviders(providerStatuses)
 
     // Refresh the file panel whenever the active provider changes, so the page
     // no longer shows Google Drive-only results after Dropbox or OneDrive is activated.
@@ -318,7 +366,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                 <div>
                     <h5 className="mb-1">Cloud Storage Accounts</h5>
                     <p className="text-muted mb-0" style={{ fontSize: 13 }}>
-                        Supports Google Drive, Dropbox, and OneDrive. {user.isSubscribed ? "Premium users can link up to 5 providers." : "Free tier can link 1 provider."}
+                        Supports Google Drive, Dropbox, and OneDrive. {user.isSubscribed ? "Premium users can link up to 3 providers." : "Free tier can link 1 provider."}
                     </p>
                 </div>
                 <button
@@ -331,8 +379,26 @@ function CustomerManageCloudAccLinks({ user }: Props) {
             </div>
 
             <div className="alert alert-info py-2 mb-3" style={{ fontSize: 13 }}>
-                Linked providers: {linkedProviders.length}/{providerLimit}. Only one account can be active at a time; the active account is the default upload destination.
+                Linked providers: {linkedProviders.length}/{providerLimit}. Cloud links belong to this StealthSync account and are shared across its authorized devices. Only one provider can be active at a time.
             </div>
+
+            {providersNeedingReconnect.map(status => (
+                <div key={status.provider} className="alert alert-warning d-flex justify-content-between align-items-center gap-3 py-2 mb-3">
+                    <div style={{ fontSize: 13 }}>
+                        <strong>{providerLabel(status.provider)} needs reconnecting.</strong>{" "}
+                        StealthSync still has {status.ownedEncryptedFileCount} encrypted file record{status.ownedEncryptedFileCount === 1 ? "" : "s"} for this account.
+                        Reconnect the same cloud account to check and access the remote ciphertext.
+                    </div>
+                    <button
+                        className="btn btn-warning btn-sm flex-shrink-0"
+                        onClick={() => void beginProviderConnection(status.provider).catch(error =>
+                            toast.error(error instanceof Error ? error.message : "Failed to reconnect cloud account"))}
+                        disabled={!status.configured || (providerLimitReached && !linkedProviders.includes(status.provider))}
+                    >
+                        Reconnect
+                    </button>
+                </div>
+            ))}
 
             {usage && (
                 <div className="border rounded p-3 mb-3">
@@ -391,7 +457,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                     </div>
                                     <small className="text-muted text-truncate d-block">
                                         {link.accountEmail} | Linked{" "}
-                                        {new Date(link.linkedAt).toLocaleDateString()}
+                                        {formatCloudLinkedDate(link.linkedAt)}
                                     </small>
                                 </div>
                             </div>
@@ -419,6 +485,15 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                         onClick={() => handleReconnect(link.linkID)}
                                     >
                                         Reconnect
+                                    </button>
+                                )}
+                                {link.status === "connected" && (
+                                    <button
+                                        className="btn btn-outline-secondary btn-sm"
+                                        onClick={() => void beginProviderConnection(link.provider).catch(error =>
+                                            toast.error(error instanceof Error ? error.message : "Failed to change cloud account"))}
+                                    >
+                                        Change account
                                     </button>
                                 )}
                                 <button
@@ -469,8 +544,8 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                                     <div className="fw-medium text-truncate">{file.envelopeVersion === 2 ? "Encrypted file" : file.originalName}</div>
                                     <small className="text-muted">
                                         {formatBytes(file.fileSize)} | {file.encMethod}
-                                        {file.modifiedAt ? ` | ${new Date(file.modifiedAt).toLocaleString()}` : ""}
                                     </small>
+                                    <div><small className="text-info">{formatCloudFileUploadTime(file)}</small></div>
                                     <div><small className="text-muted text-break">{file.fileName}</small></div>
                                 </div>
                                 <div className="d-flex gap-2 flex-shrink-0">
