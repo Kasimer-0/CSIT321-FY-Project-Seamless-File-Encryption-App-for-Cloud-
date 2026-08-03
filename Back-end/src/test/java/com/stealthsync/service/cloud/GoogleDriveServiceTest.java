@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class GoogleDriveServiceTest {
@@ -52,6 +53,90 @@ class GoogleDriveServiceTest {
         );
 
         assertTrue(error.getMessage().contains("GOOGLE_DRIVE_CLIENT_ID"));
+    }
+
+    @Test
+    void accountSwitchCannotReuseThePreviousGoogleAccountsRefreshToken() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+                ReflectionTestUtils.invokeMethod(
+                        service(),
+                        "selectRefreshTokenForAuthorization",
+                        null,
+                        "old-account-refresh-token",
+                        "first@example.com",
+                        "second@example.com"));
+
+        assertTrue(error.getMessage().contains("newly selected account"));
+    }
+
+    @Test
+    void reconnectingTheSameGoogleAccountCanReuseItsRefreshToken() {
+        String refreshToken = ReflectionTestUtils.invokeMethod(
+                service(),
+                "selectRefreshTokenForAuthorization",
+                null,
+                "same-account-refresh-token",
+                "demo@example.com",
+                "DEMO@example.com");
+
+        assertEquals("same-account-refresh-token", refreshToken);
+    }
+
+    @Test
+    void rejectsOAuthTokenThatOmitsGoogleDriveFileScope() throws Exception {
+        JsonNode tokenResponse = new ObjectMapper().readTree("""
+                {
+                  "access_token": "identity-only-token",
+                  "scope": "openid https://www.googleapis.com/auth/userinfo.email"
+                }
+                """);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+                ReflectionTestUtils.invokeMethod(service(), "requireGrantedDriveScope", tokenResponse));
+
+        assertTrue(error.getMessage().contains("missing file access"));
+    }
+
+    @Test
+    void acceptsOAuthTokenWithLeastPrivilegeGoogleDriveFileScope() throws Exception {
+        JsonNode tokenResponse = new ObjectMapper().readTree("""
+                {
+                  "access_token": "drive-token",
+                  "scope": "openid https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email"
+                }
+                """);
+
+        ReflectionTestUtils.invokeMethod(service(), "requireGrantedDriveScope", tokenResponse);
+    }
+
+    @Test
+    void recognizesGoogleInsufficientScopeAndExpiredGrantResponses() {
+        GoogleDriveService service = service();
+
+        Boolean insufficientScope = ReflectionTestUtils.invokeMethod(
+                service,
+                "isInsufficientDriveScope",
+                403,
+                "{\"status\":\"PERMISSION_DENIED\",\"reason\":\"ACCESS_TOKEN_SCOPE_INSUFFICIENT\"}");
+        Boolean invalidGrant = ReflectionTestUtils.invokeMethod(
+                service,
+                "isInvalidGrant",
+                "Google Drive request failed (HTTP 400): {\"error\":\"invalid_grant\"}");
+
+        assertTrue(Boolean.TRUE.equals(insufficientScope));
+        assertTrue(Boolean.TRUE.equals(invalidGrant));
+    }
+
+    @Test
+    void expiringGoogleAuthorizationDeletesCredentialAndPreservesExpiredLink() {
+        GoogleDriveCredentialRepository credentialRepository = mock(GoogleDriveCredentialRepository.class);
+        AppDataService dataStore = mock(AppDataService.class);
+        GoogleDriveService service = service(credentialRepository, dataStore);
+
+        ReflectionTestUtils.invokeMethod(service, "expireAuthorization", 7L, "test reason");
+
+        verify(credentialRepository).deleteByOwnerID(7L);
+        verify(dataStore).expireCloudStorageLink(7L, "google_drive");
     }
 
     @Test
@@ -175,6 +260,20 @@ class GoogleDriveServiceTest {
 
     private GoogleDriveService service() {
         return service(mock(UserVaultService.class), mock(AesGcmService.class), new ObjectMapper());
+    }
+
+    private GoogleDriveService service(
+            GoogleDriveCredentialRepository credentialRepository,
+            AppDataService dataStore) {
+        OAuthStateService oauthStateService = mock(OAuthStateService.class);
+        return new GoogleDriveService(
+                credentialRepository,
+                dataStore,
+                mock(UserVaultService.class),
+                mock(AesGcmService.class),
+                new ObjectMapper(),
+                oauthStateService
+        );
     }
 
     private GoogleDriveService service(UserVaultService userVaultService, AesGcmService aesGcmService, ObjectMapper objectMapper) {

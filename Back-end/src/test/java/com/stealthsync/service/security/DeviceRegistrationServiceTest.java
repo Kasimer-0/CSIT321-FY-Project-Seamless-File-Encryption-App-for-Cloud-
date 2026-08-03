@@ -99,6 +99,29 @@ class DeviceRegistrationServiceTest {
     }
 
     @Test
+    void freeUserCanSwitchDevicesAfterExplicitLogout() {
+        UserDevice first = register(freeUser, "free-a");
+        deviceService.signOut(freeUser.getUserID(), "free-a");
+        assertFalse(deviceRepository.findById(first.getDeviceID()).orElseThrow().isActive());
+
+        UserDevice second = register(freeUser, "free-b");
+        assertTrue(second.isActive());
+        assertEquals(1, deviceRepository.countByOwnerIDAndActiveTrueAndRevokedAtIsNull(freeUser.getUserID()));
+    }
+
+    @Test
+    void freeUserCanReactivateANonPrimaryDeviceAfterItLogsOut() {
+        register(freeUser, "free-a");
+        deviceService.signOut(freeUser.getUserID(), "free-a");
+        UserDevice second = register(freeUser, "free-b");
+        deviceService.signOut(freeUser.getUserID(), "free-b");
+
+        UserDevice reactivated = register(freeUser, "free-b");
+        assertEquals(second.getDeviceID(), reactivated.getDeviceID());
+        assertTrue(reactivated.isActive());
+    }
+
+    @Test
     void premiumUserCanUseTwoDevices() {
         register(premiumUser, "premium-a");
         register(premiumUser, "premium-b");

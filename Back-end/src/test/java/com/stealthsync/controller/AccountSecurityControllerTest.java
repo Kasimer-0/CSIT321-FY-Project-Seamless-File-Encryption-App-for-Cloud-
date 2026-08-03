@@ -14,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +57,9 @@ class AccountSecurityControllerTest {
 
     @Autowired
     private RecoveryLoginAttemptService recoveryLoginAttemptService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     private UserAccount premiumUser;
     private UserAccount freeUser;
@@ -201,6 +205,72 @@ class AccountSecurityControllerTest {
                         .content("{\"confirmRotation\":true}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recoveryPhrase").isNotEmpty());
+    }
+
+    @Test
+    void passwordChangeRejectsWrongCurrentPassword() throws Exception {
+        mockMvc.perform(post("/account/reset-password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(freeToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "Wrong@123",
+                                  "newPassword": "Changed@123",
+                                  "confirmPassword": "Changed@123"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Current password is incorrect."));
+    }
+
+    @Test
+    void passwordChangeRejectsWeakOrMismatchedNewPassword() throws Exception {
+        mockMvc.perform(post("/account/reset-password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(freeToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "User@123",
+                                  "newPassword": "123123123",
+                                  "confirmPassword": "123123123"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Password must be 8-128 characters and include uppercase, lowercase, number, and symbol."));
+
+        mockMvc.perform(post("/account/reset-password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(freeToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "User@123",
+                                  "newPassword": "Changed@123",
+                                  "confirmPassword": "Different@123"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("New password and confirmation do not match."));
+    }
+
+    @Test
+    void passwordChangeStoresStrongPasswordAndReturnsNoHash() throws Exception {
+        mockMvc.perform(post("/account/reset-password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(freeToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "User@123",
+                                  "newPassword": "Changed@123",
+                                  "confirmPassword": "Changed@123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("success"))
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+
+        UserAccount updated = userAccountRepository.findById(freeUser.getUserID()).orElseThrow();
+        assertTrue(passwordEncoder.matches("Changed@123", updated.getPasswordHash()));
     }
 
     private String generatePhrase() throws Exception {

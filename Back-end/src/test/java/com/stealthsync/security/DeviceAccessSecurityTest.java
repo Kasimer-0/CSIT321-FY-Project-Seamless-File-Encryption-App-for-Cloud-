@@ -84,6 +84,25 @@ class DeviceAccessSecurityTest {
     }
 
     @Test
+    void freeLogoutReleasesTheDeviceSlotForAnotherDevice() throws Exception {
+        String firstToken = token(login("testuser", "User@123", "free-device-a"));
+
+        mockMvc.perform(post("/logout")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(firstToken))
+                        .header("X-StealthSync-Device-ID", "free-device-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("success"));
+
+        mockMvc.perform(get("/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(firstToken))
+                        .header("X-StealthSync-Device-ID", "free-device-a"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("This device is inactive. Sign in again."));
+
+        login("testuser", "User@123", "free-device-b").andExpect(status().isOk());
+    }
+
+    @Test
     void revokedPremiumDeviceCannotContinueUsingProtectedApi() throws Exception {
         String tokenA = token(login("PremiumUser", "User@1234", "premium-device-a"));
         String tokenB = token(login("PremiumUser", "User@1234", "premium-device-b"));

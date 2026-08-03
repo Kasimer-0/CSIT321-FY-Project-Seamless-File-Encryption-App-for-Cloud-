@@ -20,6 +20,7 @@ import com.stealthsync.service.security.SecurityAuditService;
 import com.stealthsync.service.security.DeviceIdentifierService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -44,6 +45,86 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CloudStorageControllerTest {
+
+    @Test
+    void providerStatusReportsWhenOwnedFilesNeedTheirCloudAccountReconnected() {
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        CloudStorageAdapter adapter = mock(CloudStorageAdapter.class);
+        CloudCiphertextService ciphertextService = mock(CloudCiphertextService.class);
+
+        when(currentUserService.requireUserID()).thenReturn(7L);
+        when(adapter.providerKey()).thenReturn("google_drive");
+        when(adapter.providerPath()).thenReturn("google-drive");
+        when(adapter.isConfigured()).thenReturn(true);
+        when(adapter.isConnected(7L)).thenReturn(false);
+        when(ciphertextService.listOwned(7L, "google_drive")).thenReturn(List.of(
+                mock(CloudFileRecord.class), mock(CloudFileRecord.class)));
+
+        CloudStorageController controller = new CloudStorageController(
+                mock(AppDataService.class), List.of(adapter), mock(AesGcmService.class), currentUserService,
+                mock(UserVaultService.class), mock(EncryptionPolicyService.class), mock(EncryptionKeyService.class),
+                mock(SecurityAuditService.class), mock(DeviceIdentifierService.class),
+                mock(EncryptedEnvelopeV2Inspector.class), ciphertextService);
+
+        Map<String, Object> status = controller.providerStatus("google-drive").getBody();
+
+        assertEquals("google_drive", status.get("provider"));
+        assertEquals(true, status.get("configured"));
+        assertEquals(false, status.get("connected"));
+        assertEquals(true, status.get("reconnectRequired"));
+        assertEquals(2, status.get("ownedEncryptedFileCount"));
+        verify(ciphertextService).listOwned(7L, "google_drive");
+    }
+
+    @Test
+    void providerStatusDoesNotRequestReconnectWithoutOwnedFiles() {
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        CloudStorageAdapter adapter = mock(CloudStorageAdapter.class);
+        CloudCiphertextService ciphertextService = mock(CloudCiphertextService.class);
+
+        when(currentUserService.requireUserID()).thenReturn(7L);
+        when(adapter.providerKey()).thenReturn("google_drive");
+        when(adapter.providerPath()).thenReturn("google-drive");
+        when(adapter.isConnected(7L)).thenReturn(false);
+        when(ciphertextService.listOwned(7L, "google_drive")).thenReturn(List.of());
+
+        CloudStorageController controller = new CloudStorageController(
+                mock(AppDataService.class), List.of(adapter), mock(AesGcmService.class), currentUserService,
+                mock(UserVaultService.class), mock(EncryptionPolicyService.class), mock(EncryptionKeyService.class),
+                mock(SecurityAuditService.class), mock(DeviceIdentifierService.class),
+                mock(EncryptedEnvelopeV2Inspector.class), ciphertextService);
+
+        Map<String, Object> status = controller.providerStatus("google-drive").getBody();
+
+        assertEquals(false, status.get("reconnectRequired"));
+        assertEquals(0, status.get("ownedEncryptedFileCount"));
+    }
+
+    @Test
+    void removingOwnedCloudLinkDisconnectsCredentialAndRecordsAuditEvent() {
+        AppDataService dataStore = mock(AppDataService.class);
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        CloudStorageAdapter adapter = mock(CloudStorageAdapter.class);
+        SecurityAuditService auditService = mock(SecurityAuditService.class);
+        CloudStorageLink link = new CloudStorageLink(
+                12L, "google_drive", "owner@example.test", Instant.now(), "connected", true, 7L);
+
+        when(currentUserService.requireUserID()).thenReturn(7L);
+        when(dataStore.findCloudStorageLink(12L, 7L)).thenReturn(Optional.of(link));
+        when(dataStore.removeCloudStorageLink(12L, 7L)).thenReturn(true);
+        when(adapter.providerKey()).thenReturn("google_drive");
+        when(adapter.providerPath()).thenReturn("google-drive");
+
+        CloudStorageController controller = new CloudStorageController(
+                dataStore, List.of(adapter), mock(AesGcmService.class), currentUserService,
+                mock(UserVaultService.class), mock(EncryptionPolicyService.class), mock(EncryptionKeyService.class),
+                auditService, mock(DeviceIdentifierService.class), mock(EncryptedEnvelopeV2Inspector.class),
+                mock(CloudCiphertextService.class));
+
+        assertEquals(HttpStatus.NO_CONTENT, controller.remove(12L).getStatusCode());
+        verify(adapter).disconnect(7L);
+        verify(auditService).recordForUser(7L, "CLOUD_ACCOUNT_REMOVED", "google_drive");
+    }
 
     @Test
     void legacyGoogleDriveFilesCanStillDecryptAfterMetadataMigration() throws Exception {

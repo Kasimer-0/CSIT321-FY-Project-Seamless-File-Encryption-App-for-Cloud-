@@ -108,6 +108,15 @@ class OwnershipSecurityTest {
     void customerCannotListAnotherCustomersCloudLinksByChangingOwnerID() throws Exception {
         cloudStorageLinkRepository.save(new CloudStorageLink(
                 null,
+                "google_drive",
+                "customer-a@example.test",
+                Instant.now(),
+                "connected",
+                true,
+                customerA.getUserID()
+        ));
+        cloudStorageLinkRepository.save(new CloudStorageLink(
+                null,
                 "onedrive",
                 "other@example.test",
                 Instant.now(),
@@ -117,10 +126,32 @@ class OwnershipSecurityTest {
         ));
 
         mockMvc.perform(get("/cloud-storage/links")
+                .queryParam("ownerID", customerB.getUserID().toString())
+                .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].ownerID").value(customerA.getUserID()))
+                .andExpect(jsonPath("$[0].accountEmail").value("customer-a@example.test"))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+    }
+
+    @Test
+    void customerCannotRemoveAnotherCustomersCloudLink() throws Exception {
+        CloudStorageLink otherLink = cloudStorageLinkRepository.save(new CloudStorageLink(
+                null,
+                "google_drive",
+                "other@example.test",
+                Instant.now(),
+                "connected",
+                true,
+                customerB.getUserID()
+        ));
+
+        mockMvc.perform(delete("/cloud-storage/links/{id}", otherLink.getLinkID())
                         .queryParam("ownerID", customerB.getUserID().toString())
                         .header(HttpHeaders.AUTHORIZATION, bearer(customerAToken)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(status().isNotFound());
+
+        assertTrue(cloudStorageLinkRepository.findById(otherLink.getLinkID()).isPresent());
     }
 
     @Test

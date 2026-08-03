@@ -45,9 +45,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/cloud-storage")
@@ -135,11 +138,16 @@ public class CloudStorageController {
     @DeleteMapping("/links/{id}")
     public ResponseEntity<Void> remove(@PathVariable Long id) {
         Long ownerID = currentUserService.requireUserID();
-        dataStore.findCloudStorageLink(id, ownerID)
-                .ifPresent(link -> adapterFor(link.getProvider()).disconnect(ownerID));
-        return dataStore.removeCloudStorageLink(id, ownerID)
-                ? ResponseEntity.noContent().build()
-                : ResponseEntity.notFound().build();
+        Optional<CloudStorageLink> link = dataStore.findCloudStorageLink(id, ownerID);
+        if (link.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        adapterFor(link.get().getProvider()).disconnect(ownerID);
+        if (!dataStore.removeCloudStorageLink(id, ownerID)) {
+            return ResponseEntity.notFound().build();
+        }
+        securityAuditService.recordForUser(ownerID, "CLOUD_ACCOUNT_REMOVED", link.get().getProvider());
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/links/{id}/reconnect")
@@ -196,10 +204,14 @@ public class CloudStorageController {
     public ResponseEntity<Map<String, Object>> providerStatus(@PathVariable String provider) {
         Long ownerID = currentUserService.requireUserID();
         CloudStorageAdapter adapter = adapterFor(provider);
+        boolean connected = adapter.isConnected(ownerID);
+        int ownedEncryptedFileCount = cloudCiphertextService.listOwned(ownerID, adapter.providerKey()).size();
         return ResponseEntity.ok(Map.of(
                 "provider", adapter.providerKey(),
                 "configured", adapter.isConfigured(),
-                "connected", adapter.isConnected(ownerID)
+                "connected", connected,
+                "reconnectRequired", !connected && ownedEncryptedFileCount > 0,
+                "ownedEncryptedFileCount", ownedEncryptedFileCount
         ));
     }
 
@@ -218,6 +230,9 @@ public class CloudStorageController {
                         && file.envelopeVersion() == EncryptedEnvelopeV2Inspector.VERSION
                         ? v2FileDTO(file, ownedV2.get(file.fileId()))
                         : file)
+                .sorted(Comparator.comparing(
+                        this::cloudUploadTimestamp,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
         return ResponseEntity.ok(files);
     }
@@ -605,6 +620,10 @@ public class CloudStorageController {
                 record.getEnvelopeVersion(),
                 record.getEncryptedMetadata()
         );
+    }
+
+    private Instant cloudUploadTimestamp(CloudFileDTO file) {
+        return file.createdAt() == null ? file.modifiedAt() : file.createdAt();
     }
 
     private String requireOpaqueObjectName(String objectName) {

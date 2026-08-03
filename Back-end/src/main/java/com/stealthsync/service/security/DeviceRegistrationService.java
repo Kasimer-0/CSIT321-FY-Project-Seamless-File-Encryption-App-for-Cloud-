@@ -19,6 +19,9 @@ import java.util.List;
 /** Registers customer devices and enforces one free or five active Premium devices. */
 public class DeviceRegistrationService {
 
+    private static final int FREE_DEVICE_LIMIT = 1;
+    private static final int PREMIUM_DEVICE_LIMIT = 5;
+
     public static final String FREE_SECOND_DEVICE_MESSAGE =
             "Multi-device access requires an active premium subscription.";
     public static final String PREMIUM_DEVICE_LIMIT_MESSAGE =
@@ -47,9 +50,6 @@ public class DeviceRegistrationService {
                 deny(user.getUserID(), "This device has been revoked.");
             }
             if (!device.isActive()) {
-                if (!premium && !device.isPrimaryDevice()) {
-                    deny(user.getUserID(), FREE_SECOND_DEVICE_MESSAGE);
-                }
                 enforceLimit(user.getUserID(), premium);
                 device.setActive(true);
             }
@@ -141,12 +141,36 @@ public class DeviceRegistrationService {
         securityAuditService.recordForUser(ownerID, "DEVICE_REVOKED", null);
     }
 
+    @Transactional
+    public void signOut(Long ownerID, String rawIdentifier) {
+        String identifierHash = deviceIdentifierService.requireHash(rawIdentifier);
+        userDeviceRepository.findByOwnerIDAndDeviceIdentifierHash(ownerID, identifierHash)
+                .filter(device -> device.getRevokedAt() == null && device.isActive())
+                .ifPresent(device -> {
+                    // Logout releases an active-device slot without permanently revoking the device.
+                    device.setActive(false);
+                    device.setLastSeenAt(Instant.now());
+                    userDeviceRepository.save(device);
+                    securityAuditService.recordForUser(ownerID, "LOGOUT", null);
+                });
+    }
+
     private void reconcileEntitlement(List<UserDevice> devices, boolean premium) {
         if (premium) {
             return;
         }
-        devices.stream()
-                .filter(device -> !device.isPrimaryDevice() && device.isActive())
+        List<UserDevice> activeDevices = devices.stream()
+                .filter(device -> device.isActive() && device.getRevokedAt() == null)
+                .toList();
+        if (activeDevices.size() <= FREE_DEVICE_LIMIT) {
+            return;
+        }
+        UserDevice retained = activeDevices.stream()
+                .filter(UserDevice::isPrimaryDevice)
+                .findFirst()
+                .orElse(activeDevices.get(0));
+        activeDevices.stream()
+                .filter(device -> !device.getDeviceID().equals(retained.getDeviceID()))
                 .forEach(device -> {
                     device.setActive(false);
                     userDeviceRepository.save(device);
@@ -155,7 +179,7 @@ public class DeviceRegistrationService {
 
     private void enforceLimit(Long ownerID, boolean premium) {
         long activeCount = userDeviceRepository.countByOwnerIDAndActiveTrueAndRevokedAtIsNull(ownerID);
-        int limit = premium ? 5 : 1;
+        int limit = premium ? PREMIUM_DEVICE_LIMIT : FREE_DEVICE_LIMIT;
         if (activeCount >= limit) {
             deny(ownerID, premium ? PREMIUM_DEVICE_LIMIT_MESSAGE : FREE_SECOND_DEVICE_MESSAGE);
         }

@@ -54,6 +54,7 @@ public class GoogleDriveService implements CloudStorageAdapter {
     // Keep the least-privilege scope. The configured demo folder is already
     // accessible to this app, so broader full-Drive authorization is unnecessary.
     private static final String DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+    private static final String FULL_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
     private static final String USER_EMAIL_SCOPE = "openid https://www.googleapis.com/auth/userinfo.email";
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -66,7 +67,7 @@ public class GoogleDriveService implements CloudStorageAdapter {
     private final AesGcmService aesGcmService;
     private final ObjectMapper objectMapper;
     private final OAuthStateService oauthStateService;
-    private final HttpClient httpClient = HttpClient.newBuilder()
+    private HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
@@ -161,20 +162,22 @@ public class GoogleDriveService implements CloudStorageAdapter {
                 "redirect_uri", redirectUri,
                 "grant_type", "authorization_code"
         ));
+        requireGrantedDriveScope(tokenResponse);
         String accessToken = requiredText(tokenResponse, "access_token");
         String returnedRefreshToken = textOrNull(tokenResponse, "refresh_token");
         long expiresIn = tokenResponse.path("expires_in").asLong(3600);
 
+        // Granular Google consent can return a token that identifies the user but cannot access Drive.
+        // Verify Drive access before persisting the link as connected.
+        verifyDriveAccess(accessToken);
+        String accountEmail = fetchAccountEmail(accessToken);
         GoogleDriveCredential credential = credentialRepository.findByOwnerID(oauthState.ownerID())
                 .orElseGet(GoogleDriveCredential::new);
-        String refreshToken = isBlank(returnedRefreshToken)
-                ? decryptToken(credential, credential.getRefreshToken())
-                : returnedRefreshToken;
-        if (isBlank(refreshToken)) {
-            throw new IllegalArgumentException("Google Drive did not provide a refresh token. Revoke the previous app grant and connect again.");
-        }
-
-        String accountEmail = fetchAccountEmail(accessToken);
+        String refreshToken = selectRefreshTokenForAuthorization(
+                returnedRefreshToken,
+                decryptToken(credential, credential.getRefreshToken()),
+                credential.getAccountEmail(),
+                accountEmail);
         credential.setOwnerID(oauthState.ownerID());
         credential.setAccountEmail(accountEmail);
         if (isBlank(credential.getTokenSalt())) {
@@ -186,6 +189,27 @@ public class GoogleDriveService implements CloudStorageAdapter {
         credentialRepository.save(credential);
 
         return dataStore.linkCloudProvider(providerKey(), oauthState.ownerID(), accountEmail);
+    }
+
+    private String selectRefreshTokenForAuthorization(
+            String returnedRefreshToken,
+            String existingRefreshToken,
+            String existingAccountEmail,
+            String selectedAccountEmail) {
+        if (!isBlank(returnedRefreshToken)) {
+            return returnedRefreshToken;
+        }
+        if (!isBlank(existingAccountEmail)
+                && !existingAccountEmail.equalsIgnoreCase(selectedAccountEmail)) {
+            throw new IllegalArgumentException(
+                    "Google Drive did not issue a refresh token for the newly selected account. "
+                            + "Remove StealthSync access from that Google account, then use Change account again.");
+        }
+        if (isBlank(existingRefreshToken)) {
+            throw new IllegalArgumentException(
+                    "Google Drive did not provide a refresh token. Revoke the previous app grant and connect again.");
+        }
+        return existingRefreshToken;
     }
 
     @Override
@@ -429,13 +453,40 @@ public class GoogleDriveService implements CloudStorageAdapter {
         return requiredText(objectMapper.readTree(response.body()), "email");
     }
 
+    private void requireGrantedDriveScope(JsonNode tokenResponse) {
+        String grantedScopes = textOrNull(tokenResponse, "scope");
+        if (isBlank(grantedScopes)) {
+            return;
+        }
+        boolean hasDriveAccess = List.of(grantedScopes.trim().split("\\s+"))
+                .stream()
+                .anyMatch(scope -> DRIVE_SCOPE.equals(scope) || FULL_DRIVE_SCOPE.equals(scope));
+        if (!hasDriveAccess) {
+            throw missingDrivePermission();
+        }
+    }
+
+    private void verifyDriveAccess(String accessToken) throws IOException, InterruptedException {
+        URI uri = URI.create(DRIVE_FILES_ENDPOINT + "?pageSize=1&fields=" + encode("files(id)"));
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(REQUEST_TIMEOUT)
+                .header("Authorization", "Bearer " + accessToken)
+                .GET()
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (isInsufficientDriveScope(response.statusCode(), response.body())) {
+            throw missingDrivePermission();
+        }
+        ensureSuccess(response.statusCode(), response.body());
+    }
+
     private JsonNode sendJson(Long ownerID, HttpRequest.Builder requestBuilder)
             throws IOException, InterruptedException {
         HttpResponse<String> response = send(ownerID, requestBuilder, HttpResponse.BodyHandlers.ofString());
         return objectMapper.readTree(response.body());
     }
 
-    // Retry one unauthorized request after forcing token refresh; other HTTP failures are surfaced unchanged.
+    // Retry one unauthorized request after forcing token refresh and convert known OAuth failures into reconnect state.
     private <T> HttpResponse<T> send(Long ownerID, HttpRequest.Builder requestBuilder,
                                      HttpResponse.BodyHandler<T> bodyHandler)
             throws IOException, InterruptedException {
@@ -452,7 +503,12 @@ public class GoogleDriveService implements CloudStorageAdapter {
                     bodyHandler
             );
         }
-        ensureSuccess(response.statusCode(), response.body() == null ? "" : response.body().toString());
+        String responseBody = responseBodyText(response.body());
+        if (isInsufficientDriveScope(response.statusCode(), responseBody)) {
+            expireAuthorization(ownerID, "Drive file permission is missing");
+            throw missingDrivePermission();
+        }
+        ensureSuccess(response.statusCode(), responseBody);
         return response;
     }
 
@@ -462,12 +518,22 @@ public class GoogleDriveService implements CloudStorageAdapter {
         if (!forceRefresh && credential.getExpiresAt().isAfter(Instant.now().plusSeconds(60))) {
             return decryptToken(credential, credential.getAccessToken());
         }
-        JsonNode response = postForm(TOKEN_ENDPOINT, Map.of(
-                "client_id", clientId,
-                "client_secret", clientSecret,
-                "refresh_token", decryptToken(credential, credential.getRefreshToken()),
-                "grant_type", "refresh_token"
-        ));
+        JsonNode response;
+        try {
+            response = postForm(TOKEN_ENDPOINT, Map.of(
+                    "client_id", clientId,
+                    "client_secret", clientSecret,
+                    "refresh_token", decryptToken(credential, credential.getRefreshToken()),
+                    "grant_type", "refresh_token"
+            ));
+        } catch (IllegalArgumentException exception) {
+            if (isInvalidGrant(exception.getMessage())) {
+                expireAuthorization(credential.getOwnerID(), "Refresh token expired or was revoked");
+                throw new IllegalArgumentException(
+                        "Google Drive authorization expired or was revoked. Reconnect Google Drive.");
+            }
+            throw exception;
+        }
         String accessToken = requiredText(response, "access_token");
         String rotatedRefreshToken = textOrNull(response, "refresh_token");
         credential.setAccessToken(encryptToken(credential, accessToken));
@@ -513,6 +579,49 @@ public class GoogleDriveService implements CloudStorageAdapter {
         if (statusCode < 200 || statusCode >= 300) {
             throw new IllegalArgumentException("Google Drive request failed (HTTP " + statusCode + "): " + responseBody);
         }
+    }
+
+    private boolean isInsufficientDriveScope(int statusCode, String responseBody) {
+        if (statusCode != 403 || isBlank(responseBody)) {
+            return false;
+        }
+        String normalized = responseBody.toLowerCase();
+        return normalized.contains("access_token_scope_insufficient")
+                || normalized.contains("insufficient authentication scopes")
+                || normalized.contains("insufficientpermission");
+    }
+
+    private boolean isInvalidGrant(String message) {
+        if (isBlank(message)) {
+            return false;
+        }
+        String normalized = message.toLowerCase();
+        return normalized.contains("invalid_grant")
+                || normalized.contains("expired or revoked");
+    }
+
+    private String responseBodyText(Object body) {
+        if (body == null) {
+            return "";
+        }
+        if (body instanceof byte[] bytes) {
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+        return String.valueOf(body);
+    }
+
+    private void expireAuthorization(Long ownerID, String reason) {
+        if (ownerID == null) {
+            return;
+        }
+        credentialRepository.deleteByOwnerID(ownerID);
+        dataStore.expireCloudStorageLink(ownerID, providerKey());
+        log.warn("Google Drive authorization expired for owner {}: {}", ownerID, reason);
+    }
+
+    private IllegalArgumentException missingDrivePermission() {
+        return new IllegalArgumentException(
+                "Google Drive authorization is missing file access. Reconnect and approve Google Drive file access.");
     }
 
     private GoogleDriveFileDTO toFileDTO(Long ownerID, JsonNode file) {

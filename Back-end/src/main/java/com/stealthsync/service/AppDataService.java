@@ -14,6 +14,7 @@ import com.stealthsync.repository.SubscriptionRepository;
 import com.stealthsync.repository.SystemLogRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import com.stealthsync.service.ai.AnomalyDetectorService;
+import com.stealthsync.service.security.PasswordPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -44,7 +45,7 @@ public class AppDataService {
     // frontend pages do not hard-code different rules for free vs. premium users.
     private static final Set<String> SUPPORTED_CLOUD_PROVIDERS = Set.of("google_drive", "dropbox", "onedrive");
     private static final int FREE_TIER_CLOUD_PROVIDER_LIMIT = 1;
-    private static final int PREMIUM_CLOUD_PROVIDER_LIMIT = 5;
+    private static final int PREMIUM_CLOUD_PROVIDER_LIMIT = 3;
 
     private final UserAccountRepository userAccountRepository;
     private final PlanRepository planRepository;
@@ -72,8 +73,10 @@ public class AppDataService {
             throw new IllegalArgumentException("Username or Email already exists.");
         }
 
+        PasswordPolicy.requireStrong(password);
+
         UserAccount user = new UserAccount(null, username.trim(), email.trim(), "customer", false, false, null);
-        user.setPasswordHash(passwordEncoder.encode(isBlank(password) ? "User@1234" : password));
+        user.setPasswordHash(passwordEncoder.encode(password));
         return userAccountRepository.save(user);
     }
 
@@ -344,6 +347,22 @@ public class AppDataService {
             return cloudStorageLinkRepository.save(link);
         });
     }
+
+    @Transactional
+    public Optional<CloudStorageLink> expireCloudStorageLink(Long ownerID, String provider) {
+        if (ownerID == null) {
+            return Optional.empty();
+        }
+        String normalizedProvider = normalizeCloudProvider(provider);
+        return cloudStorageLinkRepository.findByOwnerIDAndProviderIgnoreCase(ownerID, normalizedProvider)
+                .map(link -> {
+                    // Keep the owner-scoped link and file index so a successful OAuth reconnect can restore access.
+                    link.setStatus("expired");
+                    link.setActive(false);
+                    return cloudStorageLinkRepository.save(link);
+                });
+    }
+
     @Transactional
     public CloudStorageLink linkCloudProvider(String provider, Long ownerID) {
         String normalizedProvider = normalizeCloudProvider(provider);

@@ -180,6 +180,7 @@ class AppDataServiceTest {
         List<CloudStorageLink> links = mutableCloudLinkRepository(premiumCustomer);
         when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
 
+        assertEquals(3, service().cloudProviderLimitFor(2L));
         service().linkCloudProvider("google_drive", 2L, "google@example.com");
         service().linkCloudProvider("dropbox", 2L, "dropbox@example.com");
         service().linkCloudProvider("onedrive", 2L, "onedrive@example.com");
@@ -188,6 +189,20 @@ class AppDataServiceTest {
         assertTrue(links.stream().anyMatch(link -> "google_drive".equals(link.getProvider())));
         assertTrue(links.stream().anyMatch(link -> "dropbox".equals(link.getProvider())));
         assertTrue(links.stream().anyMatch(link -> "onedrive".equals(link.getProvider())));
+    }
+
+    @Test
+    void reconnectingSameOwnerAndProviderUpdatesEmailWithoutCreatingDuplicateLink() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        List<CloudStorageLink> links = mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+
+        CloudStorageLink original = service().linkCloudProvider("google_drive", 2L, "first@example.com");
+        CloudStorageLink updated = service().linkCloudProvider("google_drive", 2L, "second@example.com");
+
+        assertEquals(original.getLinkID(), updated.getLinkID());
+        assertEquals("second@example.com", updated.getAccountEmail());
+        assertEquals(1, links.size());
     }
 
     @Test
@@ -247,6 +262,21 @@ class AppDataServiceTest {
 
         assertFalse(deactivated.isActive());
         assertEquals("connected", deactivated.getStatus());
+        assertEquals(1, links.size());
+    }
+
+    @Test
+    void expiringCloudLinkKeepsOwnerRecordForOAuthReconnect() {
+        UserAccount premiumCustomer = customer(true, 9L);
+        List<CloudStorageLink> links = mutableCloudLinkRepository(premiumCustomer);
+        when(userAccountRepository.findById(2L)).thenReturn(Optional.of(premiumCustomer));
+        CloudStorageLink google = service().linkCloudProvider("google_drive", 2L, "google@example.com");
+
+        CloudStorageLink expired = service().expireCloudStorageLink(2L, "google_drive").orElseThrow();
+
+        assertEquals(google.getLinkID(), expired.getLinkID());
+        assertEquals("expired", expired.getStatus());
+        assertFalse(expired.isActive());
         assertEquals(1, links.size());
     }
 

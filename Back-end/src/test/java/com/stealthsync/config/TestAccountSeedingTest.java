@@ -1,6 +1,8 @@
 package com.stealthsync.config;
 
 import com.stealthsync.model.entity.UserAccount;
+import com.stealthsync.repository.EncryptedFileRecordRepository;
+import com.stealthsync.repository.PlanRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +33,15 @@ class TestAccountSeedingTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private EncryptedFileRecordRepository encryptedFileRecordRepository;
+
+    @Autowired
+    private PlanRepository planRepository;
+
+    @Autowired
+    private DataSeeder dataSeeder;
+
     @Test
     void createsAdminAndNormalCustomerCredentials() {
         UserAccount admin = userAccountRepository.findByUsernameIgnoreCase("admin").orElseThrow();
@@ -43,5 +54,32 @@ class TestAccountSeedingTest {
         assertFalse(customer.isSubscribed());
         assertFalse(customer.isSuspended());
         assertTrue(passwordEncoder.matches("User@123", customer.getPasswordHash()));
+    }
+
+    @Test
+    void doesNotSeedLegacyEncryptedFileRecords() {
+        assertEquals(0, encryptedFileRecordRepository.count());
+    }
+
+    @Test
+    void seedsFinalPremiumMonthlyPrice() {
+        assertEquals(7.0, planRepository.findByPlanTitleIgnoreCase("Premium Corporate Tier")
+                .orElseThrow()
+                .getPlanPrice());
+    }
+
+    @Test
+    void migratesPreviousSeededPremiumPriceWithoutDuplicatingPlan() throws Exception {
+        var premiumPlan = planRepository.findByPlanTitleIgnoreCase("Premium Corporate Tier").orElseThrow();
+        premiumPlan.setPlanPrice(15.0);
+        planRepository.saveAndFlush(premiumPlan);
+
+        long planCount = planRepository.count();
+        dataSeeder.run();
+
+        assertEquals(planCount, planRepository.count());
+        assertEquals(7.0, planRepository.findByPlanTitleIgnoreCase("Premium Corporate Tier")
+                .orElseThrow()
+                .getPlanPrice());
     }
 }

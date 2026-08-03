@@ -77,10 +77,10 @@ public class AuthController {
             response.put("message", "Account registered successfully!");
             response.put("user", user);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (Exception exception) {
+        } catch (IllegalArgumentException exception) {
             log.warn("Registration failed for username {}", signUpRequest.getUsername());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new ErrorResponse("Registration failed: Username or Email already exists."));
+                    .body(new ErrorResponse(exception.getMessage()));
         }
     }
 
@@ -120,7 +120,13 @@ public class AuthController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout() {
+    public ResponseEntity<Map<String, String>> logout(HttpServletRequest request) {
+        UserAccount user = currentUserService.requireUser();
+        if ("customer".equalsIgnoreCase(user.getRole())) {
+            deviceRegistrationService.signOut(
+                    user.getUserID(),
+                    request.getHeader(DeviceIdentifierService.HEADER_NAME));
+        }
         return ResponseEntity.ok(Map.of("status", "success", "message", "Logged out successfully."));
     }
 }

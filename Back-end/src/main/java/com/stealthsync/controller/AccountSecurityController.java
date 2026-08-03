@@ -9,6 +9,7 @@ import com.stealthsync.service.security.RecoveryPhraseService;
 import com.stealthsync.service.security.RecoveryLoginAttemptService;
 import com.stealthsync.service.security.DeviceIdentifierService;
 import com.stealthsync.service.security.DeviceRegistrationService;
+import com.stealthsync.service.security.PasswordPolicy;
 import com.stealthsync.service.security.SecurityAuditService;
 import com.stealthsync.service.SubscriptionEntitlementService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,15 +44,22 @@ public class AccountSecurityController {
     // Reset password now lives on the customer View Account page; the old
     // destructive account-wipe action is intentionally no longer exposed.
     @PostMapping("/reset-password")
-    @Transactional
-    public ResponseEntity<UserAccount> resetPassword(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, String>> resetPassword(@RequestBody Map<String, Object> request) {
         UserAccount user = currentUserService.requireUser();
+        String currentPassword = asString(request.get("currentPassword"), "");
         String newPassword = asString(request.get("newPassword"), "");
-        if (newPassword.length() < 8) {
-            throw new IllegalArgumentException("Password must contain at least 8 characters.");
+        String confirmPassword = asString(request.get("confirmPassword"), "");
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("Current password is incorrect.");
+        }
+        PasswordPolicy.requireStrong(newPassword);
+        if (!newPassword.equals(confirmPassword)) {
+            throw new IllegalArgumentException("New password and confirmation do not match.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
-        return ResponseEntity.ok(userAccountRepository.save(user));
+        userAccountRepository.save(user);
+        securityAuditService.recordForUser(user.getUserID(), "PASSWORD_CHANGED", null);
+        return ResponseEntity.ok(Map.of("status", "success", "message", "Password changed successfully."));
     }
 
     // The backend generates and stores the recovery phrase hash so the frontend

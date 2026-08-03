@@ -1,7 +1,6 @@
 package com.stealthsync.config;
 
 import com.stealthsync.model.entity.CloudStorageLink;
-import com.stealthsync.model.entity.EncryptedFileRecord;
 import com.stealthsync.model.entity.Plan;
 import com.stealthsync.model.entity.Subscription;
 import com.stealthsync.model.entity.UserAccount;
@@ -22,10 +21,13 @@ import java.time.LocalDate;
 @Component
 @RequiredArgsConstructor
 /**
- * Creates deterministic demo plans, test accounts, and sample records at startup.
+ * Creates deterministic demo plans and test accounts at startup.
  * Lookups are idempotent so repeated launches do not duplicate seeded business data.
  */
 public class DataSeeder implements CommandLineRunner {
+
+    private static final double PREMIUM_PLAN_PRICE = 7.0;
+    private static final double LEGACY_PREMIUM_PLAN_PRICE = 15.0;
 
     private final UserAccountRepository userAccountRepository;
     private final PlanRepository planRepository;
@@ -51,11 +53,16 @@ public class DataSeeder implements CommandLineRunner {
                 .orElseGet(() -> planRepository.save(new Plan(
                         null,
                         "Premium Corporate Tier",
-                        15.0,
+                        PREMIUM_PLAN_PRICE,
                         "AES-256 GCM encryption with premium multi-device access",
                         "active",
                         "AES-256-GCM"
                 )));
+        // Migrate only the previous seeded price so later administrator-defined prices are preserved.
+        if (Double.compare(premiumPlan.getPlanPrice(), LEGACY_PREMIUM_PLAN_PRICE) == 0) {
+            premiumPlan.setPlanPrice(PREMIUM_PLAN_PRICE);
+            planRepository.save(premiumPlan);
+        }
 
         seedUser(
                 "admin",
@@ -98,8 +105,6 @@ public class DataSeeder implements CommandLineRunner {
         customer.setSubscription(subscription.getSubscriptionID());
         userAccountRepository.save(customer);
 
-        // Sample operational data is inserted only into empty tables to avoid overwriting user work.
-
         if (cloudStorageLinkRepository.count() == 0) {
             cloudStorageLinkRepository.save(new CloudStorageLink(
                     null,
@@ -109,20 +114,6 @@ public class DataSeeder implements CommandLineRunner {
                     "expired",
                     true,
                     customer.getUserID()
-            ));
-        }
-
-        if (encryptedFileRecordRepository.count() == 0) {
-            encryptedFileRecordRepository.save(new EncryptedFileRecord(
-                    null,
-                    customer.getUserID(),
-                    "sample-contract.pdf",
-                    245760,
-                    "pdf",
-                    Instant.now().minusSeconds(3600),
-                    "AES-256-GCM",
-                    1001L,
-                    new byte[0]
             ));
         }
 
