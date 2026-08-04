@@ -43,6 +43,20 @@ If the package exceeds the upload limit, submit the shared Drive link as permitt
 
 Do not call the desktop package final until step 10 passes on a clean launch.
 
+## OAuth And Shared Hosting Readiness - 2026-08-04
+
+- [x] Google OAuth project is External Production rather than Testing.
+- [x] Google scopes are limited to `drive.file` and `userinfo.email`.
+- [x] Google, Dropbox, and OneDrive production callbacks match the fixed public URL.
+- [x] `PremiumUser -> kasimer.zero@gmail.com` was reauthorized after Google publication.
+- [ ] Teammate reauthorizes `testuser -> nekohuii@gmail.com` from a familiar Google device/network.
+- [x] Google Drive, Dropbox, and OneDrive passed encrypted upload/list/download/decrypt/delete smoke tests.
+- [x] Dropbox offline refresh and OneDrive rotated refresh-token paths passed live provider access.
+- [x] Shared deployment task remains running as a health supervisor with no execution-time limit.
+- [x] App-container and Dev-Tunnel failure recovery were demonstrated in under one minute.
+- [x] Deliberate `-Stop` remained stopped for five minutes and normal startup restored both URLs to `200`.
+- [x] Verified PostgreSQL, Vault, DPAPI environment, and checksum backup retained under ignored release outputs.
+
 ## Documentation Closure
 
 - [ ] Replace the July 8 User Manual in Drive with the teammate's updated version.
