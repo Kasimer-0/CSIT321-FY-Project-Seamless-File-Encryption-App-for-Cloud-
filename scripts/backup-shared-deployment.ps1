@@ -50,13 +50,15 @@ if ([string]::IsNullOrWhiteSpace($databaseUser)) {
     throw "DB_USERNAME is missing from .env.production."
 }
 
-$databaseContainer = (& $docker compose -f $composeFile --env-file $environmentFile ps -q database).Trim()
-$appContainer = (& $docker compose -f $composeFile --env-file $environmentFile ps -q app).Trim()
+$databaseContainer = (& $docker compose -f $composeFile --env-file $environmentFile ps -a -q database | Out-String).Trim()
+$appContainer = (& $docker compose -f $composeFile --env-file $environmentFile ps -a -q app | Out-String).Trim()
 if (-not $databaseContainer -or -not $appContainer) {
     throw "The shared app and database containers must exist before a release backup is created."
 }
 
 $appWasRunning = ((& $docker inspect -f "{{.State.Running}}" $appContainer).Trim() -eq "true")
+$databaseWasRunning = ((& $docker inspect -f "{{.State.Running}}" $databaseContainer).Trim() -eq "true")
+$databaseWasStartedForBackup = $false
 $remoteDump = "/tmp/stealthsync-release-$timestamp.dump"
 $databaseDump = Join-Path $backupDirectory "postgres.dump"
 $vaultStaging = Join-Path $backupDirectory "vault"
@@ -64,6 +66,25 @@ $vaultArchive = Join-Path $backupDirectory "vault.zip"
 $encryptedEnvironment = Join-Path $backupDirectory "environment.dpapi"
 
 try {
+    if (-not $databaseWasRunning) {
+        Write-Host "Starting PostgreSQL for the release backup..." -ForegroundColor Cyan
+        Invoke-Compose -Arguments @("up", "-d", "database")
+        $databaseWasStartedForBackup = $true
+    }
+
+    $databaseReady = $false
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        $health = (& $docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" $databaseContainer | Out-String).Trim()
+        if ($health -eq "healthy" -or $health -eq "running") {
+            $databaseReady = $true
+            break
+        }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $databaseReady) {
+        throw "PostgreSQL did not become ready for the release backup."
+    }
+
     if ($appWasRunning) {
         Write-Host "Pausing the application while the paired database and vault backup is created..." -ForegroundColor Cyan
         Invoke-Compose -Arguments @("stop", "app")
@@ -139,6 +160,9 @@ finally {
     & $docker exec $databaseContainer rm -f $remoteDump 2>$null | Out-Null
     if ($appWasRunning) {
         Invoke-Compose -Arguments @("up", "-d", "app")
+    }
+    elseif ($databaseWasStartedForBackup) {
+        Invoke-Compose -Arguments @("stop", "database")
     }
 }
 

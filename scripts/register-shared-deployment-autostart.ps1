@@ -40,7 +40,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew `
     -RestartCount 3 `
     -RestartInterval (New-TimeSpan -Minutes 2) `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+    -ExecutionTimeLimit ([TimeSpan]::Zero)
 
 function Register-TaskForRunLevel([string]$RunLevel) {
     $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel $RunLevel
@@ -63,3 +63,8 @@ Write-Host "Registered scheduled task: $taskName" -ForegroundColor Green
 Write-Host "Trigger: current user logon with a 60-second delay"
 Write-Host "Run level: $registeredRunLevel"
 Write-Host "Log: $(Join-Path $repoRoot '.stealthsync-run\logs\autostart.log')"
+
+Remove-Item -LiteralPath (Join-Path $powerStateDirectory "shared-deployment.disabled") `
+    -Force -ErrorAction SilentlyContinue
+Start-ScheduledTask -TaskName $taskName
+Write-Host "Health supervisor started." -ForegroundColor Green

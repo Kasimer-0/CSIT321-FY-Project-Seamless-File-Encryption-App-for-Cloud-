@@ -12,6 +12,8 @@ $runDirectory = Join-Path $repoRoot ".stealthsync-run"
 $logDirectory = Join-Path $runDirectory "logs"
 $tunnelPidFile = Join-Path $runDirectory "devtunnel.pid"
 $tunnelIdFile = Join-Path $runDirectory "devtunnel.id"
+$disabledMarker = Join-Path $runDirectory "shared-deployment.disabled"
+$scheduledTaskName = "StealthSync Shared Deployment"
 $preferredTunnelId = "stealthsync-fyp-kasimer-2026"
 $tunnelId = $preferredTunnelId
 $publicUrl = $null
@@ -280,11 +282,19 @@ function Get-PublicUrlFromDevTunnelLogs {
 function Start-DevTunnelHost {
     Stop-StaleDevTunnelProcess
 
-    # Restart the tracked host on every run so a previous login or tunnel ID
-    # cannot leave the script validating a stale public URL.
     if (Test-Path -LiteralPath $tunnelPidFile) {
         $existingPid = Get-Content -LiteralPath $tunnelPidFile -ErrorAction SilentlyContinue
-        if ($existingPid) {
+        $existingProcess = if ($existingPid) {
+            Get-Process -Id $existingPid -ErrorAction SilentlyContinue
+        }
+        $existingUrl = Get-PublicUrlFromDevTunnelLogs
+        if ($existingProcess -and $existingUrl) {
+            $script:publicUrl = $existingUrl
+            Write-Host "Reusing the healthy Dev Tunnel host." -ForegroundColor DarkGreen
+            return
+        }
+
+        if ($existingProcess) {
             Stop-Process -Id $existingPid -Force -ErrorAction SilentlyContinue
         }
         Remove-Item -LiteralPath $tunnelPidFile -Force -ErrorAction SilentlyContinue
@@ -384,6 +394,11 @@ $docker = Resolve-DockerCli
 $devTunnel = Resolve-DevTunnelCli
 
 if ($Stop) {
+    Set-Content -LiteralPath $disabledMarker -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss K") -Encoding ASCII
+    $scheduledTask = Get-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
+    if ($scheduledTask -and $scheduledTask.State -eq "Running") {
+        Stop-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
+    }
     if (Test-Path -LiteralPath $tunnelPidFile) {
         $tunnelPid = Get-Content -LiteralPath $tunnelPidFile -ErrorAction SilentlyContinue
         if ($tunnelPid) {
@@ -395,6 +410,8 @@ if ($Stop) {
     Write-Host "StealthSync shared test deployment stopped." -ForegroundColor Yellow
     exit 0
 }
+
+Remove-Item -LiteralPath $disabledMarker -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path -LiteralPath $environmentFile)) {
     throw ".env.production is missing. Create it from .env.production.example without committing it."
@@ -474,3 +491,11 @@ Write-Host "Dropbox callback: $publicUrl/cloud-storage/dropbox/callback"
 Write-Host "OneDrive callback: $publicUrl/cloud-storage/onedrive/callback"
 Write-Host ""
 Write-Host "The first browser visit may show a Microsoft anti-phishing page. Click Continue once." -ForegroundColor Yellow
+
+if (-not $NonInteractive) {
+    $scheduledTask = Get-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
+    if ($scheduledTask -and $scheduledTask.State -ne "Running") {
+        Start-ScheduledTask -TaskName $scheduledTaskName
+        Write-Host "Shared deployment health supervisor started." -ForegroundColor DarkGreen
+    }
+}
