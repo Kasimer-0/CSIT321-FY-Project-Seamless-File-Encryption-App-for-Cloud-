@@ -6,7 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
-/** Database access for one encrypted Google Drive credential record per customer. */
+/** Compatibility access for existing encrypted Google credentials pending an explicit database migration. */
 public interface GoogleDriveCredentialRepository extends JpaRepository<GoogleDriveCredential, Long> {
     Optional<GoogleDriveCredential> findByOwnerID(Long ownerID);
 

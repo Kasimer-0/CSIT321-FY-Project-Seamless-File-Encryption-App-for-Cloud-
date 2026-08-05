@@ -15,6 +15,7 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
     const [editingID, setEditingID] = useState<number | null>(null)
     const [deviceName, setDeviceName] = useState("")
     const [revokingID, setRevokingID] = useState<number | null>(null)
+    const [showRevokeConfirm, setShowRevokeConfirm] = useState<UserDevice | null>(null)
 
     const loadDevices = async () => {
         try {
@@ -57,8 +58,9 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
         toast.success("Device renamed")
     }
 
-    const revoke = async (device: UserDevice) => {
-        if (!window.confirm(`Revoke ${device.deviceName}? This device will lose access immediately.`)) return
+    const revoke = async () => {
+        if (!showRevokeConfirm) return
+        const device = showRevokeConfirm
         try {
             setRevokingID(device.deviceID)
             const response = await apiFetch(`/devices/${device.deviceID}`, {
@@ -71,6 +73,9 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
             }
             await loadDevices()
             toast.success("Device revoked")
+            setShowRevokeConfirm(null)
+        } catch {
+            toast.error("Server connection failed")
         } finally {
             setRevokingID(null)
         }
@@ -146,7 +151,7 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
                                         <button
                                             className="btn btn-outline-danger btn-sm"
                                             disabled={revokingID === device.deviceID}
-                                            onClick={() => revoke(device)}
+                                            onClick={() => setShowRevokeConfirm(device)}
                                         >
                                             {revokingID === device.deviceID ? "Revoking..." : "Revoke"}
                                         </button>
@@ -155,6 +160,50 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {showRevokeConfirm && (
+                <div
+                    className="premium-modal-backdrop"
+                    role="presentation"
+                    onClick={() => revokingID === null && setShowRevokeConfirm(null)}
+                    onKeyDown={event => {
+                        if (event.key === "Escape" && revokingID === null) setShowRevokeConfirm(null)
+                    }}
+                >
+                    <div
+                        className="premium-modal-surface"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="revoke-device-modal-heading"
+                        onClick={event => event.stopPropagation()}
+                    >
+                        <div className="modal-accent-strip-alert" />
+                        <h4 id="revoke-device-modal-heading" className="modal-title-main">Revoke Device?</h4>
+                        <p className="modal-description-text">
+                            <strong>{showRevokeConfirm.deviceName}</strong> will lose access immediately and must be
+                            authorized again before it can use this account.
+                        </p>
+                        <div className="d-flex gap-3 justify-content-end">
+                            <button
+                                className="btn-modal-dismiss"
+                                type="button"
+                                disabled={revokingID !== null}
+                                onClick={() => setShowRevokeConfirm(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn-modal-destructive"
+                                type="button"
+                                disabled={revokingID !== null}
+                                onClick={() => void revoke()}
+                            >
+                                {revokingID !== null ? "Revoking..." : "Revoke Device"}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </>

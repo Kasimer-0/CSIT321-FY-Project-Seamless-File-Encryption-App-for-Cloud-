@@ -19,7 +19,10 @@ import java.time.Instant;
         name = "cloud_provider_credentials",
         uniqueConstraints = @UniqueConstraint(columnNames = {"provider", "owner_id"})
 )
-/** Encrypted OAuth credential storage shared by Dropbox, OneDrive, and future cloud adapters. */
+/**
+ * Encrypted OAuth credential storage shared by Dropbox and OneDrive.
+ * Google Drive keeps its established table until those live refresh tokens receive an explicit data migration.
+ */
 public class CloudProviderCredential {
 
     @Id
