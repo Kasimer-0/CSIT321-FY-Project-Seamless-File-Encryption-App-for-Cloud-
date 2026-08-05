@@ -718,6 +718,29 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     cursor: pointer;
 }
 
+.recent-activity-list {
+  border-top: 1px solid var(--premium-border);
+}
+
+.recent-activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--premium-border);
+}
+
+.recent-activity-row:last-child {
+  border-bottom: 0;
+}
+
+.recent-activity-meta {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
 /* --- Current feature compatibility layer --- */
 .console-kicker {
     color: var(--accent);

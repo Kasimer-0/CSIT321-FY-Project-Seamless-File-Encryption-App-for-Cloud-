@@ -1,11 +1,12 @@
 import { apiFetch } from "../lib/api"
-import { useState, useEffect } from "react"
-import type { UserAccount } from "../Type"
+import { useCallback, useState, useEffect } from "react"
+import type { SystemLog, UserAccount } from "../Type"
 import AdminManageAccount from "./AdminManageAccountPage"
 import AdminManagePlan from "./AdminManagePlanPage"
 import AdminManageSubscription from "./AdminManageSubscriptionPage"
 // Reports and logs cover the admin monitoring user stories.
 import AdminReportsLogsPage from "./AdminReportsLogsPage"
+import { formatSystemLogTime, newestSystemLogs } from "../admin/recentActivity"
 
 type DashboardStats = {
     totalUsers: number
@@ -39,12 +40,16 @@ const tabConfig: Record<Tab, { label: string; icon: string }> = {
 
 function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     const [activeTab, setActiveTab] = useState<Tab>("overview")
+    const [reportsInitialView, setReportsInitialView] = useState<"reports" | "logs">("reports")
 
     const [stats, setStats] = useState<DashboardStats>({
         totalUsers: 0,
         premiumUsers: 0,
         inactiveUsers: 0,
     })
+    const [recentLogs, setRecentLogs] = useState<SystemLog[]>([])
+    const [recentLogsLoading, setRecentLogsLoading] = useState(true)
+    const [recentLogsError, setRecentLogsError] = useState("")
 
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
@@ -65,6 +70,29 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
         fetchStats()
     }, [])
+
+    const loadRecentActivity = useCallback(async () => {
+        setRecentLogsLoading(true)
+        setRecentLogsError("")
+        try {
+            const response = await apiFetch("/admin/logs", { credentials: "include" })
+            if (!response.ok) {
+                throw new Error("Unable to load recent activity.")
+            }
+            const logs = await response.json() as SystemLog[]
+            setRecentLogs(newestSystemLogs(logs))
+        } catch (error) {
+            setRecentLogsError(error instanceof Error ? error.message : "Unable to load recent activity.")
+        } finally {
+            setRecentLogsLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        if (activeTab === "overview") {
+            void loadRecentActivity()
+        }
+    }, [activeTab, loadRecentActivity])
 
     const handleLogout = async () => {
         await onLogout()
@@ -95,7 +123,10 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                                 key={tab}
                                 className={`sidebar-nav-item ${activeTab === tab ? "active" : ""}`}
                                 type="button"
-                                onClick={() => setActiveTab(tab)}
+                                onClick={() => {
+                                    if (tab === "reports") setReportsInitialView("reports")
+                                    setActiveTab(tab)
+                                }}
                             >
                                 <span className="sidebar-nav-icon">{tabConfig[tab].icon}</span>
                                 <span>{tabConfig[tab].label}</span>
@@ -163,9 +194,57 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                             </div>
 
                             <section className="workspace-card-wrapper p-4">
-                                <div className="console-kicker mb-2">System activity</div>
-                                <h5 className="workspace-section-heading mb-2">Recent Activity</h5>
-                                <p className="console-muted mb-0">Activity stream placeholder for the current sprint demo.</p>
+                                <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                    <div>
+                                        <div className="console-kicker mb-2">System activity</div>
+                                        <h5 className="workspace-section-heading mb-0">Recent Activity</h5>
+                                    </div>
+                                    <button
+                                        className="btn btn-outline-primary btn-sm"
+                                        type="button"
+                                        onClick={() => {
+                                            setReportsInitialView("logs")
+                                            setActiveTab("reports")
+                                        }}
+                                    >
+                                        View all logs
+                                    </button>
+                                </div>
+
+                                {recentLogsLoading && <p className="console-muted mb-0">Loading recent activity...</p>}
+
+                                {!recentLogsLoading && recentLogsError && (
+                                    <div className="d-flex align-items-center justify-content-between gap-3">
+                                        <p className="text-danger mb-0">{recentLogsError}</p>
+                                        <button className="btn btn-outline-danger btn-sm" type="button" onClick={() => void loadRecentActivity()}>
+                                            Retry
+                                        </button>
+                                    </div>
+                                )}
+
+                                {!recentLogsLoading && !recentLogsError && recentLogs.length === 0 && (
+                                    <p className="console-muted mb-0">No system activity has been recorded yet.</p>
+                                )}
+
+                                {!recentLogsLoading && !recentLogsError && recentLogs.length > 0 && (
+                                    <div className="recent-activity-list">
+                                        {recentLogs.map(log => (
+                                            <div className="recent-activity-row" key={log.logId}>
+                                                <div className="min-w-0">
+                                                    <div className="fw-semibold text-truncate">{log.action}</div>
+                                                    <div className="console-muted recent-activity-meta">
+                                                        {log.username || "Unknown user"}
+                                                        {log.provider ? ` | ${log.provider}` : ""}
+                                                        {` | ${formatSystemLogTime(log.timestamp)}`}
+                                                    </div>
+                                                </div>
+                                                <span className={`badge ${log.riskLevel === "HIGH" ? "bg-danger" : log.riskLevel === "MEDIUM" ? "bg-warning text-dark" : "bg-success"}`}>
+                                                    {log.riskLevel ?? "LOW"} {log.riskScore ?? 0}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </section>
                         </>
                     )}
@@ -190,7 +269,7 @@ function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
                     {activeTab === "reports" && (
                         <section className="workspace-card-wrapper p-4">
-                            <AdminReportsLogsPage />
+                            <AdminReportsLogsPage initialView={reportsInitialView} />
                         </section>
                     )}
                 </div>

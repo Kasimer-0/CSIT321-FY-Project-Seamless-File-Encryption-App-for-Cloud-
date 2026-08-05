@@ -10,8 +10,12 @@ import toast from "react-hot-toast"
  */
 type View = "reports" | "logs"
 
-function AdminReportsLogsPage() {
-    const [view, setView] = useState<View>("reports")
+type AdminReportsLogsPageProps = {
+    initialView?: View
+}
+
+function AdminReportsLogsPage({ initialView = "reports" }: AdminReportsLogsPageProps) {
+    const [view, setView] = useState<View>(initialView)
     const [performance, setPerformance] = useState<PerformanceReport | null>(null)
     const [financial, setFinancial] = useState<FinancialReport | null>(null)
     const [logs, setLogs] = useState<SystemLog[]>([])
