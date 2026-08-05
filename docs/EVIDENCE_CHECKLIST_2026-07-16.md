@@ -1,9 +1,9 @@
 # Final Evidence Checklist
 
 Originally created: 2026-07-16
-Updated: 2026-07-31
+Updated: 2026-08-05
 
-`PASS` means the evidence file exists and was visually checked. `SUPPORTING` is valid supporting evidence but does not complete the two-device test. `PENDING` requires Device A or Device B manual action.
+`PASS` means the evidence file exists and was visually checked. `SUPPORTING` is valid supporting evidence but does not complete the two-device test. `FUNCTIONAL PASS / EVIDENCE FILE PENDING` means the workflow was manually confirmed but its teammate screenshot has not yet been copied locally. `PENDING` still requires manual action.
 
 ## Automated And Runtime Checks
 
@@ -13,10 +13,11 @@ Updated: 2026-07-31
 - PASS - PremiumUser has two retained active devices after temporary evidence devices were removed.
 - PASS - Google Drive, Dropbox and OneDrive are connected; Google Drive was restored as active.
 - PASS - Final AES-256-GCM key metadata exists with the expected active fingerprint.
-- PASS - Runtime database contains eight HIGH suspicious events.
+- PASS - Runtime database contains explainable HIGH suspicious events.
 - PASS - Free second-device login returns the explicit Premium entitlement error.
-- PASS - 2026-07-31 complete backend suite: 124 tests, zero failures or errors.
-- PASS - 2026-07-31 frontend suite: 7 tests passed; TypeScript and Vite production build passed.
+- PASS - 2026-08-05 complete backend suite: 145 tests, zero failures or errors.
+- PASS - 2026-08-05 frontend suite: 12 tests passed; TypeScript and Vite production build passed.
+- PASS - Shared deployment was restored after the deliberate stop; the scheduled supervisor is running and both local and public endpoints return HTTP 200.
 
 ## Captured UI Evidence
 
@@ -29,21 +30,23 @@ Updated: 2026-07-31
 - PASS - Free second-device rejection: `free/FREE-01-second-device-rejected.png`.
 - PASS - Admin HIGH/Flagged view with explainable reason: `admin/ADMIN-01-high-flagged-logs.png`.
 - PASS - Authenticated admin CSV: `admin/ADMIN-02-system-logs.csv`.
+- PASS - Admin Overview with five real recent system logs: `admin/ADMIN-03-recent-activity.png`.
+- PASS - Local rule-based sensitive-data warning: `device-a/PRIVACY-01-sensitive-data-warning.png`; Cancel was selected and no upload occurred.
 - SUPPORTING - Earlier single-device screenshots are retained under `legacy-2026-07-07/`.
 
 All paths above are relative to:
 
 `C:/Users/Z/Desktop/Project (Last two semester)/测试截图证据/2026-07-31-final/`
 
-## Cross-device Evidence Still Pending
+## Cross-device Functional Result And Pending Evidence
 
 - PENDING - Final Devices screenshot showing only the retained Device A and Device B entries (`2/5 active devices`).
-- PENDING - Device A ciphertext listed and decrypted on Device B for Google Drive.
-- PENDING - Device A ciphertext listed and decrypted on Device B for Dropbox.
-- PENDING - Device A ciphertext listed and decrypted on Device B for OneDrive.
-- PENDING - Device B upload listed and decrypted on Device A for all three providers.
-- PENDING - Intentional wrong-password rejection on the other device.
-- PENDING - Correct-password SHA-256 match in both directions.
+- FUNCTIONAL PASS / EVIDENCE FILE PENDING - Device A ciphertext listed and decrypted on Device B for Google Drive.
+- FUNCTIONAL PASS / EVIDENCE FILE PENDING - Device A ciphertext listed and decrypted on Device B for Dropbox.
+- FUNCTIONAL PASS / EVIDENCE FILE PENDING - Device A ciphertext listed and decrypted on Device B for OneDrive.
+- FUNCTIONAL PASS / EVIDENCE FILE PENDING - Device B upload listed and decrypted on Device A for all three providers.
+- FUNCTIONAL PASS / EVIDENCE FILE PENDING - Intentional wrong-password rejection on the other device.
+- FUNCTIONAL PASS / EVIDENCE FILE PENDING - Correct-password SHA-256 match in both directions.
 - PENDING - Delete result after the evidence is saved.
 - PENDING - Teammate screenshots copied into `device-b-pending/` and referenced by final path.
 
@@ -55,6 +58,14 @@ All paths above are relative to:
 - PENDING - The three Supervisor answers from 2026-07-31 are written back into the scope wording.
 - PENDING - Windows desktop package is built after web E2E evidence is complete.
 - PENDING - Desktop clean-launch and core-flow smoke tests pass before the package is called final.
+
+## 2026-08-05 Non-human And Local Evidence Checks
+
+- PASS - Admin Overview Recent Activity uses the existing admin-only `/admin/logs` endpoint and does not add a public API or database table.
+- PASS - `View all logs` opens the System Logs view with the existing risk/flag filters and CSV action.
+- PASS - A customer cannot use the admin-only log endpoint because existing ADMIN RBAC remains unchanged.
+- PASS - The privacy scanner is documented and demonstrated as a local rule-based warning, not a trained ML model.
+- PASS - Sprint 5 end date was extended to 2026/8/9 in the local reviewed Gantt workbook; the original workbook backup was retained.
 
 ## Known Evidence Caveat
 

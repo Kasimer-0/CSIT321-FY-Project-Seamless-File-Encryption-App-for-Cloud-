@@ -30,13 +30,13 @@ If the package exceeds the upload limit, submit the shared Drive link as permitt
 
 ## Product Closure Order
 
-1. [ ] Complete Google Drive Device A to Device B and Device B to Device A evidence.
-2. [ ] Complete Dropbox Device A to Device B and Device B to Device A evidence.
-3. [ ] Complete OneDrive Device A to Device B and Device B to Device A evidence.
-4. [ ] Record wrong-password rejection and correct-password SHA-256 match for each provider.
+1. [x] Google Drive Device A to Device B and Device B to Device A functions passed; copy the teammate screenshots into the final evidence folder.
+2. [x] Dropbox Device A to Device B and Device B to Device A functions passed; copy the teammate screenshots into the final evidence folder.
+3. [x] OneDrive Device A to Device B and Device B to Device A functions passed; copy the teammate screenshots into the final evidence folder.
+4. [x] Wrong-password rejection and correct-password SHA-256 matching were manually confirmed; evidence files remain pending.
 5. [ ] Capture the final Devices page with the two retained test devices and the `2/5` limit.
 6. [ ] Remove temporary test cloud objects only after evidence paths are recorded.
-7. [ ] Re-run backend tests, frontend tests, frontend production build, and runtime smoke tests.
+7. [x] Re-ran backend 145/145, frontend 12/12, TypeScript/Vite production build, and runtime HTTP smoke tests on 2026-08-05.
 8. [ ] Resolve or accurately document any remaining user-visible runtime discrepancy.
 9. [ ] Build the Windows desktop application/package from the validated source.
 10. [ ] Smoke-test desktop login, device registration, cloud listing, upload, wrong-password rejection, correct decrypt/save, and logout.
@@ -67,6 +67,15 @@ Do not call the desktop package final until step 10 passes on a clean launch.
 - [ ] Remove claims that trusted-device package import/export, cross-account sharing, or hardware-backed token authentication are implemented.
 - [ ] Ensure Technical Document, User Manual, slides, videos, diagrams, and code use the same final scope.
 - [ ] Include evidence paths for wrong-password rejection, successful decryption, ciphertext objects, and matching SHA-256.
+
+## Admin, Privacy And Schedule Closure - 2026-08-05
+
+- [x] Admin Overview shows the five newest real system logs instead of placeholder content.
+- [x] `View all logs` opens the full System Logs view; existing filters and CSV remain available there.
+- [x] Captured `admin/ADMIN-03-recent-activity.png` without credentials or secrets.
+- [x] Captured `device-a/PRIVACY-01-sensitive-data-warning.png` using fictional data, then cancelled before upload.
+- [x] Updated the local reviewed Gantt workbook so Sprint 5 ends on 2026/8/9; retained the original backup.
+- [x] Restored the shared deployment and confirmed the scheduled supervisor is running with local and public HTTP 200.
 
 ## AI Decision Gate
 
