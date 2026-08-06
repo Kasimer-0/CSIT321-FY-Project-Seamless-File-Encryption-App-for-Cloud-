@@ -25,6 +25,7 @@ import java.time.LocalDate;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -121,6 +122,30 @@ class DeviceAccessSecurityTest {
                         .header("X-StealthSync-Device-ID", "premium-device-b"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("This device has been revoked."));
+    }
+
+    @Test
+    void restoredPremiumDeviceMustSignInAgainBeforeAccessReturns() throws Exception {
+        String tokenA = token(login("PremiumUser", "User@1234", "premium-device-a"));
+        login("PremiumUser", "User@1234", "premium-device-b").andExpect(status().isOk());
+        UserDevice deviceB = deviceRepository.findByOwnerIDOrderByFirstSeenAtAsc(premiumUser.getUserID()).stream()
+                .filter(device -> !device.isPrimaryDevice())
+                .findFirst()
+                .orElseThrow();
+
+        mockMvc.perform(delete("/devices/{id}", deviceB.getDeviceID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+                        .header("X-StealthSync-Device-ID", "premium-device-a"))
+                .andExpect(status().isNoContent());
+        login("PremiumUser", "User@1234", "premium-device-b")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("This device has been revoked."));
+
+        mockMvc.perform(patch("/devices/{id}/restore", deviceB.getDeviceID())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+                        .header("X-StealthSync-Device-ID", "premium-device-a"))
+                .andExpect(status().isNoContent());
+        login("PremiumUser", "User@1234", "premium-device-b").andExpect(status().isOk());
     }
 
     @Test

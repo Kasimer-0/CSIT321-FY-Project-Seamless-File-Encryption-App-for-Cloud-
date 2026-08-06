@@ -142,6 +142,28 @@ public class DeviceRegistrationService {
     }
 
     @Transactional
+    public void restore(Long ownerID, Long deviceID, String rawIdentifier) {
+        UserAccount user = userAccountRepository.findById(ownerID)
+                .orElseThrow(() -> new IllegalArgumentException("User was not found."));
+        if (!entitlementService.hasActivePremium(user)) {
+            throw new DeviceAccessDeniedException("An active premium subscription is required to restore a device.");
+        }
+        requireAccess(ownerID, rawIdentifier);
+        UserDevice target = userDeviceRepository.findByDeviceIDAndOwnerID(deviceID, ownerID)
+                .orElseThrow(() -> new IllegalArgumentException("Device was not found."));
+        if (target.getRevokedAt() == null) {
+            throw new IllegalArgumentException("Device is not revoked.");
+        }
+
+        // Restoring removes the block, but a fresh login must reactivate the device
+        // and claim an available Premium device slot.
+        target.setRevokedAt(null);
+        target.setActive(false);
+        userDeviceRepository.save(target);
+        securityAuditService.recordForUser(ownerID, "DEVICE_RESTORED", null);
+    }
+
+    @Transactional
     public void signOut(Long ownerID, String rawIdentifier) {
         String identifierHash = deviceIdentifierService.requireHash(rawIdentifier);
         userDeviceRepository.findByOwnerIDAndDeviceIdentifierHash(ownerID, identifierHash)

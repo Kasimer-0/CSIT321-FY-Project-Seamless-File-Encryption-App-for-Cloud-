@@ -15,7 +15,9 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
     const [editingID, setEditingID] = useState<number | null>(null)
     const [deviceName, setDeviceName] = useState("")
     const [revokingID, setRevokingID] = useState<number | null>(null)
+    const [restoringID, setRestoringID] = useState<number | null>(null)
     const [showRevokeConfirm, setShowRevokeConfirm] = useState<UserDevice | null>(null)
+    const [showRestoreConfirm, setShowRestoreConfirm] = useState<UserDevice | null>(null)
 
     const loadDevices = async () => {
         try {
@@ -78,6 +80,29 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
             toast.error("Server connection failed")
         } finally {
             setRevokingID(null)
+        }
+    }
+
+    const restore = async () => {
+        if (!showRestoreConfirm) return
+        const device = showRestoreConfirm
+        try {
+            setRestoringID(device.deviceID)
+            const response = await apiFetch(`/devices/${device.deviceID}/restore`, {
+                method: "PATCH"
+            })
+            if (!response.ok) {
+                const error = await response.json().catch(() => null)
+                toast.error(error?.message ?? "Failed to restore device")
+                return
+            }
+            await loadDevices()
+            toast.success("Device restored. It can sign in again.")
+            setShowRestoreConfirm(null)
+        } catch {
+            toast.error("Server connection failed")
+        } finally {
+            setRestoringID(null)
         }
     }
 
@@ -156,6 +181,16 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
                                             {revokingID === device.deviceID ? "Revoking..." : "Revoke"}
                                         </button>
                                     )}
+                                    {user.isSubscribed && !device.currentDevice && !device.primaryDevice && device.revokedAt && (
+                                        <button
+                                            className="btn btn-outline-primary btn-sm"
+                                            disabled={restoringID === device.deviceID}
+                                            title="Allow this device to sign in again"
+                                            onClick={() => setShowRestoreConfirm(device)}
+                                        >
+                                            {restoringID === device.deviceID ? "Restoring..." : "Restore"}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -183,7 +218,7 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
                         <h4 id="revoke-device-modal-heading" className="modal-title-main">Revoke Device?</h4>
                         <p className="modal-description-text">
                             <strong>{showRevokeConfirm.deviceName}</strong> will lose access immediately and must be
-                            authorized again before it can use this account.
+                            restored from an authorized device before it can sign in again.
                         </p>
                         <div className="d-flex gap-3 justify-content-end">
                             <button
@@ -201,6 +236,50 @@ function CustomerDevicesPage({ user }: CustomerDevicesPageProps) {
                                 onClick={() => void revoke()}
                             >
                                 {revokingID !== null ? "Revoking..." : "Revoke Device"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showRestoreConfirm && (
+                <div
+                    className="premium-modal-backdrop"
+                    role="presentation"
+                    onClick={() => restoringID === null && setShowRestoreConfirm(null)}
+                    onKeyDown={event => {
+                        if (event.key === "Escape" && restoringID === null) setShowRestoreConfirm(null)
+                    }}
+                >
+                    <div
+                        className="premium-modal-surface"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="restore-device-modal-heading"
+                        onClick={event => event.stopPropagation()}
+                    >
+                        <div className="modal-accent-strip-confirm" />
+                        <h4 id="restore-device-modal-heading" className="modal-title-main">Restore Device?</h4>
+                        <p className="modal-description-text">
+                            <strong>{showRestoreConfirm.deviceName}</strong> will be allowed to sign in again. It must
+                            enter valid account credentials and claim an available device slot.
+                        </p>
+                        <div className="d-flex gap-3 justify-content-end">
+                            <button
+                                className="btn-modal-dismiss"
+                                type="button"
+                                disabled={restoringID !== null}
+                                onClick={() => setShowRestoreConfirm(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn-modal-confirm"
+                                type="button"
+                                disabled={restoringID !== null}
+                                onClick={() => void restore()}
+                            >
+                                {restoringID !== null ? "Restoring..." : "Restore Device"}
                             </button>
                         </div>
                     </div>

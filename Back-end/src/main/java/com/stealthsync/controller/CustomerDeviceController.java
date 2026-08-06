@@ -22,7 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/devices")
 @RequiredArgsConstructor
-/** Owner-scoped customer API for viewing, renaming, and revoking registered devices. */
+/** Owner-scoped customer API for viewing, renaming, revoking, and restoring registered devices. */
 public class CustomerDeviceController {
 
     private final CurrentUserService currentUserService;
@@ -66,6 +66,14 @@ public class CustomerDeviceController {
             @PathVariable Long deviceID,
             @RequestHeader(DeviceIdentifierService.HEADER_NAME) String rawDeviceID) {
         deviceRegistrationService.revoke(currentUserService.requireUserID(), deviceID, rawDeviceID);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{deviceID}/restore")
+    public ResponseEntity<Void> restore(
+            @PathVariable Long deviceID,
+            @RequestHeader(DeviceIdentifierService.HEADER_NAME) String rawDeviceID) {
+        deviceRegistrationService.restore(currentUserService.requireUserID(), deviceID, rawDeviceID);
         return ResponseEntity.noContent().build();
     }
 

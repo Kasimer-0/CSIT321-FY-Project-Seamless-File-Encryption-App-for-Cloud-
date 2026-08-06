@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -146,6 +147,8 @@ class DeviceRegistrationServiceTest {
                 premiumUser.getUserID(), other.getDeviceID(), "premium-a", "Tampered"));
         assertThrows(IllegalArgumentException.class, () -> deviceService.revoke(
                 premiumUser.getUserID(), other.getDeviceID(), "premium-a"));
+        assertThrows(IllegalArgumentException.class, () -> deviceService.restore(
+                premiumUser.getUserID(), other.getDeviceID(), "premium-a"));
     }
 
     @Test
@@ -171,6 +174,22 @@ class DeviceRegistrationServiceTest {
         deviceService.revoke(premiumUser.getUserID(), secondary.getDeviceID(), "premium-a");
         assertThrows(DeviceAccessDeniedException.class,
                 () -> deviceService.requireAccess(premiumUser.getUserID(), "premium-b"));
+    }
+
+    @Test
+    void restoredDeviceCanSignInAgainAndClaimAnAvailableSlot() {
+        register(premiumUser, "premium-a");
+        UserDevice secondary = register(premiumUser, "premium-b");
+        deviceService.revoke(premiumUser.getUserID(), secondary.getDeviceID(), "premium-a");
+
+        deviceService.restore(premiumUser.getUserID(), secondary.getDeviceID(), "premium-a");
+        UserDevice restored = deviceRepository.findById(secondary.getDeviceID()).orElseThrow();
+        assertFalse(restored.isActive());
+        assertNull(restored.getRevokedAt());
+
+        UserDevice signedInAgain = register(premiumUser, "premium-b");
+        assertEquals(secondary.getDeviceID(), signedInAgain.getDeviceID());
+        assertTrue(signedInAgain.isActive());
     }
 
     @Test
