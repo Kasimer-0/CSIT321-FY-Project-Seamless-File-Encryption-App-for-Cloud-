@@ -36,7 +36,7 @@ If the package exceeds the upload limit, submit the shared Drive link as permitt
 4. [x] Wrong-password rejection and correct-password SHA-256 matching were manually confirmed; evidence files remain pending.
 5. [ ] Capture the final Devices page with the two retained test devices and the `2/5` limit.
 6. [ ] Remove temporary test cloud objects only after evidence paths are recorded.
-7. [x] Re-ran backend 145/145, frontend 12/12, TypeScript/Vite production build, and runtime HTTP smoke tests on 2026-08-05.
+7. [x] Re-ran backend 147/147, frontend 12/12, and TypeScript/Vite production build on 2026-08-06.
 8. [ ] Resolve or accurately document any remaining user-visible runtime discrepancy.
 9. [ ] Build the Windows desktop application/package from the validated source.
 10. [ ] Smoke-test desktop login, device registration, cloud listing, upload, wrong-password rejection, correct decrypt/save, and logout.
@@ -59,7 +59,8 @@ Do not call the desktop package final until step 10 passes on a clean launch.
 
 ## Documentation Closure
 
-- [ ] Replace the July 8 User Manual in Drive with the teammate's updated version.
+- [x] Backed up and audited the latest Week 19 User Manual source locally without overwriting the cloud original.
+- [ ] Resolve the four review comments, replace the remaining incomplete screenshots and upload the approved final User Manual.
 - [ ] Update all screenshots and limits to S$7, three providers, and five devices.
 - [ ] Describe Premium multi-device as the same account using the shared service on up to five registered devices.
 - [ ] Describe Recovery Phrase as account/login recovery only.
@@ -76,6 +77,18 @@ Do not call the desktop package final until step 10 passes on a clean launch.
 - [x] Captured `device-a/PRIVACY-01-sensitive-data-warning.png` using fictional data, then cancelled before upload.
 - [x] Updated the local reviewed Gantt workbook so Sprint 5 ends on 2026/8/9; retained the original backup.
 - [x] Restored the shared deployment and confirmed the scheduled supervisor is running with local and public HTTP 200.
+
+## Device And Presentation Closure - 2026-08-06
+
+- [x] Added a Premium-only Restore Device confirmation flow requested for the final User Manual.
+- [x] Confirmed that Restore requires a fresh login and an available Premium device slot; it does not silently reactivate a session.
+- [x] Added service and security tests for Restore and owner isolation.
+- [x] Audited the preliminary 14-slide deck and both preliminary presentation scripts.
+- [x] Created the final slide, Project Video and Marketing Video evidence map.
+- [ ] Capture the final `2/5 active devices` and Revoke/Restore screenshots.
+- [ ] Receive and verify all Device B three-cloud screenshots before placing them in final deliverables.
+- [ ] Build the final presentation deck from the approved evidence map.
+- [ ] Rewrite and record the final Project Video and Marketing Video.
 
 ## AI Decision Gate
 

@@ -1,7 +1,7 @@
 # Final Evidence Checklist
 
 Originally created: 2026-07-16
-Updated: 2026-08-05
+Updated: 2026-08-06
 
 `PASS` means the evidence file exists and was visually checked. `SUPPORTING` is valid supporting evidence but does not complete the two-device test. `FUNCTIONAL PASS / EVIDENCE FILE PENDING` means the workflow was manually confirmed but its teammate screenshot has not yet been copied locally. `PENDING` still requires manual action.
 
@@ -15,8 +15,8 @@ Updated: 2026-08-05
 - PASS - Final AES-256-GCM key metadata exists with the expected active fingerprint.
 - PASS - Runtime database contains explainable HIGH suspicious events.
 - PASS - Free second-device login returns the explicit Premium entitlement error.
-- PASS - 2026-08-05 complete backend suite: 145 tests, zero failures or errors.
-- PASS - 2026-08-05 frontend suite: 12 tests passed; TypeScript and Vite production build passed.
+- PASS - 2026-08-06 complete backend suite: 147 tests, zero failures, errors or skipped tests.
+- PASS - 2026-08-06 frontend suite: 12 tests passed; TypeScript and Vite production build passed.
 - PASS - Shared deployment was restored after the deliberate stop; the scheduled supervisor is running and both local and public endpoints return HTTP 200.
 
 ## Captured UI Evidence
@@ -52,10 +52,10 @@ All paths above are relative to:
 
 ## Documentation And Recording
 
-- PENDING - Teammate uploads the updated User Manual to the Week 19 Google Drive folder.
-- PENDING - User Manual screenshots are checked against this evidence index.
+- PASS - The latest Week 19 User Manual source was backed up and audited locally on 2026-08-05 without overwriting the cloud original.
+- PENDING - Resolve the four English review comments, replace the remaining incomplete screenshots and upload the approved final User Manual.
 - PENDING - Final video records the required two-device/provider coverage.
-- PENDING - The three Supervisor answers from 2026-07-31 are written back into the scope wording.
+- PASS - Final slide, Project Video and Marketing Video evidence mapping was created on 2026-08-06.
 - PENDING - Windows desktop package is built after web E2E evidence is complete.
 - PENDING - Desktop clean-launch and core-flow smoke tests pass before the package is called final.
 
@@ -66,6 +66,16 @@ All paths above are relative to:
 - PASS - A customer cannot use the admin-only log endpoint because existing ADMIN RBAC remains unchanged.
 - PASS - The privacy scanner is documented and demonstrated as a local rule-based warning, not a trained ML model.
 - PASS - Sprint 5 end date was extended to 2026/8/9 in the local reviewed Gantt workbook; the original workbook backup was retained.
+
+## 2026-08-06 Device And Deliverable Checks
+
+- PASS - Restore Device is owner-scoped and Premium-only.
+- PASS - Restore clears the revoked block but leaves the device inactive until a fresh successful login claims an available slot.
+- PASS - Restore-specific service and security tests passed (20/20).
+- PENDING - Capture the final Revoke/Restore UI sequence without credentials or tokens.
+- PASS - Preliminary slides and scripts were audited against the frozen scope.
+- PASS - Final presentation and both video evidence routes are mapped in `docs/FINAL_PRESENTATION_VIDEO_EVIDENCE_MAP_2026-08-06.md`.
+- PENDING - Copy and visually verify the teammate's Device B evidence before using it in slides or videos.
 
 ## Known Evidence Caveat
 

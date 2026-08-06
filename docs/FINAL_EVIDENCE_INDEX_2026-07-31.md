@@ -1,7 +1,7 @@
 # StealthSync Final Evidence Index
 
 Date: 2026-07-31
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
 ## Evidence Root
 
@@ -12,7 +12,7 @@ Last updated: 2026-08-05
 | Area | Result | Evidence |
 | --- | --- | --- |
 | Shared deployment | PASS | Local and public HTTPS endpoints returned HTTP 200 |
-| Automated verification | PASS | Backend 145/145; frontend 12/12; TypeScript and Vite production build passed on 2026-08-05 |
+| Automated verification | PASS | Backend 147/147; frontend 12/12; TypeScript and Vite production build passed on 2026-08-06 |
 | Premium subscription | PASS | S$7, active through 2026-08-29 |
 | Device state | PASS | Two retained active devices; temporary automation devices removed |
 | Device limit | PENDING | The old `device-a/MD-A-01-registered-devices.png` shows a superseded temporary 3/3 rule; capture the final `2/5 active devices` state |
@@ -26,6 +26,7 @@ Last updated: 2026-08-05
 | Admin CSV export | PASS | `admin/ADMIN-02-system-logs.csv` |
 | Admin Recent Activity | PASS | `admin/ADMIN-03-recent-activity.png` |
 | Rule-based privacy warning | PASS | `device-a/PRIVACY-01-sensitive-data-warning.png`; upload was cancelled before any ciphertext was sent |
+| Device revoke/restore control | CODE/TEST PASS; UI EVIDENCE PENDING | Restore is owner-scoped and Premium-only; a restored device must complete a fresh login and claim an available slot |
 | Cross-device three-cloud flow | FUNCTIONAL PASS / EVIDENCE FILE PENDING | Device A and Device B upload/list/decrypt flows were manually confirmed; teammate screenshots have not yet been copied into the evidence root |
 
 ## Provider Record Snapshot
@@ -48,6 +49,12 @@ The teammate has reported that the same-account cross-device test passed for Goo
 - `MD-B-01-device-b-active.png`
 
 Device B uploads were also reported as listed and decrypted on Device A. Add the corresponding `*-A-reverse-decrypt.png` and `*-A-reverse-hash.png` files before marking the screenshot evidence complete.
+
+## Deliverable Mapping
+
+- Final presentation and video evidence map: `docs/FINAL_PRESENTATION_VIDEO_EVIDENCE_MAP_2026-08-06.md`.
+- Latest User Manual source was backed up and audited locally on 2026-08-05. The reviewed 45-page copy is under ignored `outputs/document-review/2026-08-05/user-manual/`; remaining comments must be resolved before the final cloud copy is called complete.
+- Preliminary presentation and scripts were audited on 2026-08-06. They contain obsolete scope and must not be submitted unchanged.
 
 ## Interpretation Rules
 
