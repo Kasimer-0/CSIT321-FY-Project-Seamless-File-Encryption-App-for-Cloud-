@@ -1,7 +1,7 @@
 # StealthSync Final Evidence Index
 
 Date: 2026-07-31
-Last updated: 2026-08-06
+Last updated: 2026-08-07
 
 ## Evidence Root
 
@@ -12,7 +12,7 @@ Last updated: 2026-08-06
 | Area | Result | Evidence |
 | --- | --- | --- |
 | Shared deployment | PASS | Local and public HTTPS endpoints returned HTTP 200 |
-| Automated verification | PASS | Backend 147/147; frontend 12/12; TypeScript and Vite production build passed on 2026-08-06 |
+| Automated verification | PASS | Backend 143/143; frontend 14/14; desktop client 4/4; TypeScript and Vite production build passed on 2026-08-07 |
 | Premium subscription | PASS | S$7, active through 2026-08-29 |
 | Device state | PASS | Two retained active devices; temporary automation devices removed |
 | Device limit | PENDING | The old `device-a/MD-A-01-registered-devices.png` shows a superseded temporary 3/3 rule; capture the final `2/5 active devices` state |
@@ -28,6 +28,7 @@ Last updated: 2026-08-06
 | Rule-based privacy warning | PASS | `device-a/PRIVACY-01-sensitive-data-warning.png`; upload was cancelled before any ciphertext was sent |
 | Device revoke/restore control | CODE/TEST PASS; UI EVIDENCE PENDING | Restore is owner-scoped and Premium-only; a restored device must complete a fresh login and claim an available slot |
 | Cross-device three-cloud flow | FUNCTIONAL PASS / EVIDENCE FILE PENDING | Device A and Device B upload/list/decrypt flows were manually confirmed; teammate screenshots have not yet been copied into the evidence root |
+| Windows desktop installer 1.3.0 | LOCAL INSTALL PASS / EXTERNAL E2E PENDING | Clean install, shortcut launch, uninstall, reinstall and local shared-service smoke passed; public desktop validation is pending on a network that does not intercept or block the fixed Dev Tunnel |
 
 ## Provider Record Snapshot
 
@@ -55,6 +56,7 @@ Device B uploads were also reported as listed and decrypted on Device A. Add the
 - Final presentation and video evidence map: `docs/FINAL_PRESENTATION_VIDEO_EVIDENCE_MAP_2026-08-06.md`.
 - Latest User Manual source was backed up and audited locally on 2026-08-05. The reviewed 45-page copy is under ignored `outputs/document-review/2026-08-05/user-manual/`; remaining comments must be resolved before the final cloud copy is called complete.
 - Preliminary presentation and scripts were audited on 2026-08-06. They contain obsolete scope and must not be submitted unchanged.
+- Desktop validation details and local ignored evidence: `docs/DAILY_RECORD_2026-08-07.md` and `outputs/desktop-validation/2026-08-07/`.
 
 ## Interpretation Rules
 

@@ -36,12 +36,23 @@ If the package exceeds the upload limit, submit the shared Drive link as permitt
 4. [x] Wrong-password rejection and correct-password SHA-256 matching were manually confirmed; evidence files remain pending.
 5. [ ] Capture the final Devices page with the two retained test devices and the `2/5` limit.
 6. [ ] Remove temporary test cloud objects only after evidence paths are recorded.
-7. [x] Re-ran backend 147/147, frontend 12/12, and TypeScript/Vite production build on 2026-08-06.
+7. [x] Re-ran backend 143/143, frontend 14/14, desktop client 4/4, and TypeScript/Vite production build on 2026-08-07.
 8. [ ] Resolve or accurately document any remaining user-visible runtime discrepancy.
-9. [ ] Build the Windows desktop application/package from the validated source.
-10. [ ] Smoke-test desktop login, device registration, cloud listing, upload, wrong-password rejection, correct decrypt/save, and logout.
+9. [x] Built the Windows 1.3.0 app image and installer from the validated source; clean install/uninstall/reinstall passed locally.
+10. [ ] On a non-intercepted external Windows network, smoke-test desktop login, device registration, three-cloud listing/upload, wrong-password rejection, correct decrypt/save, delete and logout.
 
 Do not call the desktop package final until step 10 passes on a clean launch.
+
+## Windows Desktop Candidate - 2026-08-07
+
+- [x] Independent JavaFX window loads the configured shared service and does not start Spring Boot, H2 or a local server.
+- [x] OAuth uses the restricted native bridge to open only Google, Dropbox or Microsoft HTTPS authorization hosts in the system browser.
+- [x] Decrypted output uses a native Save File dialog in desktop mode; normal web download behavior remains unchanged.
+- [x] Single-instance, offline page, Retry control and Open Web App fallback are present.
+- [x] `StealthSync 1.3.0` app image, EXE installer and SHA-256 manifest were generated.
+- [x] Old installed `1.2.1` was removed; `1.3.0` clean install, shortcut creation, uninstall and reinstall passed.
+- [ ] Repeat public desktop login and all three live provider flows on the teammate's network. This machine's current Fortinet network intercepts and blocks the Dev Tunnel TLS connection for JavaFX/non-browser clients.
+- [ ] Capture the teammate clean-install and desktop three-provider evidence before publishing the GitHub Release.
 
 ## OAuth And Shared Hosting Readiness - 2026-08-04
 
