@@ -5,6 +5,7 @@ Front-end/node_modules/
 
 # Build output
 Back-end/target/
+Desktop-client/target/
 Front-end/dist/
 dist-desktop/
 installer/
@@ -19,6 +20,7 @@ Front-end/tmp/
 ~$*.docx
 .codex/
 .stealthsync-run/
+.tools/
 .env.production
 
 # IDE and OS metadata
