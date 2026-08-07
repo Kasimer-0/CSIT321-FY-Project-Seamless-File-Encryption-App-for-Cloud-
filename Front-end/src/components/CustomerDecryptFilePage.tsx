@@ -102,7 +102,11 @@ function CustomerDecryptFile({ user }: Props) {
                 throw new Error(responseError?.message ?? "Ciphertext download failed.")
             }
             const decrypted = await decryptFileInBrowser(await response.arrayBuffer(), derivedKey)
-            saveDecryptedFile(decrypted.blob, decrypted.metadata.filename)
+            const saved = await saveDecryptedFile(decrypted.blob, decrypted.metadata.filename)
+            if (!saved) {
+                toast.error("Save cancelled")
+                return
+            }
             setPasswords(current => {
                 const next = { ...current }
                 delete next[field]

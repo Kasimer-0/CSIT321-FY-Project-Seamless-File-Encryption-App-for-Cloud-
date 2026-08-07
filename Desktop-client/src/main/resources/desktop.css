@@ -1,0 +1,52 @@
+.root {
+    -fx-font-family: "Segoe UI";
+    -fx-background-color: #090a0c;
+}
+
+.status-pane {
+    -fx-background-color: #090a0c;
+}
+
+.offline-pane {
+    -fx-background-color: #121418;
+    -fx-background-radius: 8;
+    -fx-border-color: #2a2d34;
+    -fx-border-radius: 8;
+}
+
+.brand-title {
+    -fx-text-fill: #06b6d4;
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+}
+
+.offline-title {
+    -fx-text-fill: #f4f4f5;
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+}
+
+.status-text {
+    -fx-text-fill: #a1a1aa;
+    -fx-font-size: 14px;
+    -fx-text-alignment: center;
+}
+
+.primary-button, .secondary-button {
+    -fx-min-width: 180px;
+    -fx-padding: 10px 18px;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-font-weight: bold;
+}
+
+.primary-button {
+    -fx-background-color: #06b6d4;
+    -fx-text-fill: #090a0c;
+}
+
+.secondary-button {
+    -fx-background-color: transparent;
+    -fx-border-color: #3f3f46;
+    -fx-text-fill: #f4f4f5;
+}

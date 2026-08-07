@@ -1,9 +1,10 @@
 import { apiFetch } from "../lib/api"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { CloudProviderStatus, CloudStorageLink, CloudStorageUsage, GoogleDriveFile, UserAccount } from "../Type"
 import toast from "react-hot-toast"
 import { formatCloudFileUploadTime, formatCloudLinkedDate, sortCloudFilesNewestFirst } from "../lib/cloudFiles"
 import { cloudProviderKeys, reconnectRequiredProviders } from "../lib/cloudProviderStatus"
+import { launchOAuthAuthorization } from "../lib/desktopBridge"
 
 import googleDriveIcon from "../assets/googledrive.png"
 import dropboxIcon from "../assets/dropbox.png"
@@ -20,6 +21,10 @@ const availableProviders = ["google_drive", "dropbox", "onedrive"]
 // google-drive for readability; the helper keeps that translation in one place.
 const providerPath = (provider: string) => provider === "google_drive" ? "google-drive" : provider
 const providerLabel = (provider?: string) => provider ? providerLabels[provider]?.label ?? provider : "Cloud provider"
+const providerLinkSignature = (links: CloudStorageLink[], provider: string) => {
+    const link = links.find(item => item.provider === provider)
+    return link ? `${link.linkID}:${link.accountEmail}:${String(link.linkedAt)}:${link.status}` : "missing"
+}
 
 /**
  * This page provides persisted cloud links,
@@ -44,6 +49,7 @@ function CustomerManageCloudAccLinks({ user }: Props) {
     const [providerStatuses, setProviderStatuses] = useState<Record<string, CloudProviderStatus>>({})
     const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([])
     const [driveLoading, setDriveLoading] = useState(false)
+    const oauthPollRef = useRef<number | null>(null)
 
     const fetchLinks = async (showLoading = true) => {
         try {
@@ -58,11 +64,13 @@ function CustomerManageCloudAccLinks({ user }: Props) {
                 return
             }
 
-            const data = await response.json()
+            const data = await response.json() as CloudStorageLink[]
             setLinks(data)
+            return data
 
         } catch (err) {
             console.error("Server connection failed")
+            return null
         } finally {
             if (showLoading) setLoading(false)
         }
@@ -149,6 +157,10 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         void fetchProviderInfo()
         void fetchProviderStatuses()
     }, [user.userID, user.isSubscribed])
+
+    useEffect(() => () => {
+        if (oauthPollRef.current !== null) window.clearInterval(oauthPollRef.current)
+    }, [])
 
     useEffect(() => {
         const refreshSharedAccountState = () => {
@@ -278,7 +290,27 @@ function CustomerManageCloudAccLinks({ user }: Props) {
         }
     }
 
-    // OAuth continues in the same browser tab and the backend callback redirects to the configured frontend URL.
+    const startDesktopOAuthRefresh = (provider: string, previousSignature: string) => {
+        if (oauthPollRef.current !== null) window.clearInterval(oauthPollRef.current)
+        let attempts = 0
+        oauthPollRef.current = window.setInterval(async () => {
+            attempts += 1
+            const refreshedLinks = await fetchLinks(false)
+            void fetchProviderStatuses()
+            if (refreshedLinks
+                && providerLinkSignature(refreshedLinks, provider) !== previousSignature) {
+                window.clearInterval(oauthPollRef.current!)
+                oauthPollRef.current = null
+                const linked = refreshedLinks.find(item => item.provider === provider)
+                toast.success(`${providerLabel(provider)} connected${linked?.accountEmail ? ` as ${linked.accountEmail}` : ""}`)
+            } else if (attempts >= 60) {
+                window.clearInterval(oauthPollRef.current!)
+                oauthPollRef.current = null
+            }
+        }, 2000)
+    }
+
+    // The desktop shell hands OAuth to the system browser; the hosted web app keeps its same-tab flow.
     const beginProviderConnection = async (provider: string) => {
         const response = await apiFetch(
             `/cloud-storage/${providerPath(provider)}/auth`,
@@ -291,7 +323,11 @@ function CustomerManageCloudAccLinks({ user }: Props) {
 
         const data = await response.json()
         if (!data.authUrl) throw new Error("The OAuth authorization URL was not returned.")
-        window.location.assign(data.authUrl)
+        const previousSignature = providerLinkSignature(links, provider)
+        if (launchOAuthAuthorization(data.authUrl)) {
+            startDesktopOAuthRefresh(provider, previousSignature)
+            toast.success("Authorization opened in your browser. Return here when it is complete.")
+        }
     }
 
     const handleReconnect = async (linkID: number) => {

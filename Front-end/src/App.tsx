@@ -5,10 +5,13 @@ import AdminDashboard from "./components/AdminDashboardPage"
 import CustomerDashboard from "./components/CustomerDashboard"
 import { Toaster } from "react-hot-toast"
 import { apiFetch, clearAuthToken, getAuthToken } from "./lib/api"
+import OAuthCompletionPage from "./components/OAuthCompletionPage"
 
 function App() {
     const [user, setUser] = useState<UserAccount | null>(null)
     const [restoringSession, setRestoringSession] = useState(true)
+    const oauthReturnWithoutSession = !getAuthToken()
+        && new URLSearchParams(window.location.search).has("oauth")
 
     // Restore the signed-in account from the saved JWT when the desktop window reloads.
     useEffect(() => {
@@ -43,6 +46,10 @@ function App() {
 
     const handleUserUpdate = (updatedUser: UserAccount) => {
         setUser(updatedUser)
+    }
+
+    if (oauthReturnWithoutSession) {
+        return <OAuthCompletionPage />
     }
 
     if (restoringSession) {

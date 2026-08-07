@@ -9,6 +9,7 @@ import {
     type EncryptedEnvelopeHeader
 } from "./encryptedEnvelope.ts"
 import type { DerivedClientKey } from "./keyDerivation.ts"
+import { saveUserFile } from "../lib/desktopBridge.ts"
 
 const IV_BYTES = 12
 
@@ -79,14 +80,6 @@ export async function decryptFileInBrowser(envelopeBytes: ArrayBuffer, key: Deri
     }
 }
 
-export function saveDecryptedFile(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = filename
-    anchor.style.display = "none"
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+export async function saveDecryptedFile(blob: Blob, filename: string) {
+    return saveUserFile(blob, filename)
 }
