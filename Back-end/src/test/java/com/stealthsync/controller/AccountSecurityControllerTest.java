@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -221,6 +222,10 @@ class AccountSecurityControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Current password is incorrect."));
+
+        UserAccount unchanged = userAccountRepository.findById(freeUser.getUserID()).orElseThrow();
+        assertTrue(passwordEncoder.matches("User@123", unchanged.getPasswordHash()));
+        assertFalse(passwordEncoder.matches("Changed@123", unchanged.getPasswordHash()));
     }
 
     @Test

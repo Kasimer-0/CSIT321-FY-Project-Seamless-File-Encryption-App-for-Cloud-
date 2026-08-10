@@ -545,13 +545,13 @@ function CustomerViewAccount({ user, onSubscribe, onUpdateAccount, onSuspendAcco
                 <div className="card p-4" style={{ width: 400 }} onClick={e => e.stopPropagation()}>
                     <h6 className="mb-1">Cancel Subscription?</h6>
                     <p className="text-muted mb-1" style={{ fontSize: 14 }}>You are about to cancel your <b>{subscription.plan.planTitle}</b> plan.</p>
-                    <p className="text-muted mb-4" style={{ fontSize: 14 }}>
-                        You will lose access to premium features at the end of your billing period on <b>{new Date(subscription.subscriptionEndDate).toLocaleDateString()}</b>.
+                    <p className="text-danger mb-4" style={{ fontSize: 14 }}>
+                        This demo cancellation takes effect immediately. Premium multi-device access and other Premium entitlements will stop now.
                     </p>
                     <div className="d-flex justify-content-end gap-2">
                         <button className="btn btn-outline-secondary" onClick={() => setShowCancelSubConfirm(false)} disabled={cancellingSub}>Keep Subscription</button>
                         <button className="btn btn-danger" onClick={handleCancelSubscription} disabled={cancellingSub}>
-                            {cancellingSub ? "Cancelling..." : "Yes, Cancel"}
+                            {cancellingSub ? "Cancelling..." : "Yes, Cancel Now"}
                         </button>
                     </div>
                 </div>

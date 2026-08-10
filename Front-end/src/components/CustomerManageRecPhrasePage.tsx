@@ -14,6 +14,7 @@ function CustomerManageRecPhrase({ user }: Props) {
     const [loadingStatus, setLoadingStatus] = useState(true)
     const [isRevealed, setIsRevealed] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
+    const [showRotateConfirm, setShowRotateConfirm] = useState(false)
     const [localBanner, setLocalBanner] = useState<{ msg: string; type: "success" | "error" } | null>(null)
 
     const triggerBanner = (msg: string, type: "success" | "error") => {
@@ -36,11 +37,7 @@ function CustomerManageRecPhrase({ user }: Props) {
             .finally(() => setLoadingStatus(false))
     }, [premium, user.userID])
 
-    const handleGeneratePhrase = async () => {
-        if (configured && !window.confirm("Rotate the existing Account Recovery Phrase? The previous phrase will stop working immediately.")) {
-            return
-        }
-
+    const handleGeneratePhrase = async (confirmRotation: boolean) => {
         setIsGenerating(true)
         setLocalBanner(null)
 
@@ -51,7 +48,7 @@ function CustomerManageRecPhrase({ user }: Props) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ confirmRotation: configured })
+                body: JSON.stringify({ confirmRotation })
             })
 
             if (!response.ok) {
@@ -64,7 +61,12 @@ function CustomerManageRecPhrase({ user }: Props) {
             setRecoveryWords(generatedPool)
             setConfigured(true)
             setIsRevealed(true)
-            triggerBanner("SUCCESS: Recovery phrase committed to account vault.", "success")
+            triggerBanner(
+                confirmRotation
+                    ? "Recovery phrase rotated successfully. The previous phrase is no longer valid."
+                    : "Recovery phrase created successfully. Store it somewhere safe before leaving this page.",
+                "success"
+            )
         } catch (error) {
             triggerBanner(error instanceof Error ? `DATABASE_ERROR: ${error.message}` : "DATABASE_ERROR: Failed to commit phrase.", "error")
         } finally {
@@ -128,7 +130,7 @@ function CustomerManageRecPhrase({ user }: Props) {
                         className="btn border-0 fw-semibold text-dark px-4 py-2.5"
                         style={{ backgroundColor: "#06b6d4", borderRadius: "6px" }}
                         disabled={isGenerating}
-                        onClick={handleGeneratePhrase}
+                        onClick={() => configured ? setShowRotateConfirm(true) : void handleGeneratePhrase(false)}
                     >
                         {isGenerating ? "Generating Account Recovery Phrase..." : configured ? "Rotate Account Recovery Phrase" : "Generate Account Recovery Phrase"}
                     </button>
@@ -148,6 +150,55 @@ function CustomerManageRecPhrase({ user }: Props) {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {showRotateConfirm && (
+                <div
+                    className="premium-modal-backdrop"
+                    role="presentation"
+                    onClick={() => !isGenerating && setShowRotateConfirm(false)}
+                    onKeyDown={event => {
+                        if (event.key === "Escape" && !isGenerating) setShowRotateConfirm(false)
+                    }}
+                >
+                    <div
+                        className="premium-modal-surface"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="rotate-recovery-phrase-modal-heading"
+                        onClick={event => event.stopPropagation()}
+                    >
+                        <div className="modal-accent-strip-alert" />
+                        <h4 id="rotate-recovery-phrase-modal-heading" className="modal-title-main">
+                            Rotate Account Recovery Phrase?
+                        </h4>
+                        <p className="modal-description-text">
+                            The current recovery phrase will stop working immediately. Make sure you save the new
+                            six-word phrase before leaving this page.
+                        </p>
+                        <div className="d-flex gap-3 justify-content-end">
+                            <button
+                                className="btn-modal-dismiss"
+                                type="button"
+                                disabled={isGenerating}
+                                onClick={() => setShowRotateConfirm(false)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn-modal-destructive"
+                                type="button"
+                                disabled={isGenerating}
+                                onClick={() => {
+                                    setShowRotateConfirm(false)
+                                    void handleGeneratePhrase(true)
+                                }}
+                            >
+                                Rotate Phrase
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

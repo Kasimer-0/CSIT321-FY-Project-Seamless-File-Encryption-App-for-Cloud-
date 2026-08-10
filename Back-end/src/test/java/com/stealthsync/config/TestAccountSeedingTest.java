@@ -3,6 +3,7 @@ package com.stealthsync.config;
 import com.stealthsync.model.entity.UserAccount;
 import com.stealthsync.repository.EncryptedFileRecordRepository;
 import com.stealthsync.repository.PlanRepository;
+import com.stealthsync.repository.SubscriptionRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,9 @@ class TestAccountSeedingTest {
 
     @Autowired
     private PlanRepository planRepository;
+
+    @Autowired
+    private SubscriptionRepository subscriptionRepository;
 
     @Autowired
     private DataSeeder dataSeeder;
@@ -81,5 +85,31 @@ class TestAccountSeedingTest {
         assertEquals(7.0, planRepository.findByPlanTitleIgnoreCase("Premium Corporate Tier")
                 .orElseThrow()
                 .getPlanPrice());
+    }
+
+    @Test
+    void restoresCancelledSeededPremiumSubscription() throws Exception {
+        UserAccount premiumUser = userAccountRepository.findByUsernameIgnoreCase("PremiumUser").orElseThrow();
+        var subscription = subscriptionRepository
+                .findFirstBySubscriber_UserIDOrderBySubscriptionIDDesc(premiumUser.getUserID())
+                .orElseThrow();
+        Long originalSubscriptionID = subscription.getSubscriptionID();
+        var originalEndDate = subscription.getSubscriptionEndDate();
+
+        subscription.setSubcriptionStatus("cancelled");
+        subscriptionRepository.saveAndFlush(subscription);
+        premiumUser.setSubscribed(false);
+        userAccountRepository.saveAndFlush(premiumUser);
+
+        dataSeeder.run();
+
+        UserAccount restoredUser = userAccountRepository.findById(premiumUser.getUserID()).orElseThrow();
+        var restoredSubscription = subscriptionRepository
+                .findFirstBySubscriber_UserIDOrderBySubscriptionIDDesc(restoredUser.getUserID())
+                .orElseThrow();
+        assertTrue(restoredUser.isSubscribed());
+        assertEquals(originalSubscriptionID, restoredSubscription.getSubscriptionID());
+        assertEquals("active", restoredSubscription.getSubcriptionStatus());
+        assertEquals(originalEndDate, restoredSubscription.getSubscriptionEndDate());
     }
 }

@@ -89,10 +89,11 @@ public class DataSeeder implements CommandLineRunner {
                 false
         );
 
-        // Preserve an existing premium subscription; otherwise create the demo subscription state.
-        Subscription subscription = subscriptionRepository.findAll().stream()
-                .filter(existing -> existing.getSubscriber().getUserID().equals(customer.getUserID()))
-                .findFirst()
+        // PremiumUser is a deterministic shared demo credential. Repair its latest
+        // subscription on startup so a cancellation test cannot permanently turn
+        // the seeded Premium account into a Free account for the rest of the team.
+        Subscription subscription = subscriptionRepository
+                .findFirstBySubscriber_UserIDOrderBySubscriptionIDDesc(customer.getUserID())
                 .orElseGet(() -> subscriptionRepository.save(new Subscription(
                         null,
                         premiumPlan,
@@ -101,7 +102,16 @@ public class DataSeeder implements CommandLineRunner {
                         LocalDate.now().minusDays(20),
                         LocalDate.now().plusDays(10)
                 )));
-        customer.setSubscribed("active".equalsIgnoreCase(subscription.getSubcriptionStatus()));
+        subscription.setPlan(premiumPlan);
+        subscription.setSubscriber(customer);
+        subscription.setSubcriptionStatus("active");
+        if (subscription.getSubscriptionEndDate() == null
+                || subscription.getSubscriptionEndDate().isBefore(LocalDate.now())) {
+            subscription.setSubcriptionStartDate(LocalDate.now());
+            subscription.setSubscriptionEndDate(LocalDate.now().plusDays(30));
+        }
+        subscription = subscriptionRepository.save(subscription);
+        customer.setSubscribed(true);
         customer.setSubscription(subscription.getSubscriptionID());
         userAccountRepository.save(customer);
 
