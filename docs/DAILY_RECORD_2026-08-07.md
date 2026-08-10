@@ -9,34 +9,42 @@
 - Reworked `scripts/build-desktop.ps1` for the shared-service client, OpenJDK 21.0.2, pinned WiX 3.14.1, a fixed upgrade UUID and SHA-256 output.
 - Removed the installed `1.2.1` package, completed a clean install/uninstall/reinstall cycle for `1.3.0`, and verified the desktop and Start Menu shortcuts.
 - Reinstalled `1.3.0` as the final local machine state.
+- Reviewed the latest Google Drive User Manual and Technical Document without changing the cloud originals.
+- Produced local commented revisions for the User Manual installation/hosting guidance and the Technical Document Project Schedule, Premium device limit and desktop NFR wording.
+- Updated the Sprint 5 Gantt task to `Three-cloud Regression & Desktop Release` ending 2026-08-09.
+- Restored the accidentally cancelled `PremiumUser` demo subscription after an online PostgreSQL backup, then verified `user@stealthsync.com / User@1234` login against the shared deployment.
+- Made startup repair the seeded Premium demo subscription so a cancellation test cannot leave the team's fixed Premium credential permanently downgraded.
+- Confirmed the deployed password-reset endpoint rejects an incorrect current password without changing the stored password, and clarified that demo subscription cancellation takes effect immediately.
 
 ## Desktop Artifacts
 
 - App image: `dist-desktop/StealthSync/StealthSync.exe`
 - Installer: `dist-desktop/StealthSync-Setup-1.3.0.exe`
 - Checksums: `dist-desktop/SHA256SUMS.txt`
-- Installer SHA-256: `63cfd7b94c73926271ef69543956840688d7fdc0124f76c1b8b5cb708bcfae0e`
-- App launcher SHA-256: `8e6afe7f4da5be1745bc3320faea7d32bee34689c253284a0e274a827969dc01`
+- Installer SHA-256: `ed57074cd1f1eb9ec8d6c9c7e6869b459c6bb59951614f33647c7d8373ed179a`
+- App launcher SHA-256: `6c758aa3e3a80b2b38f0f5f8856805a623205e460aec7b937151a8ce9aeeaca1`
 
 The installer is intentionally kept in ignored local output and is not part of the Git source commit. It is unsigned, so another Windows computer may show an Unknown Publisher or SmartScreen warning.
 
 ## Verification
 
-- Backend: 143/143 tests passed.
+- Backend: 144/144 tests passed.
 - Frontend: 14/14 Node tests passed.
 - TypeScript project build: passed.
 - Vite production build: passed.
-- Desktop client: 4/4 unit tests passed.
+- Desktop client: 8/8 unit tests passed.
 - App-image smoke test: native window, single instance, no local backend/H2 process and no desktop-owned port 8080 listener passed.
 - Installed-package smoke test against the local shared service: passed.
 - Clean install, uninstall and reinstall: passed with exit code 0; installed version is 1.3.0.
 - Existing web-based three-provider and multi-device evidence remains valid because cloud encryption and provider APIs were not reimplemented in the desktop shell.
 
-## Public HTTPS Validation Note
+## Public HTTPS and Automatic Hosting Validation
 
-The fixed Dev Tunnel is online, but this computer's current network replaces the `devtunnels.ms` TLS certificate with an untrusted Fortinet certificate and returns a Fortinet block page to non-browser clients. The desktop client correctly refuses to bypass TLS verification and shows its offline page. Local hosted-client behavior is verified; a public-service desktop login and the three live provider flows must be repeated on the teammate's normal network before the installer is called the final Release Candidate.
-
-This is an environment-specific validation blocker, not a failure of Google Drive, Dropbox, OneDrive, encryption, JWT or owner isolation. Do not add a permissive certificate bypass to the product.
+- The installed desktop client now reaches the fixed public Dev Tunnel URL and loads the StealthSync login page successfully.
+- The client recognizes the trusted Microsoft Dev Tunnel first-visit interstitial and continues automatically. A normal web browser may still show Microsoft's one-time confirmation page.
+- The Windows scheduled task `StealthSync Shared Deployment` remains `Running` with no execution time limit. The supervisor continues to report healthy containers, local HTTP, tunnel process and public HTTPS.
+- Both `http://localhost:8080` and `https://tj867zgk-8080.asse.devtunnels.ms` returned HTTP 200 during the final check.
+- A real Windows reboot/re-login check is intentionally deferred until the teammate finishes recording, because rebooting the host would interrupt the shared service. The configured logon trigger, 60-second delay, continuous supervisor and heartbeat are in place.
 
 ## Evidence
 
@@ -48,8 +56,8 @@ No password, JWT, OAuth token, client secret or database credential is included 
 
 ## Next Priority - 2026-08-08
 
-1. Install `1.3.0` on the teammate's Windows computer and verify the public HTTPS login without the local Fortinet interception.
-2. Run the desktop Google Drive, Dropbox and OneDrive upload/list/wrong-password/correct-decrypt-save/delete smoke sequence and retain screenshots plus SHA-256 results.
-3. Copy the teammate's existing Device B evidence into the final evidence root and verify every path.
-4. Update the Technical Document, User Manual, final presentation and both video scripts with the validated desktop status.
-5. Do not upload a GitHub Release until the external desktop smoke test is complete.
+1. Complete the teammate's desktop three-provider recording and retain the final screenshots plus SHA-256 evidence.
+2. Perform the host reboot/re-login automatic-start check after recording is complete.
+3. Review the local User Manual, Technical Document and revised Project Schedule generated on 2026-08-07, then merge the accepted changes into the Google Drive originals.
+4. Update the final presentation and both video scripts with the validated desktop and shared-hosting status.
+5. Do not upload a GitHub Release until the external desktop smoke test and reboot/re-login check are complete.

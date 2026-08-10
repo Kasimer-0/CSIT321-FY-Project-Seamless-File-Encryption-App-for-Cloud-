@@ -26,7 +26,7 @@
         .border-premium {
             border-color: rgba(255, 255, 255, 0.07);
         }
-        
+
         /* Custom Keyframes for Animations */
         @keyframes radar-sweep {
             0% { transform: translateY(-100%); opacity: 0; }
@@ -69,14 +69,12 @@
             animation: pulse-lock 5s ease-in-out infinite;
         }
 
-        @keyframes key-transfer {
-            0% { transform: translateX(-24px); opacity: 0; }
-            30% { opacity: 1; }
-            70% { opacity: 1; }
-            100% { transform: translateX(24px); opacity: 0; }
+        @keyframes device-ping {
+            0%, 100% { opacity: 0.3; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.05); }
         }
-        .animate-key-transfer {
-            animation: key-transfer 3s ease-in-out infinite;
+        .animate-device-sync {
+            animation: device-ping 3s ease-in-out infinite;
         }
     </style>
 </head>
@@ -96,11 +94,12 @@
                 </div>
                 <span class="text-white font-medium text-lg tracking-tight mono transition-colors group-hover:text-white">Stealth<span class="text-[#C8F200]">Sync</span></span>
             </a>
-            
+
             <nav class="hidden md:flex items-center gap-8 text-sm font-medium tracking-wide text-neutral-400">
                 <a href="#features" class="hover:text-white transition-colors">Explore</a>
                 <a href="#architecture" class="hover:text-white transition-colors">Privacy Protection</a>
-                <a href="#key-portability" class="hover:text-white transition-colors">Multi-Device</a>
+                <a href="#multi-device" class="hover:text-white transition-colors">Multi-Device Access</a>
+                <a href="#recovery" class="hover:text-white transition-colors">Recovery Phrase</a>
                 <a href="#pricing" class="hover:text-white transition-colors">Pricing</a>
             </nav>
         </div>
@@ -108,23 +107,23 @@
 
     <section class="relative pt-28 pb-24 px-6 overflow-hidden border-b border-premium">
         <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[#C8F200]/5 blur-[120px] rounded-full pointer-events-none"></div>
-        
+
         <div class="max-w-4xl mx-auto text-center relative z-10">
             <div class="inline-flex items-center gap-2 border border-premium px-3 py-1 rounded-full bg-[#0A0A0A] mb-8">
                 <span class="text-xs text-neutral-400 tracking-widest uppercase mono flex items-center gap-1.5">
                     <i data-lucide="shield" class="w-3.5 h-3.5 text-[#C8F200]"></i> Client-Side Cloud Encryption App
                 </span>
             </div>
-            
+
             <h1 class="text-4xl sm:text-6xl font-light tracking-tight text-white mb-6 leading-[1.15]">
                 Privacy by Default. <br>
                 <span class="font-normal text-transparent bg-clip-text bg-gradient-to-r from-white via-neutral-200 to-neutral-400">Encrypted Cloud Protection.</span>
             </h1>
-            
+
             <p class="text-neutral-400 text-base sm:text-lg max-w-2xl mx-auto mb-4 font-light leading-relaxed">
-                Encrypt files locally before transmitting them to third-party cloud storage environments. Protect your data while keeping key passwords and plaintext files inside your browser.
+                Encrypt files locally before transmitting them to third-party cloud storage environments. Only ciphertext is uploaded while plaintext and Key Passwords remain inside the client.
             </p>
-            
+
             <p class="text-xs text-neutral-500 mono mt-6">Utilizes APIs from official cloud storage providers.</p>
         </div>
     </section>
@@ -137,7 +136,7 @@
             </div>
             <div class="border-l sm:border-r border-premium pl-4 sm:pl-6 sm:pr-4">
                 <div class="text-xs uppercase tracking-widest text-neutral-500 font-medium mono mb-1">Architecture</div>
-                <div class="text-2xl font-light text-white tracking-tight mono">Client-Side Crypto</div>
+                <div class="text-2xl font-light text-white tracking-tight mono">Client-Side Encryption</div>
             </div>
             <div class="border-l pl-4 sm:pl-6">
                 <div class="text-xs uppercase tracking-widest text-neutral-500 font-medium mono mb-1">Integration Layer</div>
@@ -202,7 +201,7 @@
                     <div>
                         <h3 class="text-xl font-medium text-white mb-3 tracking-tight">Two-Click Drag & Drop</h3>
                         <p class="text-neutral-400 text-sm font-light leading-relaxed">
-                            Select a file and encryption key, then let the browser encrypt it locally before only ciphertext is uploaded to the selected cloud provider.
+                            Drop or select a file, choose a password-protected key, and confirm Encrypt &amp; Upload. StealthSync encrypts locally before sending ciphertext to the active cloud provider.
                         </p>
                     </div>
                 </div>
@@ -213,12 +212,12 @@
     <section id="architecture" class="py-24 bg-[#070707] border-b border-premium px-6">
         <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
             <div>
-                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Local Privacy Protection</div>
+                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Explainable Privacy Protection</div>
                 <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Rule-Based Privacy Warning</h2>
                 <p class="text-neutral-400 font-light text-sm leading-relaxed mb-6">
                     In compliance with privacy standards, all document processing checks happen strictly within the local client application before data transits across the network.
                 </p>
-                
+
                 <ul class="space-y-4 text-sm font-light text-neutral-300">
                     <li class="flex items-start gap-3">
                         <i data-lucide="scan-face" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
@@ -270,61 +269,110 @@
         </div>
     </section>
 
-    <section id="key-portability" class="py-24 bg-[#050505] border-b border-premium px-6">
+    <section id="multi-device" class="py-24 bg-[#050505] border-b border-premium px-6">
         <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
             <div class="w-full max-w-md mx-auto aspect-square rounded-2xl border border-premium bg-[#0A0A0A] p-8 flex flex-col justify-between relative overflow-hidden group order-2 md:order-1">
                 <div class="absolute inset-0 bg-radial from-neutral-900 via-transparent to-transparent pointer-events-none"></div>
-                
+
                 <div class="flex justify-between items-center text-[10px] uppercase font-medium tracking-widest mono text-neutral-500">
-                    <span class="flex items-center gap-1.5"><i data-lucide="file-key" class="w-3.5 h-3.5 text-[#C8F200]"></i> Key Management</span>
+                    <span class="flex items-center gap-1.5"><i data-lucide="laptop" class="w-3.5 h-3.5 text-[#C8F200]"></i> Active Sessions</span>
+                    <span class="text-[#C8F200] font-semibold">5 / 5 Devices</span>
                 </div>
 
-                <div class="my-auto flex flex-col items-center justify-center relative w-full h-40">
-                    <div class="flex items-center gap-8 z-10">
-                        <div class="w-16 h-20 bg-neutral-900 border border-neutral-800 rounded-xl flex flex-col items-center justify-center gap-2 group-hover:border-[#C8F200]/50 transition-colors shadow-xl">
-                            <i data-lucide="laptop" class="w-6 h-6 text-neutral-400"></i>
-                            <span class="text-[9px] mono text-neutral-500">Device A</span>
+                <div class="my-auto flex flex-col items-center justify-center relative w-full h-44">
+                    <div class="relative w-40 h-40 flex items-center justify-center">
+                        <div class="w-12 h-12 bg-neutral-900 border border-[#C8F200]/40 rounded-full flex items-center justify-center z-10 shadow-[0_0_20px_rgba(200,242,0,0.2)]">
+                            <i data-lucide="shield-check" class="w-6 h-6 text-[#C8F200]"></i>
                         </div>
 
-                        <div class="flex flex-col items-center gap-1">
-                            <i data-lucide="arrow-right-left" class="w-5 h-5 text-[#C8F200] animate-key-transfer"></i>
-                            <span class="text-[8px] mono text-neutral-500 uppercase">Metadata</span>
+                        <div class="absolute -top-1 left-1/2 -translate-x-1/2 p-2 bg-neutral-900 border border-neutral-800 rounded-lg flex items-center gap-1 shadow-lg animate-device-sync">
+                            <i data-lucide="laptop" class="w-3.5 h-3.5 text-[#C8F200]"></i>
+                            <span class="text-[8px] mono text-neutral-400">Desktop 1</span>
                         </div>
-
-                        <div class="w-16 h-20 bg-neutral-900 border border-neutral-800 rounded-xl flex flex-col items-center justify-center gap-2 group-hover:border-[#C8F200]/50 transition-colors shadow-xl">
-                            <i data-lucide="smartphone" class="w-6 h-6 text-neutral-400"></i>
-                            <span class="text-[9px] mono text-neutral-500">Device B</span>
+                        <div class="absolute top-12 -right-3 p-2 bg-neutral-900 border border-neutral-800 rounded-lg flex items-center gap-1 shadow-lg animate-device-sync [animation-delay:0.6s]">
+                            <i data-lucide="smartphone" class="w-3.5 h-3.5 text-[#C8F200]"></i>
+                            <span class="text-[8px] mono text-neutral-400">Laptop 1</span>
+                        </div>
+                        <div class="absolute -bottom-1 right-2 p-2 bg-neutral-900 border border-neutral-800 rounded-lg flex items-center gap-1 shadow-lg animate-device-sync [animation-delay:1.2s]">
+                            <i data-lucide="tablet" class="w-3.5 h-3.5 text-[#C8F200]"></i>
+                            <span class="text-[8px] mono text-neutral-400">Work PC</span>
+                        </div>
+                        <div class="absolute -bottom-1 left-2 p-2 bg-neutral-900 border border-neutral-800 rounded-lg flex items-center gap-1 shadow-lg animate-device-sync [animation-delay:1.8s]">
+                            <i data-lucide="laptop" class="w-3.5 h-3.5 text-[#C8F200]"></i>
+                            <span class="text-[8px] mono text-neutral-400">Laptop 2</span>
+                        </div>
+                        <div class="absolute top-12 -left-3 p-2 bg-neutral-900 border border-neutral-800 rounded-lg flex items-center gap-1 shadow-lg animate-device-sync [animation-delay:2.4s]">
+                            <i data-lucide="monitor" class="w-3.5 h-3.5 text-[#C8F200]"></i>
+                            <span class="text-[8px] mono text-neutral-400">Home PC</span>
                         </div>
                     </div>
-                </div>
-
-                <div class="border-t border-premium pt-4 flex justify-between items-end text-neutral-400 mono">
-                    <div></div>
-                    <div class="text-right"></div>
                 </div>
             </div>
 
             <div class="order-1 md:order-2">
-                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Premium Multi-Device</div>
-                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Password-Derived Keys Across Devices</h2>
+                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Session Management</div>
+                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Multi-Device Simultaneous Access</h2>
                 <p class="text-neutral-400 font-light text-sm leading-relaxed mb-6">
-                    Sign in on another approved device to retrieve the same non-secret key metadata. The same Key Password derives the same encryption key locally in each browser.
+                    Sign in to the same Premium account on authorized devices to access synchronized cloud links, key metadata, and encrypted file records. Each device still requires the same Key Password to derive the file key locally.
                 </p>
-                
+
                 <ul class="space-y-4 text-sm font-light text-neutral-300">
                     <li class="flex items-start gap-3">
-                        <i data-lucide="arrow-right-left" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>No Key Package Required:</strong> Shared salt, algorithm and fingerprint metadata allow approved devices to derive keys without exporting raw key material.</span>
-                    </li>
+                        <i data-lucide="monitor-smartphone" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
+                        <span><strong>Up to 5 Active Devices:</strong> Link and run StealthSync concurrently.</span>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section id="recovery" class="py-24 bg-[#070707] border-b border-premium px-6">
+        <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+            <div>
+                <div class="text-xs text-[#C8F200] tracking-widest uppercase mono mb-3">// Vault Protection & Recovery</div>
+                <h2 class="text-3xl font-light tracking-tight text-white mb-6 sm:text-4xl">Recovery Phrase Backup</h2>
+                <p class="text-neutral-400 font-light text-sm leading-relaxed mb-6">
+                    Generate a six-word alternative for recovering access to your StealthSync account login. The phrase is stored as a verifier and cannot restore encryption keys, Key Passwords, or encrypted files.
+                </p>
+
+                <ul class="space-y-4 text-sm font-light text-neutral-300">
                     <li class="flex items-start gap-3">
                         <i data-lucide="key-round" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Complete Lifecycle Control:</strong> Create, view, update metadata for, and retire keys easily as your operational requirements evolve.</span>
+                        <span><strong>Account Recovery:</strong> Use the phrase as an alternative login recovery credential.</span>
                     </li>
                     <li class="flex items-start gap-3">
-                        <i data-lucide="life-buoy" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
-                        <span><strong>Account Recovery:</strong> Premium recovery phrases support account login recovery; they do not expose or reconstruct file encryption keys.</span>
+                        <i data-lucide="refresh-cw" class="w-4 h-4 text-[#C8F200] mt-0.5 shrink-0"></i>
+                        <span><strong>Clear Security Boundary:</strong> File decryption still requires the original Key Password.</span>
                     </li>
                 </ul>
+            </div>
+
+            <div class="w-full max-w-md mx-auto aspect-square rounded-2xl border border-premium bg-[#0A0A0A] p-8 flex flex-col justify-between relative overflow-hidden group">
+                <div class="absolute inset-0 bg-radial from-[#C8F200]/5 to-transparent pointer-events-none"></div>
+
+                <div class="flex justify-between items-center text-[10px] uppercase font-medium tracking-widest mono text-neutral-500 z-10">
+                    <span class="flex items-center gap-1.5"><i data-lucide="file-key" class="w-3.5 h-3.5 text-[#C8F200]"></i> Recovery Phrase</span>
+                    <span class="text-[#C8F200] font-semibold">6-Word Seed</span>
+                </div>
+
+                <div class="my-auto z-10">
+                    <div class="text-[11px] font-medium text-neutral-400 mb-3 mono flex items-center justify-between">
+                        <span>Recovery Phrase</span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 mono text-xs">
+                        <div class="bg-neutral-900/80 border border-premium rounded p-2 flex items-center gap-1.5"><span class="text-neutral-600 text-[10px]">01</span><span class="text-neutral-200">matrix</span></div>
+                        <div class="bg-neutral-900/80 border border-premium rounded p-2 flex items-center gap-1.5"><span class="text-neutral-600 text-[10px]">02</span><span class="text-neutral-200">cipher</span></div>
+                        <div class="bg-neutral-900/80 border border-premium rounded p-2 flex items-center gap-1.5"><span class="text-neutral-600 text-[10px]">03</span><span class="text-neutral-200">shield</span></div>
+                        <div class="bg-neutral-900/80 border border-premium rounded p-2 flex items-center gap-1.5"><span class="text-neutral-600 text-[10px]">04</span><span class="text-neutral-200">quantum</span></div>
+                        <div class="bg-neutral-900/80 border border-premium rounded p-2 flex items-center gap-1.5"><span class="text-neutral-600 text-[10px]">05</span><span class="text-neutral-200">vector</span></div>
+                        <div class="bg-neutral-900/80 border border-premium rounded p-2 flex items-center gap-1.5"><span class="text-neutral-600 text-[10px]">06</span><span class="text-neutral-200">stealth</span></div>
+                     </div>
+
+                    <div class="mt-4 p-2.5 bg-neutral-950 border border-premium rounded-lg flex items-center gap-2 text-[10px] text-neutral-400">
+                        <i data-lucide="lock" class="w-3.5 h-3.5 text-[#C8F200] shrink-0"></i>
+                        <span>Store offline in a physical location. Never share online.</span>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -354,8 +402,8 @@
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Link to 1 cloud storage provider</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Supports Google Drive, OneDrive, or Dropbox</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Files encrypted with AES-128</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> 1 active browser device</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Core Encryption Keys Management</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> 1 active device session</li>
                     </ul>
                 </div>
             </div>
@@ -379,9 +427,8 @@
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Link up to 3 cloud storage providers</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Google Drive, OneDrive, and Dropbox supported</li>
                         <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Choice of AES-128 or AES-256 encryption</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Account login recovery phrase</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Up to 5 active browser devices</li>
-                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Cross-device key derivation without key packages</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Recovery Phrase for account login recovery</li>
+                        <li class="flex items-center gap-2.5"><i data-lucide="check" class="w-4 h-4 text-[#C8F200]"></i> Up to 5 active devices simultaneously</li>
                     </ul>
                 </div>
             </div>
