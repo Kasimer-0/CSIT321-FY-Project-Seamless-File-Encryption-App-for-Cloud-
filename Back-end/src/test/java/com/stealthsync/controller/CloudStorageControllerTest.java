@@ -127,15 +127,16 @@ class CloudStorageControllerTest {
     }
 
     @Test
-    void legacyGoogleDriveFilesCanStillDecryptAfterMetadataMigration() throws Exception {
+    void explicitlyConfiguredLegacyGoogleDriveFilesCanStillDecryptAfterMetadataMigration() throws Exception {
         AesGcmService aesGcmService = new AesGcmService(new KeyManagementService());
         UserVaultService userVaultService = mock(UserVaultService.class);
         when(userVaultService.filePassphraseFor(7L)).thenReturn("current-user-vault-key");
+        String legacyCompatibilityPassphrase = "legacy-test-fixture-passphrase";
 
         byte[] encryptedWithOldDemoPassphrase;
         try (InputStream encrypted = aesGcmService.encryptStream(
                 new ByteArrayInputStream("legacy drive content".getBytes(StandardCharsets.UTF_8)),
-                "stealthsync-demo-passphrase",
+                legacyCompatibilityPassphrase,
                 256)) {
             encryptedWithOldDemoPassphrase = encrypted.readAllBytes();
         }
@@ -153,6 +154,7 @@ class CloudStorageControllerTest {
                 mock(EncryptedEnvelopeV2Inspector.class),
                 mock(CloudCiphertextService.class)
         );
+        ReflectionTestUtils.setField(controller, "legacyDrivePassphrase", legacyCompatibilityPassphrase);
 
         CloudStorageAdapter.DownloadedCloudFile legacyFile = new CloudStorageAdapter.DownloadedCloudFile(
                 "legacy-note.txt",

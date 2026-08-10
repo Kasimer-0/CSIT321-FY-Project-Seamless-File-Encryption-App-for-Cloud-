@@ -59,8 +59,6 @@ import java.util.Optional;
 /** Coordinates cloud-link management and provider-neutral encrypted cloud file operations. */
 public class CloudStorageController {
 
-    private static final String LEGACY_DRIVE_DEMO_PASSPHRASE = "stealthsync-demo-passphrase";
-
     private final AppDataService dataStore;
     private final List<CloudStorageAdapter> cloudStorageAdapters;
     private final AesGcmService aesGcmService;
@@ -75,6 +73,9 @@ public class CloudStorageController {
 
     @Value("${stealthsync.frontend-url}")
     private String frontendUrl;
+
+    @Value("${stealthsync.legacy-drive-passphrase:}")
+    private String legacyDrivePassphrase;
 
     @GetMapping("/links")
     public ResponseEntity<List<CloudStorageLink>> getLinks() {
@@ -523,8 +524,11 @@ public class CloudStorageController {
         try {
             return new ByteArrayInputStream(decryptCloudBytes(encryptedContent, userVaultService.filePassphraseFor(ownerID), keyLengthBits));
         } catch (Exception vaultFailure) {
+            if (legacyDrivePassphrase == null || legacyDrivePassphrase.isBlank()) {
+                throw vaultFailure;
+            }
             try {
-                return new ByteArrayInputStream(decryptCloudBytes(encryptedContent, LEGACY_DRIVE_DEMO_PASSPHRASE, keyLengthBits));
+                return new ByteArrayInputStream(decryptCloudBytes(encryptedContent, legacyDrivePassphrase, keyLengthBits));
             } catch (Exception legacyFailure) {
                 vaultFailure.addSuppressed(legacyFailure);
                 throw vaultFailure;

@@ -64,4 +64,4 @@ Google Drive, Dropbox, and OneDrive now share the same intended encryption bound
 3. `AesGcmService` encrypts or decrypts locally before/after provider transfer.
 4. Provider adapters handle OAuth, token refresh, list, upload ciphertext, download ciphertext, and delete.
 
-The old `LEGACY_DRIVE_DEMO_PASSPHRASE` may remain only for backwards-compatible decryption of early demo files that have no key metadata. New cloud uploads must not use a fixed demo passphrase.
+The old fixed demo passphrase is no longer stored in source code. If an early demo file without key metadata must be migrated, an administrator may temporarily provide `stealthsync.legacy-drive-passphrase` through external configuration. The compatibility path is disabled by default, and new cloud uploads never use it.
