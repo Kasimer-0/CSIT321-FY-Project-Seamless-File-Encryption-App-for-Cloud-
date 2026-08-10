@@ -149,6 +149,13 @@ try {
     }
 
     Write-SupervisorLog "Shared deployment health supervisor started."
+    if (Test-Path -LiteralPath $disabledMarker) {
+        # -Stop ends the current task immediately. A later task start means either
+        # Windows logged in again or the user explicitly requested Start, so the
+        # previous stop marker must not disable the next hosting session.
+        Remove-Item -LiteralPath $disabledMarker -Force
+        Write-SupervisorLog "Cleared the previous hosting-session disabled marker."
+    }
     $script:docker = Resolve-DockerCli
     $publicFailureCount = 0
     $lastHeartbeat = [DateTime]::MinValue

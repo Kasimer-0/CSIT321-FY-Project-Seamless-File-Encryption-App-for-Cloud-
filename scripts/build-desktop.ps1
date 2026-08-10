@@ -111,16 +111,46 @@ function New-BrandIcon([string]$Destination) {
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
         $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-        $graphics.Clear([System.Drawing.Color]::FromArgb(9, 10, 12))
-        $dark = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(20, 23, 28))
-        $cyan = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(6, 182, 212))
+        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.Clear([System.Drawing.Color]::Transparent)
+        $accent = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(6, 182, 212))
+        $ink = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(5, 5, 5))
+        $tile = [System.Drawing.Drawing2D.GraphicsPath]::new()
         try {
-            $graphics.FillEllipse($dark, 18, 18, 220, 220)
-            $graphics.FillEllipse($cyan, 72, 72, 112, 112)
+            # This is the same compact S// mark used in Website.html, rebuilt as
+            # geometry so Windows shortcuts remain crisp without requiring a font.
+            $tile.AddArc(10, 10, 82, 82, 180, 90)
+            $tile.AddArc(164, 10, 82, 82, 270, 90)
+            $tile.AddArc(164, 164, 82, 82, 0, 90)
+            $tile.AddArc(10, 164, 82, 82, 90, 90)
+            $tile.CloseFigure()
+            $graphics.FillPath($accent, $tile)
+
+            $graphics.FillRectangle($ink, 51, 64, 82, 23)
+            $graphics.FillRectangle($ink, 51, 116, 82, 24)
+            $graphics.FillRectangle($ink, 51, 169, 82, 23)
+            $graphics.FillRectangle($ink, 51, 64, 23, 76)
+            $graphics.FillRectangle($ink, 110, 116, 23, 76)
+
+            $leftSlash = [System.Drawing.Point[]]@(
+                [System.Drawing.Point]::new(160, 64),
+                [System.Drawing.Point]::new(178, 64),
+                [System.Drawing.Point]::new(155, 192),
+                [System.Drawing.Point]::new(137, 192)
+            )
+            $rightSlash = [System.Drawing.Point[]]@(
+                [System.Drawing.Point]::new(193, 64),
+                [System.Drawing.Point]::new(211, 64),
+                [System.Drawing.Point]::new(188, 192),
+                [System.Drawing.Point]::new(170, 192)
+            )
+            $graphics.FillPolygon($ink, $leftSlash)
+            $graphics.FillPolygon($ink, $rightSlash)
         }
         finally {
-            $dark.Dispose()
-            $cyan.Dispose()
+            $tile.Dispose()
+            $accent.Dispose()
+            $ink.Dispose()
         }
         $icon = [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
         $stream = [System.IO.File]::Open($Destination, [System.IO.FileMode]::Create)

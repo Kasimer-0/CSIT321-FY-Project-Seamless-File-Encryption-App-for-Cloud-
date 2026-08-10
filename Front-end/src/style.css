@@ -1,6 +1,4 @@
-/* --- Inter Font Import --- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
+/* --- Global theme variables --- */
 :root {
     --bg-main: #09090b;       /* Zinc 950 */
     --bg-card: #141417;       /* Zinc 900 */
@@ -17,7 +15,9 @@ body, html {
     padding: 0;
     background-color: var(--bg-main) !important;
     color: var(--text-primary) !important;
-    font-family: 'Inter', sans-serif !important;
+    /* Use the native Windows UI font so the desktop shell never waits for a
+       third-party font request before it can render the application. */
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif !important;
     letter-spacing: 0;
     min-height: 100vh;
 }

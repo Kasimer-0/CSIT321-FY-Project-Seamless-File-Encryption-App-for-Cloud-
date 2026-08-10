@@ -390,32 +390,45 @@ function Test-DockerEngine {
 }
 
 New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
-$docker = Resolve-DockerCli
-$devTunnel = Resolve-DevTunnelCli
+$operationMutex = New-Object System.Threading.Mutex($false, "Local\StealthSyncSharedDeploymentOperation")
+$operationMutexHeld = $false
 
-if ($Stop) {
-    Set-Content -LiteralPath $disabledMarker -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss K") -Encoding ASCII
-    $scheduledTask = Get-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
-    if ($scheduledTask -and $scheduledTask.State -eq "Running") {
-        Stop-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
+try {
+    try {
+        $operationMutexHeld = $operationMutex.WaitOne([TimeSpan]::FromMinutes(10), $false)
+    } catch [System.Threading.AbandonedMutexException] {
+        $operationMutexHeld = $true
     }
-    if (Test-Path -LiteralPath $tunnelPidFile) {
-        $tunnelPid = Get-Content -LiteralPath $tunnelPidFile -ErrorAction SilentlyContinue
-        if ($tunnelPid) {
-            Stop-Process -Id $tunnelPid -Force -ErrorAction SilentlyContinue
+    if (-not $operationMutexHeld) {
+        throw "Another StealthSync deployment operation is still running. Try again after it finishes."
+    }
+
+    $docker = Resolve-DockerCli
+    $devTunnel = Resolve-DevTunnelCli
+
+    if ($Stop) {
+        Set-Content -LiteralPath $disabledMarker -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss K") -Encoding ASCII
+        $scheduledTask = Get-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
+        if ($scheduledTask -and $scheduledTask.State -eq "Running") {
+            Stop-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
         }
-        Remove-Item -LiteralPath $tunnelPidFile -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $tunnelPidFile) {
+            $tunnelPid = Get-Content -LiteralPath $tunnelPidFile -ErrorAction SilentlyContinue
+            if ($tunnelPid) {
+                Stop-Process -Id $tunnelPid -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item -LiteralPath $tunnelPidFile -Force -ErrorAction SilentlyContinue
+        }
+        & $docker compose -f $composeFile --env-file $environmentFile stop
+        Write-Host "StealthSync shared test deployment stopped." -ForegroundColor Yellow
+        return
     }
-    & $docker compose -f $composeFile --env-file $environmentFile stop
-    Write-Host "StealthSync shared test deployment stopped." -ForegroundColor Yellow
-    exit 0
-}
 
-Remove-Item -LiteralPath $disabledMarker -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $disabledMarker -Force -ErrorAction SilentlyContinue
 
-if (-not (Test-Path -LiteralPath $environmentFile)) {
-    throw ".env.production is missing. Create it from .env.production.example without committing it."
-}
+    if (-not (Test-Path -LiteralPath $environmentFile)) {
+        throw ".env.production is missing. Create it from .env.production.example without committing it."
+    }
 
 Ensure-DevTunnelLogin
 Ensure-DevTunnel
@@ -492,10 +505,16 @@ Write-Host "OneDrive callback: $publicUrl/cloud-storage/onedrive/callback"
 Write-Host ""
 Write-Host "The first browser visit may show a Microsoft anti-phishing page. Click Continue once." -ForegroundColor Yellow
 
-if (-not $NonInteractive) {
-    $scheduledTask = Get-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
-    if ($scheduledTask -and $scheduledTask.State -ne "Running") {
-        Start-ScheduledTask -TaskName $scheduledTaskName
-        Write-Host "Shared deployment health supervisor started." -ForegroundColor DarkGreen
+    if (-not $NonInteractive) {
+        $scheduledTask = Get-ScheduledTask -TaskName $scheduledTaskName -ErrorAction SilentlyContinue
+        if ($scheduledTask -and $scheduledTask.State -ne "Running") {
+            Start-ScheduledTask -TaskName $scheduledTaskName
+            Write-Host "Shared deployment health supervisor started." -ForegroundColor DarkGreen
+        }
     }
+} finally {
+    if ($operationMutexHeld) {
+        $operationMutex.ReleaseMutex()
+    }
+    $operationMutex.Dispose()
 }
