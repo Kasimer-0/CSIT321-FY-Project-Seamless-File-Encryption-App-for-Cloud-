@@ -46,3 +46,9 @@ Internal release-candidate deadline: 2026-08-09 21:00 Singapore time
 - TypeScript and Vite production build: passed.
 - Local application endpoint: HTTP 200.
 - Shared public HTTPS endpoint: HTTP 200.
+
+## Hosted Production Amendment - 2026-08-11
+
+The feature scope above remains frozen. The delivery topology is upgraded from the Windows-hosted Dev Tunnel to a Render Static Site, paid Render Web Service, and paid Render PostgreSQL. The former Docker/Dev Tunnel deployment remains a local development and rollback option only.
+
+Final production acceptance now requires the manual hosting, OAuth, persistence, external-network, and billing gates in [`PRODUCTION_DEPLOYMENT_CHECKLIST.md`](PRODUCTION_DEPLOYMENT_CHECKLIST.md). The Windows installer must be rebuilt with the assigned production frontend URL before release.

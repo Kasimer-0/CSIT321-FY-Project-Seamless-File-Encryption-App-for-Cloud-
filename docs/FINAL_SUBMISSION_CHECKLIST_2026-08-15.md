@@ -57,7 +57,7 @@ Do not call the desktop package final until step 10 passes on a clean launch.
 ## OAuth And Shared Hosting Readiness - 2026-08-04
 
 - [x] Google OAuth project is External Production rather than Testing.
-- [x] Google scopes are limited to `drive.file` and `userinfo.email`.
+- [x] Google access is limited to `drive.file`; `openid` and `userinfo.email` are used only to identify the connected account.
 - [x] Google, Dropbox, and OneDrive production callbacks match the fixed public URL.
 - [x] `PremiumUser -> kasimer.zero@gmail.com` was reauthorized after Google publication.
 - [ ] Teammate reauthorizes `testuser -> nekohuii@gmail.com` from a familiar Google device/network.
@@ -67,6 +67,20 @@ Do not call the desktop package final until step 10 passes on a clean launch.
 - [x] App-container and Dev-Tunnel failure recovery were demonstrated in under one minute.
 - [x] Deliberate `-Stop` remained stopped for five minutes and normal startup restored both URLs to `200`.
 - [x] Verified PostgreSQL, Vault, DPAPI environment, and checksum backup retained under ignored release outputs.
+
+## Hosted Production Gate - 2026-08-11
+
+- [x] Added a Render Blueprint for a static React frontend, paid Docker API, and paid managed PostgreSQL.
+- [x] Added strict `prod` configuration, Render `PORT` support, exact CORS origins, public health endpoint, Flyway migration, and disabled demo seeding.
+- [x] Verified the backend Docker image against a clean temporary PostgreSQL database; Flyway, Hibernate validation, and unauthenticated health all passed.
+- [x] Kept local development and the existing self-hosted Docker workflow available.
+- [x] Removed the Dev Tunnel default from desktop build and smoke-test configuration.
+- [ ] Create the paid Render resources and retain billing until at least one month after the final presentation.
+- [ ] Enter production secrets and the assigned frontend/backend URLs in Render.
+- [ ] Register the exact Render callback URLs in Google, Dropbox, and Microsoft consoles.
+- [ ] Complete three-provider OAuth/upload/list/wrong-password/decrypt/delete tests from an external network.
+- [ ] Verify a backend redeploy preserves database records and verify production remains available while the development PC is powered off.
+- [ ] Rebuild and externally smoke-test the Windows installer against the final production frontend URL.
 
 ## Documentation Closure
 

@@ -1,6 +1,6 @@
 # StealthSync
 
-StealthSync is a web-based client-side file encryption application for Google Drive, Dropbox, and OneDrive. Files are encrypted in the browser before upload and decrypted in the browser after download, so the cloud providers and StealthSync backend handle ciphertext rather than plaintext file contents.
+StealthSync is a client-side file encryption application for Google Drive, Dropbox, and OneDrive. Files are encrypted in the browser before upload and decrypted in the browser after download, so cloud providers and the StealthSync backend handle ciphertext rather than plaintext file contents.
 
 ## Current FYP Baseline
 
@@ -13,7 +13,7 @@ StealthSync is a web-based client-side file encryption application for Google Dr
 - Account recovery phrases for account login recovery only. They do not recover an encryption-key password or decrypt files.
 - A browser-local rule-based privacy warning and explainable rule-based anomaly scoring for administrator security logs.
 
-The web application is the current validation target. Legacy server-side encryption and desktop packaging code remains only for compatibility and is not the primary FYP workflow.
+The hosted web application is the primary validation target. The optional Windows desktop client loads the same hosted application in a dedicated window; it does not run a local backend or database.
 
 ## Architecture
 
@@ -21,8 +21,8 @@ The web application is the current validation target. Legacy server-side encrypt
 flowchart LR
     A["Windows Device A\nBrowser Web Crypto"]
     B["Windows Device B\nBrowser Web Crypto"]
-    API["Shared Spring Boot API\nJWT, device policy, ciphertext routing"]
-    DB["Shared PostgreSQL\naccounts, key metadata, device and file records"]
+    API["Hosted Spring Boot API\nJWT, device policy, ciphertext routing"]
+    DB["Hosted PostgreSQL\naccounts, key metadata, device and file records"]
     G["Google Drive"]
     D["Dropbox"]
     O["OneDrive"]
@@ -35,24 +35,26 @@ flowchart LR
     API --> O
 ```
 
-The Key Password, derived raw key, plaintext file, original filename, and decrypted result are kept on the active browser device during the V2 workflow. The backend stores synchronized non-secret key metadata, including the salt, algorithm, KDF version, fingerprint, and password verifier. OAuth access and refresh tokens are encrypted before database storage.
+The Key Password, derived raw key, plaintext file, original filename, and decrypted result remain on the active browser device during the V2 workflow. The backend stores synchronized non-secret key metadata, including the salt, algorithm, KDF version, fingerprint, and password verifier. OAuth access and refresh tokens are encrypted before database storage.
 
 ## Multi-device Workflow
 
-1. Device A opens the shared StealthSync URL and signs in to a Premium account.
-2. Device A connects a cloud provider through that provider's official OAuth page, creates an encryption key, and uploads an encrypted file.
-3. Device B opens the same StealthSync URL and signs in to the same account.
-4. Device B automatically sees the synchronized cloud link, encryption-key metadata, and encrypted file list.
+1. Device A opens the hosted StealthSync URL and signs in to a Premium account.
+2. Device A connects a cloud provider through its official OAuth page, creates an encryption key, and uploads an encrypted file.
+3. Device B signs in to the same StealthSync account.
+4. Device B sees the synchronized cloud link, encryption-key metadata, and encrypted file list.
 5. Device B enters the same Key Password to derive the key locally and decrypt the downloaded ciphertext.
 
-Device B does not need Java, Node.js, PostgreSQL, OAuth application credentials, environment variables, or an exported key package. OAuth application registration and server secrets are one-time deployment responsibilities, not end-user setup.
+Device B does not need Java, Node.js, PostgreSQL, OAuth application credentials, environment variables, or an exported key package. OAuth application registration and server secrets are deployment responsibilities, not end-user setup.
 
 ## Project Layout
 
-- `Back-end/` — Spring Boot 3.2.5 API, provider adapters, authentication, subscriptions, device enforcement, persistence, and security logs.
-- `Front-end/` — React 19 and Vite 8 web client, Web Crypto V2, customer pages, and administrator pages.
-- `scripts/` — local startup, database initialization, and packaging helpers.
-- `Dockerfile`, `docker-compose.production.yml`, `.env.production.example` — shared deployment template without real secrets.
+- `Back-end/` - Spring Boot 3.2.5 API, provider adapters, authentication, subscriptions, device enforcement, persistence, and security logs.
+- `Front-end/` - React 19 and Vite 8 web client, Web Crypto V2, customer pages, and administrator pages.
+- `Desktop-client/` - optional JavaFX client for the hosted web application.
+- `scripts/` - local startup, database initialization, and packaging helpers.
+- `render.yaml` - reproducible Render Blueprint for the hosted frontend, API, and PostgreSQL database.
+- `Dockerfile`, `docker-compose.production.yml`, `.env.production.example` - self-hosted/local deployment template without real secrets.
 
 ## Development Prerequisites
 
@@ -113,15 +115,26 @@ ONEDRIVE_TENANT
 
 Never commit OAuth secrets, database passwords, JWT secrets, OAuth state secrets, access tokens, refresh tokens, Key Passwords, or a real `.env.production` file.
 
-## Shared Deployment
+## Hosted Production Deployment
 
-For a true two-Windows-device demonstration, both devices must use the same deployed StealthSync backend and database. Copy `.env.production.example` to `.env.production` on the server, replace every placeholder, register the production HTTPS callback URLs with all three providers, and start the deployment with:
+The recommended production topology uses a Render Static Site for the React frontend, a paid Render Docker Web Service for the Spring Boot API, and paid Render PostgreSQL. It does not depend on a personal Windows computer or Dev Tunnel.
+
+- [Deployment runbook](docs/DEPLOYMENT_RUNBOOK.md)
+- [Production environment template](docs/PRODUCTION_ENVIRONMENT_TEMPLATE.md)
+- [Production deployment checklist](docs/PRODUCTION_DEPLOYMENT_CHECKLIST.md)
+- [End-user hosted installation guide](docs/END_USER_HOSTED_INSTALLATION.md)
+
+Deploy `render.yaml` as a Blueprint, assign the final frontend and backend URLs, configure all three OAuth applications, and complete the external end-to-end checklist. The `prod` profile uses Flyway migrations, `ddl-auto=validate`, exact CORS origins, and no demo-account seeding.
+
+## Self-hosted Development Deployment
+
+The existing Docker Compose deployment remains available for local development and rollback testing. Copy `.env.production.example` to `.env.production`, replace every placeholder, register the matching HTTPS callback URLs with all three providers, and start it with:
 
 ```powershell
 docker compose -f docker-compose.production.yml up --build -d
 ```
 
-The deployment must use HTTPS and strong independent values for `DB_PASSWORD`, `JWT_SECRET`, `OAUTH_STATE_SECRET`, and `VAULT_SERVER_SECRET`. The `.env.production` file is ignored by Git.
+The deployment must use HTTPS and strong independent values for `DB_PASSWORD`, `JWT_SECRET`, `OAUTH_STATE_SECRET`, `TOKEN_ENCRYPTION_SECRET`, and `VAULT_SERVER_SECRET`. The `.env.production` file is ignored by Git.
 
 ## Test Accounts
 
@@ -133,7 +146,7 @@ These accounts are seeded for local course-project testing only:
 | Free customer | `testuser` | `testuser@stealthsync.com` | `User@123` |
 | Premium customer | `PremiumUser` | `user@stealthsync.com` | `User@1234` |
 
-Do not reuse these credentials in a public deployment.
+Hosted production does not seed these accounts. Do not reuse these credentials in a public deployment.
 
 ## Automated Verification
 
@@ -144,7 +157,7 @@ cd Back-end
 mvn test
 ```
 
-Run the frontend security tests and production build:
+Run the frontend tests and production build:
 
 ```powershell
 cd Front-end
@@ -152,13 +165,14 @@ npm test
 npm run build
 ```
 
-Current verified baseline on 28 July 2026:
+Run the desktop-client tests:
 
-- Backend: 121 tests passed.
-- Frontend crypto/privacy/network-boundary tests: 7 passed.
-- TypeScript and Vite production build: passed.
-- Real Google Drive, Dropbox, and OneDrive OAuth/upload/list/wrong-password/correct-decrypt/delete flow: passed locally.
-- Premium multi-device flow: passed with two independent browser profiles; final evidence on two physical Windows devices is still required.
+```powershell
+cd Desktop-client
+mvn test
+```
+
+Real external OAuth and three-provider end-to-end verification must be repeated after the final hosted URLs are assigned.
 
 ## Security Terminology
 
