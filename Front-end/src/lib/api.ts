@@ -5,8 +5,8 @@ const DEVICE_LABEL_STORAGE_KEY = "stealthsync.device.label"
 const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.trim()
 
 /**
- * Development keeps the separate Spring port, while production defaults to the
- * page origin so a single hosted StealthSync URL needs no client configuration.
+ * Development keeps the separate Spring port. Split-host production builds set
+ * VITE_API_BASE_URL; same-origin deployments can use the production fallback.
  */
 export const API_BASE_URL = (configuredApiBase
     || (import.meta.env.DEV ? "http://localhost:8080" : window.location.origin))

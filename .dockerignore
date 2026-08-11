@@ -2,10 +2,13 @@
 .codex
 .stealthsync-run
 Back-end/target
+Desktop-client/target
 Front-end/dist
 Front-end/node_modules
 dist-desktop
 installer
 outputs
+.tools
 *.log
 .env.production
+.env

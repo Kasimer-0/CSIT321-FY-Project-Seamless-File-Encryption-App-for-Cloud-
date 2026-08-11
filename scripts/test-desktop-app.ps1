@@ -1,10 +1,13 @@
 param(
     [string]$AppPath = "dist-desktop\StealthSync\StealthSync.exe",
-    [string]$ServiceUrl = "https://tj867zgk-8080.asse.devtunnels.ms",
+    [string]$ServiceUrl = $env:STEALTHSYNC_DESKTOP_URL,
     [int]$TimeoutSeconds = 90
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($ServiceUrl)) {
+    throw "Provide -ServiceUrl https://<production-frontend-host> or set STEALTHSYNC_DESKTOP_URL."
+}
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ResolvedApp = if ([System.IO.Path]::IsPathRooted($AppPath)) {
     (Resolve-Path -LiteralPath $AppPath).Path

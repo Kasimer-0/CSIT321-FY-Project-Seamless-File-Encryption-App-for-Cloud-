@@ -5,7 +5,7 @@ param(
     [switch]$SkipTests,
     [string]$JdkHome = "C:\Users\Z\.jdks\openjdk-21.0.2",
     [string]$AppVersion = "1.3.0",
-    [string]$ServiceUrl = $(if ($env:STEALTHSYNC_DESKTOP_URL) { $env:STEALTHSYNC_DESKTOP_URL } else { "https://tj867zgk-8080.asse.devtunnels.ms" }),
+    [string]$ServiceUrl = $env:STEALTHSYNC_DESKTOP_URL,
     [string]$UpgradeUuid = "8c96c4aa-8c5f-4ed0-a9f4-8dcb48c2b6b7"
 )
 
@@ -39,6 +39,9 @@ function Invoke-Checked([scriptblock]$Command, [string]$Description) {
 }
 
 function Assert-ServiceUrl([string]$Url) {
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        throw "Provide -ServiceUrl https://<production-frontend-host> or set STEALTHSYNC_DESKTOP_URL."
+    }
     $uri = [Uri]$Url
     if (-not $uri.IsAbsoluteUri -or $uri.Scheme -ne "https" -or -not $uri.Host -or $uri.UserInfo) {
         throw "ServiceUrl must be an absolute HTTPS URL without embedded credentials."

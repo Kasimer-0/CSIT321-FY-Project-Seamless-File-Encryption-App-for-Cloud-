@@ -18,7 +18,19 @@ From the repository root:
 .\scripts\build-desktop.ps1
 ```
 
-The build is pinned to OpenJDK 21.0.2 and WiX 3.14.1. `STEALTHSYNC_DESKTOP_URL` can override the packaged service URL for a controlled build.
+The build is pinned to OpenJDK 21.0.2 and WiX 3.14.1. A release build must provide the hosted frontend URL explicitly:
+
+```powershell
+.\scripts\build-desktop.ps1 -ServiceUrl https://<production-frontend-host>
+```
+
+The client never contains OAuth client secrets. An operator can redirect an installed client without rebuilding it by creating `%LOCALAPPDATA%\StealthSync\desktop.properties`:
+
+```properties
+service.url=https://<production-frontend-host>
+```
+
+`STEALTHSYNC_DESKTOP_URL` remains the highest-priority override for controlled smoke tests.
 
 Generated artifacts are ignored by Git:
 
