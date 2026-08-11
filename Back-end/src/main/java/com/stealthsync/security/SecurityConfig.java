@@ -41,7 +41,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/", "/index.html", "/assets/**", "/static/**", "/favicon.svg", "/icons.svg",
                                 "/login", "/signup", "/account/recovery-phrase/login",
-                                "/cloud-storage/oauth/**", "/cloud-storage/*/callback", "/error"
+                                "/cloud-storage/oauth/**", "/cloud-storage/*/callback",
+                                "/actuator/health", "/actuator/health/**", "/error"
                         ).permitAll()
                         .requestMatchers("/admin/**", "/users/**", "/enc-methods").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/plans/**").hasRole("ADMIN")

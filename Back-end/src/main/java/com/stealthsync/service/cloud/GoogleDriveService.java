@@ -15,7 +15,6 @@ import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.encrypt.Encryptors;
 import org.springframework.security.crypto.keygen.KeyGenerators;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,6 +76,9 @@ public class GoogleDriveService implements CloudStorageAdapter {
 
     @Value("${stealthsync.google-drive.client-secret:}")
     private String clientSecret;
+
+    @Value("${stealthsync.token-encryption-secret:}")
+    private String tokenEncryptionSecret;
 
     @Value("${stealthsync.google-drive.redirect-uri:}")
     private String redirectUri;
@@ -825,7 +827,12 @@ public class GoogleDriveService implements CloudStorageAdapter {
     }
 
     private String encryptToken(GoogleDriveCredential credential, String token) {
-        return Encryptors.text(clientSecret, credential.getTokenSalt()).encrypt(token);
+        return OAuthTokenEncryption.encrypt(
+                token,
+                credential.getTokenSalt(),
+                tokenEncryptionSecret,
+                clientSecret
+        );
     }
 
     private String decryptToken(GoogleDriveCredential credential, String encryptedToken) {
@@ -835,7 +842,12 @@ public class GoogleDriveService implements CloudStorageAdapter {
         if (isBlank(credential.getTokenSalt())) {
             return encryptedToken;
         }
-        return Encryptors.text(clientSecret, credential.getTokenSalt()).decrypt(encryptedToken);
+        return OAuthTokenEncryption.decrypt(
+                encryptedToken,
+                credential.getTokenSalt(),
+                tokenEncryptionSecret,
+                clientSecret
+        );
     }
 
     private record DriveFileMetadata(String originalName, String encMethod, Long keyID, String keyName, String keyFingerprint) {

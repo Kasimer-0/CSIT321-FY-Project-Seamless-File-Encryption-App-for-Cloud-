@@ -11,7 +11,6 @@ import com.stealthsync.service.AppDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.encrypt.Encryptors;
 import org.springframework.security.crypto.keygen.KeyGenerators;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,6 +64,9 @@ public class DropboxService implements CloudStorageAdapter {
 
     @Value("${stealthsync.dropbox.client-secret:}")
     private String clientSecret;
+
+    @Value("${stealthsync.token-encryption-secret:}")
+    private String tokenEncryptionSecret;
 
     @Value("${stealthsync.dropbox.redirect-uri:}")
     private String redirectUri;
@@ -509,14 +511,24 @@ public class DropboxService implements CloudStorageAdapter {
     }
 
     private String encryptToken(CloudProviderCredential credential, String token) {
-        return Encryptors.text(clientSecret, credential.getTokenSalt()).encrypt(token);
+        return OAuthTokenEncryption.encrypt(
+                token,
+                credential.getTokenSalt(),
+                tokenEncryptionSecret,
+                clientSecret
+        );
     }
 
     private String decryptToken(CloudProviderCredential credential, String encryptedToken) {
         if (isBlank(encryptedToken)) {
             return null;
         }
-        return Encryptors.text(clientSecret, credential.getTokenSalt()).decrypt(encryptedToken);
+        return OAuthTokenEncryption.decrypt(
+                encryptedToken,
+                credential.getTokenSalt(),
+                tokenEncryptionSecret,
+                clientSecret
+        );
     }
 
     private String newState() {

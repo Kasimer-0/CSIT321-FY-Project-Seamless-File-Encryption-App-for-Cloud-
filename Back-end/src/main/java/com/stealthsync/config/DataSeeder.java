@@ -11,6 +11,7 @@ import com.stealthsync.repository.SubscriptionRepository;
 import com.stealthsync.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,12 +19,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 
-@Component
-@RequiredArgsConstructor
 /**
  * Creates deterministic demo plans and test accounts at startup.
  * Lookups are idempotent so repeated launches do not duplicate seeded business data.
  */
+@Component
+@Profile("!production & !prod")
+@RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
 
     private static final double PREMIUM_PLAN_PRICE = 7.0;
