@@ -1,52 +1,46 @@
-# Human Setup Checklist - Oracle Always Free Production
+# Human Setup Checklist - Azure Production
 
-No item in this file is automatically marked complete. Record evidence only
-after the real Oracle VM, public hostname, and provider consoles have been
-tested.
+Items are marked complete only after the real Azure VM, public hostname, or
+provider console has been tested. Time-dependent and external-device checks
+remain open until their evidence exists.
 
-## 1. Oracle Cloud VM
+## 1. Azure Ubuntu VM
 
-- [ ] Create the VM in the tenancy home region using Ubuntu.
-- [ ] Prefer an Ampere A1 Flex shape. Target the current Always Free allowance
-      of 2 OCPUs and 12 GB RAM in total across A1 instances.
-- [ ] If A1 capacity is unavailable, try another availability domain or try
-      later. Use an Always Free AMD micro instance only as a lower-memory
-      fallback and expect slower Docker builds.
+- [x] Create the Ubuntu VM using Azure for Students.
 - [ ] Save the SSH private key in a protected location. Do not upload it to the
       repository, Drive, screenshots, or the source-code ZIP.
 - [ ] Restrict SSH to project maintainers where practical.
-- [ ] Add OCI Security List or Network Security Group ingress for TCP 22, 80,
+- [x] Add Azure Network Security Group ingress for TCP 22, 80,
       and 443.
-- [ ] Apply UFW rules for 22, 80, and 443 inside Ubuntu.
-- [ ] Install Docker Engine and the Docker Compose plugin from Docker's Ubuntu
+- [x] Apply UFW rules for 22, 80, and 443 inside Ubuntu.
+- [x] Install Docker Engine and the Docker Compose plugin from Docker's Ubuntu
       repository.
-- [ ] Clone `main` to an absolute path such as `/home/ubuntu/stealthsync`.
+- [x] Clone `main` to `/home/azureuser/stealthsync`.
 - [ ] Confirm the VM has enough free disk space for images, PostgreSQL, Vault,
       logs, and at least two backups.
-- [ ] Add an external uptime check and review Oracle inactivity/reclamation
-      notices throughout the required month.
+- [ ] Add an external uptime check and review Azure subscription, credit, and
+      VM availability throughout the required month.
 
 ## 2. DuckDNS
 
-- [ ] Create a unique subdomain, for example
-      `stealthsync-fyp.duckdns.org` if available.
-- [ ] Set `PUBLIC_DOMAIN` to the hostname only, without `https://` or a path.
-- [ ] Put the DuckDNS token only in the VM's mode-600
+- [x] Created `stealthsyncfyp26s211.duckdns.org`.
+- [x] Set `PUBLIC_DOMAIN` to the hostname only, without `https://` or a path.
+- [x] Put the DuckDNS token only in the VM's mode-600
       `deploy/production/.env.production`.
-- [ ] Run `sh deploy/production/update-duckdns.sh` on the VM.
-- [ ] Confirm the hostname resolves to the Oracle VM public IP from a second
-      network.
-- [ ] Install the six-hour cron entry from the production README.
+- [x] Ran `sh deploy/production/update-duckdns.sh` on the VM.
+- [x] Confirm `stealthsyncfyp26s211.duckdns.org` resolves to the Azure VM public
+      IP.
+- [x] Installed the six-hour cron entry from the production README.
 - [ ] Confirm the cron updater still succeeds after a VM reboot.
 
 ## 3. Caddy And HTTPS
 
-- [ ] Confirm both TCP 80 and 443 are reachable from the public internet before
+- [x] Confirmed both TCP 80 and 443 are reachable from the public internet before
       starting Caddy.
-- [ ] Start Compose only after DuckDNS resolves to this VM.
-- [ ] Confirm Caddy obtains a trusted certificate automatically.
-- [ ] Confirm `https://<DOMAIN>/` loads the StealthSync login page.
-- [ ] Confirm `https://<DOMAIN>/actuator/health` returns HTTP 200 and only the
+- [x] Started Compose only after DuckDNS resolved to this VM.
+- [x] Confirmed Caddy obtains a trusted certificate automatically.
+- [x] Confirmed `https://stealthsyncfyp26s211.duckdns.org/` loads the StealthSync login page.
+- [x] Confirmed `https://stealthsyncfyp26s211.duckdns.org/actuator/health` returns HTTP 200 and only the
       non-detailed health response.
 - [ ] Confirm plain HTTP redirects to HTTPS.
 
@@ -60,7 +54,7 @@ Dropbox: https://<DOMAIN>/cloud-storage/dropbox/callback
 OneDrive: https://<DOMAIN>/cloud-storage/onedrive/callback
 ```
 
-- [ ] Enter matching provider IDs and secrets in the VM-only env file.
+- [x] Entered matching provider IDs and secrets in the VM-only env file.
 - [ ] Google requests only `drive.file`, `userinfo.email`, and `openid`.
 - [ ] If Google remains in Testing, add every demonstration account as a test
       user and reauthorize before the final demo because Testing refresh tokens
@@ -93,17 +87,19 @@ OneDrive: https://<DOMAIN>/cloud-storage/onedrive/callback
 
 Create a protected GitHub environment named `production`, then add:
 
-- [ ] Secret `OCI_SSH_HOST` - VM public IP or trusted SSH hostname.
-- [ ] Secret `OCI_SSH_USER` - normally `ubuntu`.
-- [ ] Secret `OCI_SSH_PORT` - normally `22`.
-- [ ] Secret `OCI_SSH_PRIVATE_KEY` - a deployment key authorized on the VM.
-- [ ] Secret `OCI_SSH_KNOWN_HOSTS` - verified host-key line, captured only after
-      comparing the VM fingerprint through the Oracle console.
-- [ ] Secret `OCI_DEPLOY_PATH` - absolute clone path, for example
-      `/home/ubuntu/stealthsync`.
+- [ ] Secret `AZURE_SSH_HOST` - VM public IP or trusted SSH hostname.
+- [ ] Secret `AZURE_SSH_USER` - normally `azureuser`.
+- [ ] Secret `AZURE_SSH_PORT` - normally `22`.
+- [ ] Secret `AZURE_SSH_PRIVATE_KEY` - a deployment key authorized on the VM.
+- [ ] Secret `AZURE_SSH_KNOWN_HOSTS` - verified host-key line, captured only
+      after comparing the VM fingerprint through the Azure portal.
+- [ ] Secret `AZURE_DEPLOY_PATH` - `/home/azureuser/stealthsync`.
 - [ ] Variable `PRODUCTION_URL` - `https://<DOMAIN>` for the Actions environment
       link; it is not a secret.
-- [ ] Run `Deploy Oracle Production` manually once and confirm the validated SHA
+- [ ] Variable `ENABLE_PRODUCTION_DEPLOY` - set to `true` only after all Azure
+      SSH secrets are configured; otherwise validation runs without attempting
+      an SSH deployment.
+- [ ] Run `Deploy Azure Production` manually once and confirm the validated SHA
       is the SHA deployed on the VM.
 - [ ] Confirm workflow logs contain no private key, env file, client secret,
       token, database URL, or password.
@@ -115,7 +111,7 @@ Create a protected GitHub environment named `production`, then add:
 - [ ] Confirm the Pages site contains marketing content only and no login form,
       OAuth secret, API credential, or private production configuration.
 - [ ] Add the final application URL as a clear call to action only after the
-      Oracle deployment passes acceptance.
+      Azure deployment passes acceptance.
 
 ## 8. External Acceptance
 
@@ -134,7 +130,7 @@ Create a protected GitHub environment named `production`, then add:
       file records.
 - [ ] Restart every Compose service and confirm PostgreSQL accounts, cloud
       links, key metadata, devices, and file indexes persist.
-- [ ] Reboot the Oracle VM and confirm Docker's restart policies restore the
+- [ ] Reboot the Azure VM and confirm Docker's restart policies restore the
       application without the development PC.
 - [ ] Record the deployment URL, UTC timestamps, screenshots, hashes, and result
       in the final evidence index.
@@ -142,7 +138,7 @@ Create a protected GitHub environment named `production`, then add:
 ## Readiness Decision
 
 The project reaches **complete public operation independent of a personal PC**
-only when the Oracle VM, DuckDNS, HTTPS, secrets, OAuth callbacks, external
+only when the Azure VM, DuckDNS, HTTPS, secrets, OAuth callbacks, external
 three-provider tests, persistence/reboot test, and powered-off-PC check above
 all pass. Source preparation alone is deployment-ready, not live-production
 evidence.

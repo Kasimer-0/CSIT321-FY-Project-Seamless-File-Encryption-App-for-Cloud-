@@ -1,6 +1,6 @@
 # User Manual Production Update Guide
 
-Use these edits only after the Oracle deployment passes the external acceptance
+Use these edits only after the Azure deployment passes the external acceptance
 checklist. Do not replace the final User Manual with unverified placeholders.
 
 ## Final User Section
@@ -15,13 +15,13 @@ Google Drive, Dropbox, or OneDrive account. They do **not** install or start
 Java, Maven, Node.js, PostgreSQL, Docker, Caddy, PowerShell, or Dev Tunnel.
 
 The Windows client is a desktop window for the hosted web system. It is not a
-local server and the end user does not keep the Oracle VM running.
+local server and the end user does not keep the Azure VM running.
 
 ## Deployment Administrator Appendix
 
 Do not mix operator commands into normal installation steps. Add a short link
 or appendix pointing maintainers to `deploy/production/README.md`. That runbook
-contains Oracle, Docker Compose, DuckDNS, Caddy, OAuth, backup, and update tasks.
+contains Azure, Docker Compose, DuckDNS, Caddy, OAuth, backup, and update tasks.
 
 ## Wording Checks
 

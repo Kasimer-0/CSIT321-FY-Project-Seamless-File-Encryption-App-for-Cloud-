@@ -5,7 +5,7 @@
 - The legacy root `Dockerfile` builds React into Spring Boot and remains for
   local/self-hosted compatibility.
 - `Back-end/Dockerfile` builds a backend-only Java 21 non-root image and is used
-  by the Oracle production Compose file.
+  by the Azure production Compose file.
 - `deploy/production/frontend/Dockerfile` performs `npm ci` and a Vite production
   build, then publishes only the static `dist` files to Caddy.
 - The production Compose file has four services and publishes only Caddy ports
@@ -21,7 +21,7 @@
 - Vite development defaults to `http://localhost:8080`.
 - A production build without the override uses `window.location.origin`.
 
-Oracle production intentionally omits `VITE_API_BASE_URL`. Caddy proxies the
+Azure production intentionally omits `VITE_API_BASE_URL`. Caddy proxies the
 actual API routes on the same DuckDNS origin.
 
 ## API And CORS

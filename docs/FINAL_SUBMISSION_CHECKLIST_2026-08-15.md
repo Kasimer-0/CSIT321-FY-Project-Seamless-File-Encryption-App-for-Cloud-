@@ -36,7 +36,7 @@ If the package exceeds the upload limit, submit the shared Drive link as permitt
 4. [x] Wrong-password rejection and correct-password SHA-256 matching were manually confirmed; evidence files remain pending.
 5. [ ] Capture the final Devices page with the two retained test devices and the `2/5` limit.
 6. [ ] Remove temporary test cloud objects only after evidence paths are recorded.
-7. [x] Re-ran backend 143/143, frontend 14/14, desktop client 4/4, and TypeScript/Vite production build on 2026-08-07.
+7. [x] Re-ran backend 153/153, frontend 14/14, desktop client 11/11, TypeScript/Vite 8.2.1 production build, and zero-vulnerability npm audit on 2026-08-11.
 8. [ ] Resolve or accurately document any remaining user-visible runtime discrepancy.
 9. [x] Built the Windows 1.3.0 app image and installer from the validated source; clean install/uninstall/reinstall passed locally.
 10. [ ] On a non-intercepted external Windows network, smoke-test desktop login, device registration, three-cloud listing/upload, wrong-password rejection, correct decrypt/save, delete and logout.
@@ -59,8 +59,8 @@ Do not call the desktop package final until step 10 passes on a clean launch.
 - [x] Google OAuth project is External Production rather than Testing.
 - [x] Google access is limited to `drive.file`; `openid` and `userinfo.email` are used only to identify the connected account.
 - [x] Google, Dropbox, and OneDrive production callbacks match the fixed public URL.
-- [x] `PremiumUser -> kasimer.zero@gmail.com` was reauthorized after Google publication.
-- [ ] Teammate reauthorizes `testuser -> nekohuii@gmail.com` from a familiar Google device/network.
+- [x] The Premium demo account was reauthorized with its expected Google account after publication.
+- [ ] The teammate reauthorizes the Free demo account with their expected Google account from a familiar device/network.
 - [x] Google Drive, Dropbox, and OneDrive passed encrypted upload/list/download/decrypt/delete smoke tests.
 - [x] Dropbox offline refresh and OneDrive rotated refresh-token paths passed live provider access.
 - [x] Shared deployment task remains running as a health supervisor with no execution-time limit.
@@ -68,19 +68,22 @@ Do not call the desktop package final until step 10 passes on a clean launch.
 - [x] Deliberate `-Stop` remained stopped for five minutes and normal startup restored both URLs to `200`.
 - [x] Verified PostgreSQL, Vault, DPAPI environment, and checksum backup retained under ignored release outputs.
 
-## Hosted Production Gate - 2026-08-11
+## Hosted Production Gate - 2026-08-12
 
-- [x] Added a Render Blueprint for a static React frontend, paid Docker API, and paid managed PostgreSQL.
-- [x] Added strict `prod` configuration, Render `PORT` support, exact CORS origins, public health endpoint, Flyway migration, and disabled demo seeding.
-- [x] Verified the backend Docker image against a clean temporary PostgreSQL database; Flyway, Hibernate validation, and unauthenticated health all passed.
-- [x] Kept local development and the existing self-hosted Docker workflow available.
+- [x] Deployed the four-service topology to Azure Ubuntu: PostgreSQL, Spring Boot, React assets, and Caddy.
+- [x] Added DuckDNS support, automatic HTTPS, same-origin API routing, persistent volumes, and a public non-detailed health endpoint.
+- [x] Added strict `prod` configuration with Flyway, `ddl-auto=validate`, forwarded HTTPS headers, environment-only secrets, and disabled demo seeding.
+- [x] Added repeatable VM update, GitHub Actions SSH deployment, and GitHub Pages Marketing Website workflows.
+- [x] Kept local development and the optional paid Render fallback without making either a production dependency.
 - [x] Removed the Dev Tunnel default from desktop build and smoke-test configuration.
-- [ ] Create the paid Render resources and retain billing until at least one month after the final presentation.
-- [ ] Enter production secrets and the assigned frontend/backend URLs in Render.
-- [ ] Register the exact Render callback URLs in Google, Dropbox, and Microsoft consoles.
-- [ ] Complete three-provider OAuth/upload/list/wrong-password/decrypt/delete tests from an external network.
-- [ ] Verify a backend redeploy preserves database records and verify production remains available while the development PC is powered off.
-- [ ] Rebuild and externally smoke-test the Windows installer against the final production frontend URL.
+- [x] Created the Azure Ubuntu VM and configured Azure NSG/UFW ports 22, 80, and 443.
+- [x] Created `stealthsyncfyp26s211.duckdns.org`, entered VM-only secrets, and obtained the Caddy HTTPS certificate.
+- [x] Registered the exact DuckDNS callback URLs in Google, Dropbox, and Microsoft consoles.
+- [x] Confirmed production login, migrated test accounts, and live Google Drive, Dropbox, and OneDrive functionality.
+- [ ] Verify container restart and VM reboot preserve database records, then confirm service availability while the development PC is powered off.
+- [x] Rebuilt the Windows 1.3.0 app image and installer against the final DuckDNS URL; local hosted-client smoke test passed.
+- [ ] Complete a clean installer and three-provider smoke test on the teammate's Windows computer.
+- [ ] Monitor and retain the Azure deployment and off-VM backups for at least one month.
 
 ## Documentation Closure
 

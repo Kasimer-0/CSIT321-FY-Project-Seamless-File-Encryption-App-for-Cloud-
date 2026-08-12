@@ -10,46 +10,48 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Test and publish Windows installer
+    name: Test and publish Windows client
     runs-on: windows-latest
+    env:
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      APP_VERSION: "1.3.0"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up pinned JDK 21.0.2
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "21.0.2"
           cache: maven
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: Front-end/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: Front-end
-        run: npm ci
-
-      - name: Build smoke-test app image
+      - name: Require final production URL
         shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType app-image -SkipTests -JdkHome $env:JAVA_HOME -ServerPort 8080 -OpenBrowser:$false
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PRODUCTION_URL)) {
+            throw "Set the repository variable PRODUCTION_URL to the final DuckDNS HTTPS origin."
+          }
+          $uri = [Uri]$env:PRODUCTION_URL
+          if (-not $uri.IsAbsoluteUri -or $uri.Scheme -ne "https") {
+            throw "PRODUCTION_URL must be an absolute HTTPS URL."
+          }
 
-      - name: Smoke-test packaged application
+      - name: Build app image and EXE installer
         shell: pwsh
-        run: ./scripts/test-desktop-app.ps1 -Port 8080
+        run: >-
+          ./scripts/build-desktop.ps1
+          -PackageType all
+          -JdkHome $env:JAVA_HOME
+          -AppVersion $env:APP_VERSION
+          -ServiceUrl $env:PRODUCTION_URL
 
-      - name: Build Windows installer
+      - name: Smoke-test packaged client
         shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType exe -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.2.1
-
-      - name: Build Windows MSI
-        shell: pwsh
-        run: ./scripts/build-desktop.ps1 -PackageType msi -SkipTests -SkipFrontendBuild -SkipBackendBuild -JdkHome $env:JAVA_HOME -AppVersion 1.2.1
+        run: >-
+          ./scripts/test-desktop-app.ps1
+          -ServiceUrl $env:PRODUCTION_URL
 
       - name: Publish GitHub Release
         env:
@@ -58,17 +60,12 @@ jobs:
         shell: pwsh
         run: |
           gh release create $env:RELEASE_TAG `
-            dist-desktop/StealthSync-Setup-1.2.1.exe `
-            dist-desktop/StealthSync-1.2.1.msi `
-            --title "StealthSync Windows Installer" `
-            --notes "Self-contained Windows installer for StealthSync.
+            "dist-desktop/StealthSync-Setup-$env:APP_VERSION.exe" `
+            "dist-desktop/SHA256SUMS.txt" `
+            --verify-tag `
+            --title "StealthSync Windows Client $env:APP_VERSION" `
+            --notes "Shared-service Windows client for the final StealthSync production URL.
 
-          Included asset:
-          - StealthSync-Setup-1.2.1.exe
-          - StealthSync-1.2.1.msi
+          The installer contains a Java runtime and dedicated JavaFX window. It does not contain or start Spring Boot, PostgreSQL, Docker, H2, OAuth client secrets, or a local server.
 
-          How to run:
-          1. Download and run StealthSync-Setup-1.2.1.exe.
-          2. Launch StealthSync from the desktop or Start Menu shortcut after installation.
-
-          Version 1.2.1 fixes desktop login by keeping the JavaFX page and API on the same localhost origin. It also includes Google OAuth and encrypted Google Drive upload/download support. Set GOOGLE_DRIVE_CLIENT_ID and GOOGLE_DRIVE_CLIENT_SECRET before launch to enable Google Drive. The app includes its own Java runtime and local database; PostgreSQL and DB_PASSWORD are not required."
+          Verify the installer against SHA256SUMS.txt before running it."

@@ -1,4 +1,4 @@
-name: Deploy Oracle Production
+name: Deploy Azure Production
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: stealthsync-oracle-production
+  group: stealthsync-azure-production
   cancel-in-progress: true
 
 jobs:
@@ -68,29 +68,30 @@ jobs:
             caddy validate --config /etc/caddy/Caddyfile
 
   deploy:
-    name: Update Oracle VM
+    name: Update Azure VM
     needs: validate
+    if: ${{ vars.ENABLE_PRODUCTION_DEPLOY == 'true' }}
     runs-on: ubuntu-latest
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
     env:
-      SSH_HOST: ${{ secrets.OCI_SSH_HOST }}
-      SSH_USER: ${{ secrets.OCI_SSH_USER }}
-      SSH_PORT: ${{ secrets.OCI_SSH_PORT }}
-      SSH_PRIVATE_KEY: ${{ secrets.OCI_SSH_PRIVATE_KEY }}
-      SSH_KNOWN_HOSTS: ${{ secrets.OCI_SSH_KNOWN_HOSTS }}
-      DEPLOY_PATH: ${{ secrets.OCI_DEPLOY_PATH }}
+      SSH_HOST: ${{ secrets.AZURE_SSH_HOST }}
+      SSH_USER: ${{ secrets.AZURE_SSH_USER }}
+      SSH_PORT: ${{ secrets.AZURE_SSH_PORT }}
+      SSH_PRIVATE_KEY: ${{ secrets.AZURE_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.AZURE_SSH_KNOWN_HOSTS }}
+      DEPLOY_PATH: ${{ secrets.AZURE_DEPLOY_PATH }}
     steps:
       - name: Configure SSH
         shell: bash
         run: |
           set -euo pipefail
-          : "${SSH_HOST:?Missing OCI_SSH_HOST}"
-          : "${SSH_USER:?Missing OCI_SSH_USER}"
-          : "${SSH_PRIVATE_KEY:?Missing OCI_SSH_PRIVATE_KEY}"
-          : "${SSH_KNOWN_HOSTS:?Missing OCI_SSH_KNOWN_HOSTS}"
-          : "${DEPLOY_PATH:?Missing OCI_DEPLOY_PATH}"
+          : "${SSH_HOST:?Missing AZURE_SSH_HOST}"
+          : "${SSH_USER:?Missing AZURE_SSH_USER}"
+          : "${SSH_PRIVATE_KEY:?Missing AZURE_SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Missing AZURE_SSH_KNOWN_HOSTS}"
+          : "${DEPLOY_PATH:?Missing AZURE_DEPLOY_PATH}"
           umask 077
           mkdir -p "$HOME/.ssh"
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_stealthsync"

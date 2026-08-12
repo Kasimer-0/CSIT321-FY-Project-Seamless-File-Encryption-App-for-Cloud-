@@ -2,49 +2,92 @@
 
 ## Objective
 
-Prepare StealthSync for a long-lived public deployment that does not depend on the development Windows PC or Dev Tunnel. The selected topology is a Render Static Site, an always-on Render Docker Web Service, and persistent Render PostgreSQL in Singapore.
+Prepare a zero-cost, month-long public deployment that remains available when
+the development Windows PC, Docker Desktop, and Dev Tunnel are offline.
 
-## Completed Implementation
+## Final Topology Decision
 
-- Added a Render Blueprint in `render.yaml` for the frontend, backend, PostgreSQL, backend health check, and persistent Vault disk.
-- Added a strict `prod` Spring profile with environment-only database, JWT, OAuth, CORS, Vault, and token-encryption configuration.
-- Added Flyway schema migration `V1__initial_schema.sql` and disabled demo account seeding in `prod` and `production` profiles.
-- Added `/actuator/health` as the only anonymously accessible actuator endpoint.
-- Added safe conversion of Render `DATABASE_URL` values to JDBC settings without logging credentials.
-- Added independent encryption for stored OAuth access and refresh tokens, with a compatibility fallback for existing local rows.
-- Added a non-root Java 21 backend Docker image.
-- Kept the frontend API origin configurable through `VITE_API_BASE_URL`.
-- Removed the hard-coded Dev Tunnel URL from the desktop client and desktop build/test scripts. A production desktop build now requires an explicit HTTPS frontend URL.
-- Added production environment, deployment, end-user, acceptance, and rollback documentation.
-- Added an isolated production-profile smoke-test script that creates and removes its own temporary database and container.
+The selected primary topology is an Azure for Students Ubuntu VM with
+Docker Compose, PostgreSQL, Spring Boot, a React production build, Caddy HTTPS,
+and DuckDNS. GitHub Pages hosts the Marketing Website separately.
+
+The paid Render topology prepared earlier remains a technically valid fallback,
+but it is no longer the selected zero-cost production path.
+
+## Completed Source Preparation
+
+- Added a four-service production Compose definition: PostgreSQL, backend,
+  frontend asset publisher, and Caddy.
+- Added persistent PostgreSQL, Vault, Caddy, and frontend asset volumes.
+- Added same-origin Caddy routing for the project's established API paths and
+  React SPA fallback.
+- Added automatic HTTPS configuration and security response headers.
+- Added a VM-only environment template with no real secret values.
+- Kept strict `prod` behavior: Flyway, `ddl-auto=validate`, no demo seeding,
+  environment-only credentials, non-detailed health, and exact origin.
+- Added forwarded-header handling for HTTPS behind Caddy.
+- Added repeatable VM update and DuckDNS refresh scripts.
+- Added a GitHub Actions validation and Azure SSH deployment workflow.
+- Added a separate GitHub Pages workflow for `Website.html`.
+- Added Azure NSG, UFW, DuckDNS, Caddy, OAuth, secrets, backup, GitHub, and external
+  acceptance instructions.
+- Separated final-user installation wording from deployment-operator tasks.
+
+## Security Boundaries
+
+- No real database password, JWT secret, OAuth client secret, refresh token,
+  DuckDNS token, SSH key, database dump, or Vault archive is stored in Git.
+- The populated production environment file exists only on the Azure VM with
+  mode `600`.
+- PostgreSQL and Spring Boot are not published directly to the internet; Caddy
+  is the only external entry point.
+- Caddy access logging is not enabled, preventing OAuth callback query codes
+  from being written to a default access log.
+- GitHub Actions requires a pre-verified SSH known-hosts value and never runs
+  `ssh-keyscan` inside deployment CI.
 
 ## Automated Verification
 
-- Backend: 153 tests passed; zero failures, errors, or skipped tests.
-- Frontend: 14 Node tests passed.
-- Frontend TypeScript check and Vite production build passed with an injected non-local API origin.
+- Backend: 153 tests passed with no failures, errors, or skipped tests.
+- Frontend: 14 tests, TypeScript, and Vite 8.2.1 production build passed from a
+  fresh `npm ci`; `npm audit` reported 0 vulnerabilities.
 - Desktop client: 11 tests passed.
-- Hosted-profile Docker smoke test passed:
-  - health status `UP`
+- Caddyfile validation and production Compose expansion passed.
+- Backend and frontend production images built successfully.
+- Isolated production smoke test passed with:
+  - backend health `UP`
   - 1 successful Flyway migration
-  - 13 public-schema tables
   - 0 demo users
-  - 2 formal plan reference rows
-- The temporary validation container and database were removed after the smoke test.
+  - 2 formal plan rows
+  - published React `index.html`
+- The isolated smoke containers, networks, PostgreSQL volume, Vault volume, and
+  frontend asset volume were removed after verification.
 
-## Manual Production Gates
+## Azure Deployment Update - 2026-08-12
 
-The implementation is deployment-ready, but the system does **not yet** satisfy the one-month public-hosting requirement. The following work requires the project owner's Render and provider-console access:
+The prepared topology is now live on an Azure Ubuntu VM and no longer depends
+on the development Windows PC, Docker Desktop, or Dev Tunnel:
 
-1. Create the paid Render resources from `render.yaml` and keep billing active for the required period.
-2. Record the final frontend and backend URLs and set the exact frontend, CORS, and API-origin variables.
-3. Enter the three providers' credentials and register the final backend callback URLs in Google, Dropbox, and Microsoft consoles.
-4. Run three-provider OAuth and encrypted file E2E checks from an external network.
-5. Verify data persistence after a backend redeploy and availability while the development PC is powered off.
-6. Rebuild and test the Windows installer against the final Render frontend URL.
+- Public URL: `https://stealthsyncfyp26s211.duckdns.org`
+- DuckDNS resolves to the Azure VM and refreshes every six hours through cron.
+- Caddy serves a trusted HTTPS endpoint; the login page and
+  `/actuator/health` return HTTP 200.
+- PostgreSQL, backend, frontend, and Caddy containers are running; backend,
+  frontend, and PostgreSQL health checks pass.
+- The migrated database contains the established users, subscriptions,
+  encryption-key metadata, cloud links, cloud-file indexes, and Vault records.
+- Google Drive, Dropbox, and OneDrive callbacks use the final DuckDNS origin.
+- Existing test accounts can log in, provider status/file-list calls return
+  successfully, and the project team completed live functional checks.
+- The VM-only `.env.production` has mode `600`; no secret value was copied into
+  Git, Drive, this record, or screenshots.
 
-No production URL, OAuth result, persistence result, or one-month availability claim should be marked as passed before the corresponding manual evidence exists.
+Remaining operational evidence is deliberately not marked complete until it is
+observed: Azure VM reboot recovery, access while the development PC is powered
+off, off-VM backup restoration, and continuous uptime through the required
+month.
 
 ## Local Development
 
-The existing local Docker, PowerShell, and Dev Tunnel workflows remain available for development and fallback testing. They are not the proposed final public-hosting topology.
+Local PowerShell, Docker Desktop, and Dev Tunnel workflows remain unchanged for
+development and fallback testing. They are not production dependencies.

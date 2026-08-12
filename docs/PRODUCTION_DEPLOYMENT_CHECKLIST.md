@@ -4,7 +4,7 @@ The primary checklist now lives at:
 
 [`deploy/production/HUMAN_SETUP_CHECKLIST.md`](../deploy/production/HUMAN_SETUP_CHECKLIST.md)
 
-It covers Oracle Always Free provisioning, OCI and UFW ports, DuckDNS, Caddy
+It covers Azure Ubuntu provisioning, Azure NSG and UFW ports, DuckDNS, Caddy
 HTTPS, VM-only secrets, all three OAuth consoles, GitHub Actions SSH secrets,
 GitHub Pages, external three-provider testing, Premium multi-device testing,
 container restart persistence, VM reboot recovery, and the powered-off-PC test.

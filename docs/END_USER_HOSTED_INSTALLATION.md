@@ -16,7 +16,7 @@ Java, Maven, Node.js, PostgreSQL, Docker Desktop, PowerShell, and OAuth applicat
 
 ### Open StealthSync
 
-1. Open `https://<YOUR_DUCKDNS_DOMAIN>`.
+1. Open `https://stealthsyncfyp26s211.duckdns.org`.
 2. Confirm the browser shows HTTPS and the expected StealthSync hostname.
 3. Register a new account or log in.
 4. Open **Cloud Storage Links** and select **Link Account**.

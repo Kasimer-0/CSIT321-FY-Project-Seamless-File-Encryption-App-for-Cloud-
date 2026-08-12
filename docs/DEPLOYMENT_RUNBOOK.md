@@ -5,7 +5,7 @@
 The final zero-cost deployment target is:
 
 - **Marketing Website:** GitHub Pages from `Website.html`.
-- **Application host:** Oracle Cloud Always Free Ubuntu VM.
+- **Application host:** Azure for Students Ubuntu VM.
 - **Public name:** DuckDNS hostname.
 - **HTTPS and routing:** Caddy on ports 80/443.
 - **Application services:** React static build and Spring Boot API.
@@ -17,7 +17,7 @@ Desktop, Dev Tunnel, or home network to remain online.
 
 ## Authoritative Instructions
 
-- [Oracle production README](../deploy/production/README.md)
+- [Azure production README](../deploy/production/README.md)
 - [Human setup and acceptance checklist](../deploy/production/HUMAN_SETUP_CHECKLIST.md)
 - [VM-only environment template](../deploy/production/.env.production.example)
 - [End-user installation wording](END_USER_HOSTED_INSTALLATION.md)
@@ -74,14 +74,14 @@ data remain GitHub repository secrets.
 ## Optional Paid Fallback
 
 The existing `render.yaml` and Render-specific support files remain as an
-optional paid fallback when Oracle capacity is unavailable. They are not the
-primary zero-cost architecture and should not be presented as the selected
-production platform unless the team explicitly switches and repeats acceptance.
+optional paid fallback. They are not the selected production architecture and
+should not be presented as the deployed platform unless the team explicitly
+switches and repeats acceptance.
 
 ## Readiness Boundary
 
 Repository configuration alone means **deployment-ready**, not **deployed**.
 The system becomes publicly operational independently from a personal PC only
-after the real OCI VM, DuckDNS record, HTTPS certificate, production secrets,
+after the real Azure VM, DuckDNS record, HTTPS certificate, production secrets,
 three provider callbacks, external E2E tests, reboot/persistence test, and
 powered-off-development-PC test pass with evidence.

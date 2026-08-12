@@ -4,7 +4,7 @@ The machine-readable placeholder file is:
 
 [`deploy/production/.env.production.example`](../deploy/production/.env.production.example)
 
-Copy it to `deploy/production/.env.production` **only on the Oracle VM**, fill
+Copy it to `deploy/production/.env.production` **only on the Azure VM**, fill
 the real values there, and set mode `600`. The populated file is ignored by Git.
 
 ## Public And Database Values

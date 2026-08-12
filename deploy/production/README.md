@@ -1,4 +1,4 @@
-# StealthSync Oracle Production Deployment
+# StealthSync Azure Production Deployment
 
 This is the primary zero-cost production topology for the FYP release. It runs
 independently from the development Windows computer, Docker Desktop, and Dev
@@ -33,12 +33,12 @@ OAuth, encryption metadata, the API, or PostgreSQL.
 - `.env.production.example` - variable names and non-secret placeholders.
 - `update-production.sh` - repeatable fast-forward deployment from `main`.
 - `update-duckdns.sh` - safe DuckDNS public-IP refresh.
-- `HUMAN_SETUP_CHECKLIST.md` - OCI, DNS, OAuth, GitHub, and acceptance steps.
+- `HUMAN_SETUP_CHECKLIST.md` - Azure, DNS, OAuth, GitHub, and acceptance steps.
 
 ## First VM Bootstrap
 
-Use Ubuntu on an Oracle Cloud Always Free VM. The commands below are for the
-default `ubuntu` account.
+Use an Ubuntu VM on Azure. The deployed FYP instance uses the `azureuser`
+account; the commands also work for another non-root maintenance account.
 
 ```bash
 sudo apt-get update
@@ -84,8 +84,8 @@ archive, or a support message.
 
 ## Firewall And DNS
 
-OCI networking must allow inbound TCP 22, 80, and 443. Apply the matching VM
-firewall rules:
+The Azure Network Security Group must allow inbound TCP 22, 80, and 443. Apply
+the matching VM firewall rules:
 
 ```bash
 sudo ufw allow OpenSSH
@@ -108,7 +108,7 @@ Replace the example hostname with the actual `PUBLIC_DOMAIN`. DNS must resolve
 to the VM before starting Caddy. To refresh DuckDNS every six hours:
 
 ```bash
-(crontab -l 2>/dev/null; echo '17 */6 * * * cd /home/ubuntu/stealthsync && sh deploy/production/update-duckdns.sh >/dev/null 2>&1') | crontab -
+(crontab -l 2>/dev/null; echo '17 */6 * * * cd "$HOME/stealthsync" && /bin/sh deploy/production/update-duckdns.sh >> "$HOME/.local/state/stealthsync/duckdns.log" 2>&1') | crontab -
 ```
 
 Adjust the home path if a different VM user is used.
@@ -223,5 +223,5 @@ End users only open the production HTTPS URL or install the Windows client,
 then log in and connect their provider account. They do not install or start
 Java, Maven, PostgreSQL, Node.js, Docker, Caddy, or this deployment script.
 
-This directory is for the project team member responsible for the Oracle VM.
+This directory is for the project team member responsible for the Azure VM.
 Local source development remains documented in the root `README.md`.
