@@ -23,6 +23,8 @@ Front-end/tmp/
 .stealthsync-run/
 .tools/
 .env.production
+# Oracle VM production secrets stay only on the host.
+deploy/production/.env.production
 
 # IDE and OS metadata
 .vscode/

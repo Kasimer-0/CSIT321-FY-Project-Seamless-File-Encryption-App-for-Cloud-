@@ -1,0 +1,113 @@
+name: Deploy Oracle Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "Back-end/**"
+      - "Front-end/**"
+      - "deploy/production/**"
+      - ".github/workflows/deploy-oracle-production.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stealthsync-oracle-production
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate production source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Test backend
+        working-directory: Back-end
+        run: mvn -B test
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: Front-end/package-lock.json
+
+      - name: Test and build frontend
+        working-directory: Front-end
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Validate Compose expansion
+        run: >-
+          docker compose
+          --env-file deploy/production/.env.production.example
+          -f deploy/production/docker-compose.prod.yml
+          config --quiet
+
+      - name: Validate Caddy configuration
+        run: |
+          docker run --rm \
+            -e PUBLIC_DOMAIN=stealthsync-fyp.duckdns.org \
+            -e ACME_EMAIL=operator@example.com \
+            -v "$PWD/deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
+
+  deploy:
+    name: Update Oracle VM
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    env:
+      SSH_HOST: ${{ secrets.OCI_SSH_HOST }}
+      SSH_USER: ${{ secrets.OCI_SSH_USER }}
+      SSH_PORT: ${{ secrets.OCI_SSH_PORT }}
+      SSH_PRIVATE_KEY: ${{ secrets.OCI_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.OCI_SSH_KNOWN_HOSTS }}
+      DEPLOY_PATH: ${{ secrets.OCI_DEPLOY_PATH }}
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Missing OCI_SSH_HOST}"
+          : "${SSH_USER:?Missing OCI_SSH_USER}"
+          : "${SSH_PRIVATE_KEY:?Missing OCI_SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Missing OCI_SSH_KNOWN_HOSTS}"
+          : "${DEPLOY_PATH:?Missing OCI_DEPLOY_PATH}"
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_stealthsync"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+      - name: Deploy verified main commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="${SSH_PORT:-22}"
+          printf -v remote_command \
+            'cd %q && bash deploy/production/update-production.sh %q' \
+            "$DEPLOY_PATH" "$GITHUB_SHA"
+          ssh \
+            -i "$HOME/.ssh/id_stealthsync" \
+            -p "$port" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "$remote_command"

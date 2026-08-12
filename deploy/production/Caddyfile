@@ -1,0 +1,57 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	# StealthSync currently uses several established root-level API routes.
+	# Keeping this list explicit lets the React application and API share one
+	# production origin without changing the tested public API contract.
+	@backend path \
+ /actuator/* \
+ /login \
+ /signup \
+ /logout \
+ /me \
+ /me/* \
+ /account/* \
+ /admin/* \
+ /api/* \
+ /cloud-storage/* \
+ /devices \
+ /devices/* \
+ /enc-methods \
+ /encryption-keys \
+ /encryption-keys/* \
+ /files \
+ /files/* \
+ /plans \
+ /plans/* \
+ /subscriptions \
+ /subscriptions/* \
+ /users \
+ /users/* \
+ /vault/*
+
+	handle @backend {
+		reverse_proxy backend:10000
+	}
+
+	handle {
+		root * /srv
+		@versionedAssets path /assets/*
+		header @versionedAssets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}

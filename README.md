@@ -53,8 +53,9 @@ Device B does not need Java, Node.js, PostgreSQL, OAuth application credentials,
 - `Front-end/` - React 19 and Vite 8 web client, Web Crypto V2, customer pages, and administrator pages.
 - `Desktop-client/` - optional JavaFX client for the hosted web application.
 - `scripts/` - local startup, database initialization, and packaging helpers.
-- `render.yaml` - reproducible Render Blueprint for the hosted frontend, API, and PostgreSQL database.
-- `Dockerfile`, `docker-compose.production.yml`, `.env.production.example` - self-hosted/local deployment template without real secrets.
+- `deploy/production/` - primary Oracle VM, PostgreSQL, Spring Boot, React, Caddy, and DuckDNS production deployment.
+- `render.yaml` - optional paid Render fallback; it is not the zero-cost primary topology.
+- `Dockerfile`, `docker-compose.production.yml`, `.env.production.example` - legacy self-hosted/local deployment template without real secrets.
 
 ## Development Prerequisites
 
@@ -117,14 +118,16 @@ Never commit OAuth secrets, database passwords, JWT secrets, OAuth state secrets
 
 ## Hosted Production Deployment
 
-The recommended production topology uses a Render Static Site for the React frontend, a paid Render Docker Web Service for the Spring Boot API, and paid Render PostgreSQL. It does not depend on a personal Windows computer or Dev Tunnel.
+The primary zero-cost topology uses an Oracle Cloud Always Free Ubuntu VM, Docker Compose, PostgreSQL, Spring Boot, the React production build, Caddy automatic HTTPS, and a DuckDNS hostname. The Marketing Website is deployed separately with GitHub Pages. The application uses one HTTPS origin and does not depend on a personal Windows computer, Docker Desktop, or Dev Tunnel.
 
-- [Deployment runbook](docs/DEPLOYMENT_RUNBOOK.md)
-- [Production environment template](docs/PRODUCTION_ENVIRONMENT_TEMPLATE.md)
-- [Production deployment checklist](docs/PRODUCTION_DEPLOYMENT_CHECKLIST.md)
+- [Oracle production runbook](deploy/production/README.md)
+- [Human OCI, DuckDNS, OAuth, and acceptance checklist](deploy/production/HUMAN_SETUP_CHECKLIST.md)
+- [Deployment overview](docs/DEPLOYMENT_RUNBOOK.md)
 - [End-user hosted installation guide](docs/END_USER_HOSTED_INSTALLATION.md)
 
-Deploy `render.yaml` as a Blueprint, assign the final frontend and backend URLs, configure all three OAuth applications, and complete the external end-to-end checklist. The `prod` profile uses Flyway migrations, `ddl-auto=validate`, exact CORS origins, and no demo-account seeding.
+The `prod` profile uses environment-only secrets, Flyway migrations, `ddl-auto=validate`, exact same-origin configuration, forwarded HTTPS headers, a minimal health endpoint, and no demo-account seeding. The checked-in environment file is an example only. Real values stay in a mode-600 file on the VM.
+
+An optional paid Render Blueprint remains available as a fallback if Oracle Free Tier capacity cannot be obtained. It is not required by, or used in, the primary deployment.
 
 ## Self-hosted Development Deployment
 
