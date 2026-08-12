@@ -56,7 +56,7 @@ forwarded HTTPS headers only in the strict `prod` profile.
 
 ## Automated Update
 
-`.github/workflows/deploy-oracle-production.yml` validates backend tests,
+`.github/workflows/deploy-azure-production.yml` validates backend tests,
 frontend tests/build, Compose expansion, and the Caddyfile. It then connects to
 the VM using repository secrets and runs:
 

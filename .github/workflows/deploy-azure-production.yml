@@ -9,7 +9,7 @@ on:
       - "Back-end/**"
       - "Front-end/**"
       - "deploy/production/**"
-      - ".github/workflows/deploy-oracle-production.yml"
+      - ".github/workflows/deploy-azure-production.yml"
 
 permissions:
   contents: read
