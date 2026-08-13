@@ -47,3 +47,16 @@ test("frontend components contain no hardcoded localhost API origin", async () =
 
     assert.equal(source.includes("http://localhost:8080"), false)
 })
+
+test("encryption key controls keep English labels and branded application rendering", async () => {
+    const source = await readFile(
+        new URL("../src/components/CustomerManageEncryptionKeysPage.tsx", import.meta.url),
+        "utf8"
+    )
+
+    assert.match(source, /role="radiogroup" aria-label="Encryption algorithm"/)
+    assert.match(source, />\s*Choose Backup\s*</)
+    assert.match(source, /"No backup selected"/)
+    assert.equal(source.includes('<select className="form-select" value={algorithm}'), false)
+    assert.equal(source.includes('className="form-control"\n                            type="file"'), false)
+})
