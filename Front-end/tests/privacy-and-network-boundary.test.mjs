@@ -47,3 +47,17 @@ test("frontend components contain no hardcoded localhost API origin", async () =
 
     assert.equal(source.includes("http://localhost:8080"), false)
 })
+
+test("encryption key page matches the frozen user manual scope", async () => {
+    const source = await readFile(
+        new URL("../src/components/CustomerManageEncryptionKeysPage.tsx", import.meta.url),
+        "utf8"
+    )
+
+    assert.equal(source.includes("Restore Encrypted Key Backup"), false)
+    assert.equal(source.includes("Export Backup"), false)
+    assert.match(source, />AES-128</)
+    assert.match(source, /value="AES-256-GCM"/)
+    assert.match(source, />Rename</)
+    assert.match(source, /Yes, Retire/)
+})

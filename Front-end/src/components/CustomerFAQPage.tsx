@@ -20,10 +20,6 @@ const faqItems = [
         answer: "Premium customers can generate a recovery phrase from Security. Store it offline and never share it with another person."
     },
     {
-        question: "How do I back up an encryption key?",
-        answer: "Open Encryption Keys and export an encrypted .sskey backup. Restoring it requires the same Key Password; the backup contains no raw key, password, or password verifier."
-    },
-    {
         question: "How do I get help using StealthSync?",
         answer: "Review these FAQs and the user manual for account, encryption-key, and cloud connection guidance."
     }

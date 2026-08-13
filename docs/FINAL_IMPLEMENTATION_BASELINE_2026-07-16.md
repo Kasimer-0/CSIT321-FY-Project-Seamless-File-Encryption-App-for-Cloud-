@@ -34,8 +34,6 @@ This document is the source of truth for the functions included in the final imp
 - Key passwords derive key material and are not persisted.
 - Stored key records contain salts, password verifiers, fingerprints, and policy metadata rather than raw keys or key passwords.
 - The backend enforces the key algorithm allowed by the current subscription.
-- Customers can export and restore password-protected V2 encryption-key backups. Backup cryptography
-  runs locally and the `.sskey` package contains no raw key, Key Password, or password verifier.
 - Plan selection is an immediate course-project demo flow, not a real payment transaction or payment gateway.
 
 ## Cloud Providers
