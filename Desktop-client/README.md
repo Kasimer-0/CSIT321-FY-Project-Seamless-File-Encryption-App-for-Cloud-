@@ -35,7 +35,7 @@ service.url=https://<production-frontend-host>
 Generated artifacts are ignored by Git:
 
 - `dist-desktop/StealthSync/StealthSync.exe`
-- `dist-desktop/StealthSync-Setup-1.3.0.exe`
+- `dist-desktop/StealthSync-Setup-1.3.1.exe`
 - `dist-desktop/SHA256SUMS.txt`
 
 ## Local Smoke Test

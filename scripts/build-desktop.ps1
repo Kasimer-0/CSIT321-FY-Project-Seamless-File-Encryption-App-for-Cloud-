@@ -4,7 +4,7 @@ param(
 
     [switch]$SkipTests,
     [string]$JdkHome = "C:\Users\Z\.jdks\openjdk-21.0.2",
-    [string]$AppVersion = "1.3.0",
+    [string]$AppVersion = "1.3.1",
     [string]$ServiceUrl = $env:STEALTHSYNC_DESKTOP_URL,
     [string]$UpgradeUuid = "8c96c4aa-8c5f-4ed0-a9f4-8dcb48c2b6b7"
 )
