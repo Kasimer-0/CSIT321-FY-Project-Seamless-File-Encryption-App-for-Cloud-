@@ -12,7 +12,7 @@ import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
-/** Resolves the enforced encryption method for each customer from their active plan/subscription state. */
+/** Enforces the encryption algorithms available to each customer tier. */
 public class EncryptionPolicyService {
 
     private static final String AES_128 = "AES-128";
@@ -47,7 +47,9 @@ public class EncryptionPolicyService {
     public EncryptionPolicy requireAlgorithmAllowedForUser(Long ownerID, String requestedAlgorithm) {
         EncryptionPolicy requested = policyForAlgorithm(requestedAlgorithm);
         EncryptionPolicy allowed = policyForUser(ownerID);
-        if (allowed.algorithm().equals(requested.algorithm())) {
+        // AES-128 is available to every customer. An active Premium plan adds
+        // AES-256-GCM instead of replacing the AES-128 option.
+        if (AES_128.equals(requested.algorithm()) || allowed.algorithm().equals(requested.algorithm())) {
             return requested;
         }
         if (AES_256_GCM.equals(requested.algorithm()) && AES_128.equals(allowed.algorithm())) {

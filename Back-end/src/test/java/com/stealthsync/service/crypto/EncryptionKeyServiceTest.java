@@ -108,6 +108,17 @@ class EncryptionKeyServiceTest {
     }
 
     @Test
+    void premiumCustomerCanChooseAes128Key() {
+        EncryptionKeyRecord key = encryptionKeyService.createKey(ownerID, "Premium AES-128 key", "AES-128", PASSWORD);
+
+        assertEquals("AES-128", key.getAlgorithm());
+        assertEquals("AES-128", encryptionKeyService
+                .requireActiveKeyMaterialForEncryption(ownerID, key.getKeyID(), PASSWORD)
+                .key()
+                .getAlgorithm());
+    }
+
+    @Test
     void browserDerivedMetadataPreservesFreeAndPremiumTierPolicy() {
         EncryptionKeyRecord freeKey = encryptionKeyService.createClientDerivedKey(
                 freeOwnerID, "Browser free key", "AES-128",
@@ -123,9 +134,17 @@ class EncryptionKeyServiceTest {
                 EncryptionKeyService.KEY_SCHEME_V2,
                 EncryptionKeyService.KDF_ITERATIONS_V2,
                 EncryptionKeyService.KDF_VERSION_V2);
+        EncryptionKeyRecord premiumAes128Key = encryptionKeyService.createClientDerivedKey(
+                ownerID, "Browser premium AES-128 key", "AES-128",
+                "AAAAAAAAAAAAAAAAAAAAAA", "PremiumAes128Key",
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                EncryptionKeyService.KEY_SCHEME_V2,
+                EncryptionKeyService.KDF_ITERATIONS_V2,
+                EncryptionKeyService.KDF_VERSION_V2);
 
         assertEquals("AES-128", freeKey.getAlgorithm());
         assertEquals("AES-256-GCM", premiumKey.getAlgorithm());
+        assertEquals("AES-128", premiumAes128Key.getAlgorithm());
         assertEquals(310_000, premiumKey.getKdfIterations());
         assertEquals(2, premiumKey.getKdfVersion());
 

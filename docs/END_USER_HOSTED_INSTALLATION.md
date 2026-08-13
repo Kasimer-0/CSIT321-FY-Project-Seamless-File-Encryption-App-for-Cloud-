@@ -41,7 +41,27 @@ The Windows Client is a desktop window for the same hosted StealthSync service. 
 ## Account and Encryption Notes
 
 - Free accounts use AES-128, one linked provider, and one active device.
-- Active Premium accounts use AES-256-GCM, up to three linked providers, and up to five active devices.
+- Active Premium accounts can choose AES-128 or AES-256-GCM, link up to three providers, and use up to five active devices.
 - The Key Password is required to derive the encryption key locally. StealthSync does not store or recover it.
 - Recovery Phrase supports StealthSync account/login recovery only. It does not recover Key Passwords, file keys, or encrypted files.
 - Deactivate stops new uploads to a provider but still permits listing and download. Remove disconnects the provider account.
+
+### Back up or restore an encryption key
+
+1. Open **Encryption Keys**.
+2. Select **Export Backup** beside a V2 key and enter that key's Key Password.
+3. Save the encrypted `.sskey` file in a protected offline location. Keep the Key Password separately.
+4. To restore it, choose the `.sskey` file under **Restore Encrypted Key Backup**, enter the same
+   Key Password, and select **Restore Key**.
+
+The browser encrypts and decrypts the backup locally. The package does not export the raw key, Key
+Password, or password verifier. Losing both the backup and its Key Password cannot be bypassed by
+StealthSync. Importing a key whose fingerprint already exists is safely rejected.
+
+### Subscription demonstration boundary
+
+The current course-project purchase control changes the demo subscription immediately. It is not a
+real payment transaction and does not collect card or banking details. Integrating an external payment
+provider requires separate merchant credentials, hosted checkout configuration, verified webhooks,
+refund/cancellation handling, and provider-specific production testing, so it remains outside this
+release rather than being represented as completed payment processing.

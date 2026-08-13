@@ -24,7 +24,7 @@ The preliminary deck provides a visual starting point only. Its Week 11 schedule
 | 3 | Final objectives and frozen scope | Three real providers, local/browser encryption, key management, JWT and multi-device | READY |
 | 4 | Architecture and trust boundary | Final architecture diagram; browser encrypts before provider upload; shared backend stores owner-scoped metadata, not plaintext files | SOURCE CHECK REQUIRED |
 | 5 | Real three-cloud integration | `device-a/CLOUD-01-three-provider-links.png` plus the three provider list screenshots | READY |
-| 6 | Encryption and key policy | `device-a/KEY-01-final-key-metadata.png`; Free AES-128 and Premium AES-256-GCM | READY |
+| 6 | Encryption and key policy | `device-a/KEY-01-final-key-metadata.png`; Free is limited to AES-128, while active Premium can choose AES-128 or AES-256-GCM | READY |
 | 7 | Premium multi-device | Same StealthSync account, up to five active devices; final `2/5` Devices screenshot and Device B evidence | EVIDENCE PENDING |
 | 8 | Security controls | JWT, ADMIN RBAC, owner isolation, password-protected keys, wrong-password rejection | CODE/TEST READY; SCREENSHOT PENDING |
 | 9 | Privacy warning and admin monitoring | `device-a/PRIVACY-01-sensitive-data-warning.png`, `admin/ADMIN-01-high-flagged-logs.png`, `admin/ADMIN-03-recent-activity.png` | READY |

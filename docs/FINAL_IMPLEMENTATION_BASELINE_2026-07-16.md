@@ -24,7 +24,7 @@ This document is the source of truth for the functions included in the final imp
 
 - Customers can view active plans and change their demo subscription.
 - Free accounts may use one active device and AES-128 keys.
-- Accounts with an active paid subscription may use up to five active devices and AES-256-GCM keys.
+- Accounts with an active paid subscription may use up to five active devices and may choose AES-128 or AES-256-GCM keys.
 - Expired or cancelled paid subscriptions retain device history but allow only the primary device to remain active.
 
 ## Encryption And Keys
@@ -34,6 +34,9 @@ This document is the source of truth for the functions included in the final imp
 - Key passwords derive key material and are not persisted.
 - Stored key records contain salts, password verifiers, fingerprints, and policy metadata rather than raw keys or key passwords.
 - The backend enforces the key algorithm allowed by the current subscription.
+- Customers can export and restore password-protected V2 encryption-key backups. Backup cryptography
+  runs locally and the `.sskey` package contains no raw key, Key Password, or password verifier.
+- Plan selection is an immediate course-project demo flow, not a real payment transaction or payment gateway.
 
 ## Cloud Providers
 

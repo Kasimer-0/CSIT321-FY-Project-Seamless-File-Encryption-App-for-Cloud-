@@ -88,6 +88,28 @@ class EncryptionPolicyServiceTest {
     }
 
     @Test
+    void premiumCustomerCanStillRequestAes128() {
+        UserAccount customer = new UserAccount(6L, "premium-flexible", "premium-flexible@example.com", "customer", true, false, 11L);
+        Plan premiumPlan = new Plan(6L, "Premium", 7.0, "Description", "active", "AES-256-GCM");
+        Subscription subscription = new Subscription(
+                11L,
+                premiumPlan,
+                customer,
+                "active",
+                LocalDate.now().minusDays(1),
+                LocalDate.now().plusDays(29)
+        );
+        when(userAccountRepository.findById(6L)).thenReturn(Optional.of(customer));
+        when(subscriptionRepository.findFirstBySubscriber_UserIDOrderBySubscriptionIDDesc(6L))
+                .thenReturn(Optional.of(subscription));
+
+        EncryptionPolicyService.EncryptionPolicy policy = service.requireAlgorithmAllowedForUser(6L, "AES-128");
+
+        assertEquals("AES-128", policy.algorithm());
+        assertEquals(128, policy.keyLengthBits());
+    }
+
+    @Test
     void rejectsUnimplementedAlgorithms() {
         assertThrows(IllegalArgumentException.class, () -> service.policyForAlgorithm("ChaCha20"));
     }

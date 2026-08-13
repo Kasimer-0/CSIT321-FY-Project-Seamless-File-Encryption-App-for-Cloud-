@@ -2,7 +2,9 @@ import { apiFetch } from "../lib/api"
 import { useEffect, useState } from "react"
 import type { EncryptionKeyRecord, SubscriptionDTO, UserAccount } from "../Type"
 import toast from "react-hot-toast"
-import { createClientKeyMetadata, type KeyAlgorithm } from "../crypto/keyDerivation"
+import { KEY_SCHEME_V2, createClientKeyMetadata, type KeyAlgorithm } from "../crypto/keyDerivation"
+import { exportEncryptedKeyBackup, importEncryptedKeyBackup } from "../crypto/keyBackup"
+import { saveUserFile } from "../lib/desktopBridge"
 
 type CustomerManageEncryptionKeysPageProps = {
     user: UserAccount
@@ -25,6 +27,12 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
     const [showRetireConfirm, setShowRetireConfirm] = useState(false)
     const [pendingRetireKey, setPendingRetireKey] = useState<EncryptionKeyRecord | null>(null)
     const [retiringKeyID, setRetiringKeyID] = useState<number | null>(null)
+    const [backupKey, setBackupKey] = useState<EncryptionKeyRecord | null>(null)
+    const [backupPassword, setBackupPassword] = useState("")
+    const [exportingBackup, setExportingBackup] = useState(false)
+    const [importFile, setImportFile] = useState<File | null>(null)
+    const [importPassword, setImportPassword] = useState("")
+    const [importingBackup, setImportingBackup] = useState(false)
     const embeddedSubscription = typeof user.subscription === "number" ? null : user.subscription
     const [currentSubscription, setCurrentSubscription] = useState<SubscriptionDTO | null>(embeddedSubscription)
     const canUseAes256 = Boolean(
@@ -176,6 +184,62 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
         }
     }
 
+    const exportBackup = async () => {
+        if (!backupKey || !backupPassword.trim()) {
+            toast.error("Key password is required")
+            return
+        }
+        try {
+            setExportingBackup(true)
+            const backup = await exportEncryptedKeyBackup(backupKey, backupPassword)
+            const saved = await saveUserFile(
+                new Blob([backup.serialized], { type: "application/json" }),
+                backup.filename
+            )
+            if (!saved) throw new Error("The encrypted key backup was not saved.")
+            toast.success("Encrypted key backup saved")
+            setBackupKey(null)
+            setBackupPassword("")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to export key backup")
+        } finally {
+            setExportingBackup(false)
+        }
+    }
+
+    const importBackup = async () => {
+        if (!importFile || !importPassword.trim()) {
+            toast.error("Select a key backup and enter its Key Password")
+            return
+        }
+        try {
+            setImportingBackup(true)
+            if (importFile.size > 256 * 1024) throw new Error("Key backup file is too large.")
+            const imported = await importEncryptedKeyBackup(await importFile.text(), importPassword)
+            const response = await apiFetch("/encryption-keys", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ keyName: imported.keyName, ...imported.metadata })
+            })
+            if (!response.ok) {
+                const error = await response.json().catch(() => null)
+                toast.error(error?.message ?? "Failed to restore encryption key")
+                return
+            }
+            setImportFile(null)
+            setImportPassword("")
+            const input = document.getElementById("key-backup-file") as HTMLInputElement | null
+            if (input) input.value = ""
+            await fetchKeys()
+            toast.success("Encryption key restored from encrypted backup")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to import key backup")
+        } finally {
+            setImportingBackup(false)
+        }
+    }
+
     return (
         <>
             <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
@@ -209,6 +273,44 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                     <div className="col-12 col-md-2">
                         <button className="btn btn-primary w-100" onClick={createKey} disabled={creating}>
                             {creating ? "Deriving..." : "Create Key"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="card p-3 mb-3">
+                <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
+                    <div>
+                        <h6 className="mb-1">Restore Encrypted Key Backup</h6>
+                        <p className="text-muted mb-0" style={{ fontSize: 13 }}>
+                            Restore a .sskey backup using the same Key Password. The password remains on this device.
+                        </p>
+                    </div>
+                </div>
+                <div className="row g-2 align-items-end">
+                    <div className="col-12 col-md-5">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Encrypted Backup</label>
+                        <input
+                            id="key-backup-file"
+                            className="form-control"
+                            type="file"
+                            accept=".sskey,application/json"
+                            onChange={event => setImportFile(event.target.files?.[0] ?? null)}
+                        />
+                    </div>
+                    <div className="col-12 col-md-5">
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Password</label>
+                        <input
+                            className="form-control"
+                            type="password"
+                            value={importPassword}
+                            onChange={event => setImportPassword(event.target.value)}
+                            autoComplete="off"
+                        />
+                    </div>
+                    <div className="col-12 col-md-2">
+                        <button className="btn btn-outline-primary w-100" onClick={importBackup} disabled={importingBackup}>
+                            {importingBackup ? "Restoring..." : "Restore Key"}
                         </button>
                     </div>
                 </div>
@@ -256,6 +358,14 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                                 ) : (
                                     <button className="btn btn-outline-secondary btn-sm" onClick={() => startRename(key)}>Rename</button>
                                 )}
+                                <button
+                                    className="btn btn-outline-primary btn-sm"
+                                    onClick={() => setBackupKey(key)}
+                                    disabled={key.keyScheme !== KEY_SCHEME_V2}
+                                    title={key.keyScheme === KEY_SCHEME_V2 ? "Export encrypted key backup" : "Legacy keys cannot be exported"}
+                                >
+                                    Export Backup
+                                </button>
                                 {key.status !== "retired" && (
                                     <button className="btn btn-outline-danger btn-sm" onClick={() => requestRetireKey(key)}>
                                         Retire
@@ -294,6 +404,47 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                             </button>
                             <button className="btn btn-danger" onClick={retireKey} disabled={retiringKeyID !== null}>
                                 {retiringKeyID !== null ? "Retiring..." : "Yes, Retire"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {backupKey && (
+                <div
+                    className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                    style={{ background: "rgba(0,0,0,0.5)", zIndex: 1050 }}
+                    onClick={() => !exportingBackup && setBackupKey(null)}
+                >
+                    <div className="card p-4" style={{ width: 460 }} onClick={event => event.stopPropagation()}>
+                        <h6 className="mb-2">Export Encrypted Key Backup</h6>
+                        <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+                            Enter the Key Password for <strong>{backupKey.keyName}</strong>. StealthSync verifies it locally
+                            and encrypts the portable backup before saving it.
+                        </p>
+                        <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Password</label>
+                        <input
+                            className="form-control mb-3"
+                            type="password"
+                            value={backupPassword}
+                            onChange={event => setBackupPassword(event.target.value)}
+                            autoComplete="off"
+                            autoFocus
+                        />
+                        <p className="text-muted mb-4" style={{ fontSize: 12 }}>
+                            The .sskey file contains no raw key, password, or password verifier. Store it offline and keep
+                            the Key Password separately.
+                        </p>
+                        <div className="d-flex justify-content-end gap-2">
+                            <button
+                                className="btn btn-outline-secondary"
+                                onClick={() => { setBackupKey(null); setBackupPassword("") }}
+                                disabled={exportingBackup}
+                            >
+                                Cancel
+                            </button>
+                            <button className="btn btn-primary" onClick={exportBackup} disabled={exportingBackup}>
+                                {exportingBackup ? "Encrypting..." : "Save Encrypted Backup"}
                             </button>
                         </div>
                     </div>

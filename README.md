@@ -6,7 +6,9 @@ StealthSync is a client-side file encryption application for Google Drive, Dropb
 
 - Real OAuth connections for Google Drive, Dropbox, and OneDrive.
 - Browser-side AES-GCM encryption and decryption.
-- AES-128 for Free customers and AES-256-GCM for customers with an active Premium subscription.
+- AES-128 for Free customers; active Premium customers can choose AES-128 or AES-256-GCM.
+- Password-protected `.sskey` backup and recovery for V2 encryption keys. Backup encryption and
+  password verification run locally; raw keys, Key Passwords, and password verifiers are not exported.
 - Password-derived encryption keys using PBKDF2-HMAC-SHA256 with 310,000 iterations and a per-key 16-byte salt.
 - Versioned, provider-neutral `SSENCV2` encrypted envelopes with encrypted file metadata and random `.ssenc` cloud object names.
 - Premium multi-device access for up to five active devices; Free accounts are limited to one active device.
