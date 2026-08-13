@@ -259,26 +259,12 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                     </div>
                     <div className="col-12 col-md-3">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>Algorithm</label>
-                        <div className="key-algorithm-selector" role="radiogroup" aria-label="Encryption algorithm">
-                            <button
-                                type="button"
-                                className={`key-algorithm-option ${algorithm === "AES-128" ? "is-selected" : ""}`}
-                                aria-pressed={algorithm === "AES-128"}
-                                onClick={() => setAlgorithm("AES-128")}
-                            >
-                                AES-128
-                            </button>
-                            <button
-                                type="button"
-                                className={`key-algorithm-option ${algorithm === "AES-256-GCM" ? "is-selected" : ""}`}
-                                aria-pressed={algorithm === "AES-256-GCM"}
-                                disabled={!canUseAes256}
-                                title={canUseAes256 ? "AES-256-GCM" : "Requires an active Premium subscription"}
-                                onClick={() => setAlgorithm("AES-256-GCM")}
-                            >
-                                AES-256-GCM
-                            </button>
-                        </div>
+                        <select className="form-select" value={algorithm} onChange={e => setAlgorithm(e.target.value as KeyAlgorithm)}>
+                            <option>AES-128</option>
+                            <option value="AES-256-GCM" disabled={!canUseAes256}>
+                                AES-256-GCM{canUseAes256 ? "" : " (Premium only)"}
+                            </option>
+                        </select>
                     </div>
                     <div className="col-12 col-md-3">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Password</label>
@@ -304,21 +290,13 @@ function CustomerManageEncryptionKeysPage({ user }: CustomerManageEncryptionKeys
                 <div className="row g-2 align-items-end">
                     <div className="col-12 col-md-5">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>Encrypted Backup</label>
-                        <div className="key-backup-file-picker">
-                            <input
-                                id="key-backup-file"
-                                className="key-backup-file-input"
-                                type="file"
-                                accept=".sskey,application/json"
-                                onChange={event => setImportFile(event.target.files?.[0] ?? null)}
-                            />
-                            <label className="key-backup-file-button" htmlFor="key-backup-file">
-                                Choose Backup
-                            </label>
-                            <span className={`key-backup-file-name ${importFile ? "has-file" : ""}`} title={importFile?.name}>
-                                {importFile?.name ?? "No backup selected"}
-                            </span>
-                        </div>
+                        <input
+                            id="key-backup-file"
+                            className="form-control"
+                            type="file"
+                            accept=".sskey,application/json"
+                            onChange={event => setImportFile(event.target.files?.[0] ?? null)}
+                        />
                     </div>
                     <div className="col-12 col-md-5">
                         <label className="form-label mb-1" style={{ fontSize: 12 }}>Key Password</label>
